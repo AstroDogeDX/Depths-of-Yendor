@@ -105,6 +105,8 @@ The weapons you hold and find, and the torch in your other hand, are [Blockbench
 - **Textures** must stay embedded in the project file, which is Blockbench's default. The game ignores texture file paths.
 - **New weapons:** give the `WEAPONS` entry a new `model` name and add `<name>.bbmodel` to the folder.
 
+These models were first built in code by `tools/modelgen/`. It shapes low-poly meshes from lathes and lofts, unwraps their UVs automatically and paints pixel-art textures procedurally. `npm run models -- sword torch` rebuilds the named models, and `all` rebuilds every one. Rebuilding replaces the whole file, so any Blockbench edits to it are lost. The script skips a file with uncommitted changes unless you pass `--force`, and `--out <dir>` writes the results somewhere else so you can compare first. To add a model, write a builder next to `weapons.mjs` or `torch.mjs` and list it in `build.mjs`.
+
 ## Code map
 
 ```
@@ -133,6 +135,7 @@ src/
   fx/                  viewmodel (hands), pixel-art flames, projectiles, particles, glow sprites
   ui/ui.js             HUD, minimap, message log, floating text, pack, dialogs, end screens
 assets/models/         Blockbench models: weapons/ and the hand torch
+tools/modelgen/        builds those models from code (npm run models)
 ```
 
 Balance numbers live in `monsters/defs.js`, `items/defs.js` and `config.js`. `window.game` is exposed for poking at state from the dev console.
