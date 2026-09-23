@@ -88,10 +88,7 @@ export class ViewModel {
     if (this.weapon) this.weaponArc.remove(this.weapon);
     this.weapon = model ? buildWeaponMesh(model) : null;
     this.keys = model === 'spear' || model === 'dagger' ? THRUST : SLASH;
-    if (this.weapon) {
-      if (model === 'spear') this.weapon.position.y = -0.5; // hold the long shaft nearer its middle
-      this.weaponArc.add(this.weapon);
-    }
+    if (this.weapon) this.weaponArc.add(this.weapon);
   }
 
   swing(duration) {

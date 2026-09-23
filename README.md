@@ -1,6 +1,6 @@
 # Depths of Yendor
 
-A first-person, real-time roguelike for the browser, in the spirit of **King's Field** (slow, deliberate first-person melee in dark stone corridors) crossed with **Rogue / Pixel Dungeon** (procedural floors, unidentified items, curses, permadeath). Built with three.js and plain ES modules. There are no asset files: textures, models and sound are all generated in code.
+A first-person, real-time roguelike for the browser, in the spirit of **King's Field** (slow, deliberate first-person melee in dark stone corridors) crossed with **Rogue / Pixel Dungeon** (procedural floors, unidentified items, curses, permadeath). Built with three.js and plain ES modules. Nearly everything is generated in code: textures, sound and most models. The weapons are the exception. They are Blockbench models (see [Weapon models](#weapon-models-blockbench)).
 
 Descend ten floors and take the **Amulet of Yendor** from its Warden. Then choose: invoke the Amulet and escape at once, or carry it back up through every floor to the surface for double score while the dungeon throws everything it has at you.
 
@@ -93,6 +93,16 @@ A doorway is either an open arch or a wooden door. Doors swing open when anyone 
 
 **Adding a specialist room:** add a type to `dungeon/rooms.js` (size, door style, whether the normal population pass may use it, and a `furnish(ctx, room)` that places its contents), then put it in the plan in `dungeon/generator.js` as a branch, e.g. `{ type: 'treasury', locked: true }`.
 
+## Weapon models (Blockbench)
+
+The weapons you hold and find are [Blockbench](https://www.blockbench.net) projects in `assets/models/weapons/`, one per `model` name in `items/defs.js` (`dagger`, `sword`, `longsword`, `mace`, `spear`, `axe`, `hammer`). The game reads the `.bbmodel` files directly, so there is no export step. Open one in Blockbench (desktop or web), edit it, save over the file, and the dev server reloads.
+
+- **Format:** Generic Model. Cubes, meshes and groups (with pivots and rotations) all work. Each texture becomes one flat-shaded material, and texels under 50% alpha are cut out. Elements with *Export* unticked are left out.
+- **Scale:** one Blockbench pixel is 1/64 m, so a 16-pixel block is 25 cm.
+- **Orientation:** the pivot (0, 0, 0) is where the hand grips, the tip or head points up (+Y), and the cutting edge or striking face points north (−Z). The swing animation depends on this.
+- **Textures** must stay embedded in the project file, which is Blockbench's default. The game ignores texture file paths.
+- **New weapons:** give the `WEAPONS` entry a new `model` name and add `<name>.bbmodel` to the folder.
+
 ## Code map
 
 ```
@@ -116,8 +126,11 @@ src/
   items/identify.js    per-run appearance shuffle, naming, descriptions
   items/generate.js    random items by depth, enchant/curse rolls
   items/use.js         potions, scrolls, wands, equip/curses, throwing, artefact powers
+  items/models.js      item models: primitives for most items, Blockbench files for weapons
+  items/bbmodel.js     loads Blockbench .bbmodel projects (cubes, meshes, groups, textures) into three.js
   fx/                  viewmodel (hands), projectiles, particles, glow sprites
   ui/ui.js             HUD, minimap, message log, floating text, pack, dialogs, end screens
+assets/models/weapons/ Blockbench weapon models
 ```
 
 Balance numbers live in `monsters/defs.js`, `items/defs.js` and `config.js`. `window.game` is exposed for poking at state from the dev console.

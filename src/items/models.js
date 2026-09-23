@@ -1,11 +1,8 @@
 import * as THREE from 'three';
 import { WEAPONS } from './defs.js';
+import { buildBBModel } from './bbmodel.js';
 
 const lam = (color, opts = {}) => new THREE.MeshLambertMaterial({ color, flatShading: true, ...opts });
-const STEEL = lam(0xb8bcc4);
-const WOOD = lam(0x5a3a1a);
-const GRIP = lam(0x3a2418);
-const BRASS = lam(0x9a8448);
 
 const box = (w, h, d, m, x = 0, y = 0, z = 0) => {
   const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
@@ -18,67 +15,30 @@ const cyl = (r, h, m, y = 0, seg = 5) => {
   return c;
 };
 
+// Weapon models are Blockbench projects (Generic Model format), one per WEAPONS[type].model, read straight
+// from the saved .bbmodel files. One Blockbench pixel is 1/64 m.
+const WEAPON_FILES = import.meta.glob('../../assets/models/weapons/*.bbmodel', { query: '?raw', import: 'default', eager: true });
+const WEAPON_PX = 1 / 64;
+const weaponCache = new Map();
+
 /**
  * Every weapon mesh shares one local frame, which the viewmodel's swing relies on:
  *   origin = where the hand grips, +y = toward the tip or head,
  *   -z = the cutting edge / striking face, ±x = the flats of the blade.
  * Blades are therefore wide along z and thin along x, and crossguards run along z (edge to edge).
+ * In Blockbench that is: pivot at the grip, tip pointing up, edge facing north.
  */
 export const WEAPON_EDGE = new THREE.Vector3(0, 0, -1);
 export const WEAPON_TIP = new THREE.Vector3(0, 1, 0);
 
 export function buildWeaponMesh(model) {
-  const g = new THREE.Group();
-  switch (model) {
-    case 'dagger':
-      g.add(box(0.035, 0.12, 0.035, GRIP, 0, 0.02), box(0.035, 0.025, 0.13, BRASS, 0, 0.09),
-        box(0.012, 0.28, 0.05, STEEL, 0, 0.24));
-      break;
-    case 'sword':
-      g.add(box(0.035, 0.15, 0.035, GRIP, 0, 0.02), box(0.04, 0.03, 0.2, BRASS, 0, 0.11),
-        box(0.014, 0.58, 0.055, STEEL, 0, 0.41));
-      break;
-    case 'longsword':
-      g.add(box(0.038, 0.24, 0.038, GRIP, 0, 0.0), box(0.045, 0.035, 0.28, BRASS, 0, 0.14),
-        box(0.015, 0.84, 0.06, STEEL, 0, 0.58), box(0.06, 0.06, 0.06, BRASS, 0, -0.14));
-      break;
-    case 'mace': {
-      g.add(cyl(0.022, 0.62, WOOD, 0.2));
-      const head = new THREE.Mesh(new THREE.DodecahedronGeometry(0.1, 0), STEEL);
-      head.position.y = 0.52;
-      g.add(head);
-      for (let i = 0; i < 4; i++) {
-        const f = box(0.02, 0.14, 0.16, STEEL, 0, 0.52);
-        f.rotation.y = (i * Math.PI) / 4;
-        g.add(f);
-      }
-      break;
-    }
-    case 'spear': {
-      g.add(cyl(0.018, 1.5, WOOD, 0.35));
-      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.24, 4), STEEL);
-      tip.position.y = 1.2;
-      g.add(tip, box(0.02, 0.02, 0.1, BRASS, 0, 1.08));
-      break;
-    }
-    case 'axe':
-      // Bit on the edge side (-z), a short spike behind it.
-      g.add(cyl(0.024, 0.85, WOOD, 0.28), box(0.02, 0.26, 0.24, STEEL, 0, 0.6, -0.13),
-        box(0.02, 0.06, 0.1, STEEL, 0, 0.62, 0.06));
-      break;
-    case 'hammer': {
-      // Striking face toward -z, a back spike toward +z.
-      const spike = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.14, 4), STEEL);
-      spike.rotation.x = Math.PI / 2; // cone points +y by default; lay it along +z
-      spike.position.set(0, 0.72, 0.13);
-      g.add(cyl(0.026, 0.9, WOOD, 0.3), box(0.14, 0.14, 0.18, STEEL, 0, 0.72, -0.04), spike,
-        box(0.03, 0.12, 0.03, STEEL, 0, 0.84));
-      break;
-    }
-    default:
-      g.add(box(0.05, 0.5, 0.02, STEEL, 0, 0.25));
+  if (!weaponCache.has(model)) {
+    const src = WEAPON_FILES[`../../assets/models/weapons/${model}.bbmodel`];
+    if (!src) console.warn(`No weapon model assets/models/weapons/${model}.bbmodel`);
+    weaponCache.set(model, src ? buildBBModel(src, WEAPON_PX) : box(0.05, 0.5, 0.02, lam(0xb8bcc4), 0, 0.25));
   }
-  return g;
+  // Clones share geometry and materials with the cached original.
+  return weaponCache.get(model).clone();
 }
 
 function glowMat(color, strength = 0.35) {
@@ -153,7 +113,8 @@ export function buildItemModel(item, color) {
       const w = buildWeaponMesh(WEAPONS[item.type].model);
       w.rotation.z = Math.PI / 2.3;
       w.scale.setScalar(0.8);
-      w.position.x = 0.25;
+      // Lie centred on the item's spot, whatever the weapon's length.
+      w.position.x = -new THREE.Box3().setFromObject(w).getCenter(new THREE.Vector3()).x;
       g.add(w);
       break;
     }
