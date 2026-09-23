@@ -10,6 +10,8 @@ export const PAL = {
   leather: P('#1a110b', '#28190f', '#382314', '#4a2f1b', '#5c3b22', '#6e482a'),
   wood: P('#21170f', '#302216', '#402e1e', '#523c27', '#644a31', '#77593b'),
   cord: P('#2b0c09', '#45130e', '#621d15', '#80291d', '#9c3828', '#b54b35'),
+  rust: P('#221610', '#35211a', '#4a2c1c', '#5e3822', '#724428'),
+  embers: P('#2a0c05', '#5a1707', '#8f2a0c', '#c84714', '#f07a22', '#ffb444', '#ffe28a'),
 };
 
 export const clamp01 = (v) => Math.max(0, Math.min(1, v));
@@ -95,6 +97,28 @@ export const MAT = {
     let v = 0.36 + 0.36 * g;
     if (fract(g * 6 + 0.4 * noise3(p.x, p.y * 0.12, p.z, 42)) < 0.13) v -= 0.18; // grain lines
     return ramp(PAL.wood, v, c.ax, c.ay);
+  },
+  // Old wrought iron, darker than 'iron' and flaking into rust in patches. `info.twist` ({ yc, until, pitch })
+  // paints a helical highlight on a square bar running along z at height yc, as if the bar were twisted.
+  rustyIron(c) {
+    const { p, info } = c;
+    const rust = noise3(p.x * 0.35, p.y * 0.35, p.z * 0.35, 91) + 0.25 * noise3(p.x * 1.3, p.y * 1.3, p.z * 1.3, 92);
+    if (rust > 0.95) return ramp(PAL.rust, 0.4 + 0.4 * patches(p, 93, 0.9) + bevel(c, 0.15), c.ax, c.ay);
+    let v = 0.36 + 0.2 * patches(p, 94, 0.3) + bevel(c, 0.2);
+    if (info.twist && p.z < info.twist.until) {
+      const f = fract(p.z / info.twist.pitch + Math.atan2(p.y - info.twist.yc, p.x) / (2 * Math.PI));
+      v += f < 0.3 ? 0.2 : f > 0.55 ? -0.1 : 0;
+    }
+    if (rand(c.ax, c.ay, 95) > 0.97) v -= 0.14; // pitting
+    return ramp(PAL.iron, v, c.ax, c.ay);
+  },
+  // Emissive: glowing coals broken up by black char. `info.heat(p)` (0..1) says where they burn hottest.
+  embers(c) {
+    const { p, info } = c;
+    const g = noise3(p.x * 0.9, p.y * 0.9, p.z * 0.9, 71);
+    if (fract(g * 4.5) < 0.2) return ramp(PAL.embers, 0.02, c.ax, c.ay);
+    const v = 0.3 + 0.45 * noise3(p.x * 0.6 + 4, p.y * 0.6, p.z * 0.6, 72) + (info.heat ? info.heat(p) : 0) * 0.35;
+    return ramp(PAL.embers, v, c.ax, c.ay);
   },
   // Cord binding: tight rounded turns.
   cord(c) {

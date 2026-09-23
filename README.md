@@ -1,6 +1,6 @@
 # Depths of Yendor
 
-A first-person, real-time roguelike for the browser, in the spirit of **King's Field** (slow, deliberate first-person melee in dark stone corridors) crossed with **Rogue / Pixel Dungeon** (procedural floors, unidentified items, curses, permadeath). Built with three.js and plain ES modules. Nearly everything is generated in code: textures, sound and most models. The weapons and the hand torch are the exception. They are Blockbench models (see [Blockbench models](#blockbench-models)).
+A first-person, real-time roguelike for the browser, in the spirit of **King's Field** (slow, deliberate first-person melee in dark stone corridors) crossed with **Rogue / Pixel Dungeon** (procedural floors, unidentified items, curses, permadeath). Built with three.js and plain ES modules. Nearly everything is generated in code: textures, sound and most models. The weapons, the hand torch and the wall sconces are the exception. They are Blockbench models (see [Blockbench models](#blockbench-models)).
 
 Descend ten floors and take the **Amulet of Yendor** from its Warden. Then choose: invoke the Amulet and escape at once, or carry it back up through every floor to the surface for double score while the dungeon throws everything it has at you.
 
@@ -95,17 +95,17 @@ A doorway is either an open arch or a wooden door. Doors swing open when anyone 
 
 ## Blockbench models
 
-The weapons you hold and find, and the torch in your other hand, are [Blockbench](https://www.blockbench.net) projects in `assets/models/`. Weapons live in `weapons/`, one per `model` name in `items/defs.js` (`dagger`, `sword`, `longsword`, `mace`, `spear`, `axe`, `hammer`), and the torch is `torch.bbmodel`. The game reads the `.bbmodel` files directly, so there is no export step. Open one in Blockbench (desktop or web), edit it, save over the file, and the dev server reloads.
+The weapons you hold and find, the torch in your other hand and the sconces on the walls are [Blockbench](https://www.blockbench.net) projects in `assets/models/`. Weapons live in `weapons/`, one per `model` name in `items/defs.js` (`dagger`, `sword`, `longsword`, `mace`, `spear`, `axe`, `hammer`). The torch is `torch.bbmodel` and the sconce is `sconce.bbmodel`. The game reads the `.bbmodel` files directly, so there is no export step. Open one in Blockbench (desktop or web), edit it, save over the file, and the dev server reloads.
 
 - **Format:** Generic Model. Cubes, meshes and groups (with pivots and rotations) all work. Each texture becomes one flat-shaded material, and texels under 50% alpha are cut out. Elements with *Export* unticked are left out.
 - **Glowing parts:** a texture whose render mode is *Emissive* ignores lighting, like the torch's burning crown. *Additive* also blends onto whatever is behind it.
-- **Anchors:** the game can find a group's pivot by the group's name. The torch's empty `flame` group marks where the fire burns, so moving that group in Blockbench moves the flame.
+- **Anchors:** the game can find a group's pivot by the group's name. The torch and the sconce each have an empty `flame` group that marks where the fire burns, so moving that group in Blockbench moves the flame.
 - **Scale:** one Blockbench pixel is 1/64 m, so a 16-pixel block is 25 cm.
-- **Orientation:** the pivot (0, 0, 0) is where the hand grips, and the tip or head points up (+Y). On weapons, the cutting edge or striking face points north (−Z). The swing animation depends on this.
+- **Orientation:** for things you hold, the pivot (0, 0, 0) is where the hand grips and the tip or head points up (+Y). On weapons, the cutting edge or striking face points north (−Z), which the swing animation depends on. The sconce's pivot sits on the wall, and it stands out to the south (+Z).
 - **Textures** must stay embedded in the project file, which is Blockbench's default. The game ignores texture file paths.
 - **New weapons:** give the `WEAPONS` entry a new `model` name and add `<name>.bbmodel` to the folder.
 
-These models were first built in code by `tools/modelgen/`. It shapes low-poly meshes from lathes and lofts, unwraps their UVs automatically and paints pixel-art textures procedurally. `npm run models -- sword torch` rebuilds the named models, and `all` rebuilds every one. Rebuilding replaces the whole file, so any Blockbench edits to it are lost. The script skips a file with uncommitted changes unless you pass `--force`, and `--out <dir>` writes the results somewhere else so you can compare first. To add a model, write a builder next to `weapons.mjs` or `torch.mjs` and list it in `build.mjs`.
+These models were first built in code by `tools/modelgen/`. It shapes low-poly meshes from lathes and lofts, unwraps their UVs automatically and paints pixel-art textures procedurally. `npm run models -- sword torch` rebuilds the named models, and `all` rebuilds every one. Rebuilding replaces the whole file, so any Blockbench edits to it are lost. The script skips a file with uncommitted changes unless you pass `--force`, and `--out <dir>` writes the results somewhere else so you can compare first. To add a model, write a builder like `torch.mjs` or `sconce.mjs` and list it in `build.mjs`.
 
 ## Code map
 
@@ -134,7 +134,7 @@ src/
   items/bbmodel.js     loads Blockbench .bbmodel projects (cubes, meshes, groups, textures) into three.js
   fx/                  viewmodel (hands), pixel-art flames, projectiles, particles, glow sprites
   ui/ui.js             HUD, minimap, message log, floating text, pack, dialogs, end screens
-assets/models/         Blockbench models: weapons/ and the hand torch
+assets/models/         Blockbench models: weapons/, the hand torch and the wall sconce
 tools/modelgen/        builds those models from code (npm run models)
 ```
 

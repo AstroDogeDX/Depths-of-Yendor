@@ -11,11 +11,13 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { weapons } from './weapons.mjs';
 import { torch } from './torch.mjs';
+import { sconce } from './sconce.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const MODELS = {
   ...Object.fromEntries(Object.entries(weapons).map(([name, build]) => [name, { file: `weapons/${name}.bbmodel`, build }])),
   torch: { file: 'torch.bbmodel', build: torch },
+  sconce: { file: 'sconce.bbmodel', build: sconce },
 };
 
 const args = process.argv.slice(2);

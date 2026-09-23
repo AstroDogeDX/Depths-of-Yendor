@@ -1,12 +1,15 @@
 import * as THREE from 'three';
-import { TILE, WALL_H } from '../config.js';
+import { TILE, WALL_H, MODEL_PX } from '../config.js';
 import { T } from './tiles.js';
 import { getTextures, getDoorTexture } from './textures.js';
 import { RNG } from '../rng.js';
 import { glowSprite } from '../fx/glow.js';
 import { Flame } from '../fx/flame.js';
+import { buildBBModel } from '../items/bbmodel.js';
+import sconceModel from '../../assets/models/sconce.bbmodel?raw';
 
 const SCONCE_LIGHTS = 6; // constant per level so shaders never need recompiling between floors
+let sconceTemplate = null; // built once; every sconce is a clone sharing its geometry and materials
 
 class GeoBuilder {
   constructor() {
@@ -268,20 +271,19 @@ function buildSconces(data, group, rng, isWall) {
   }
   rng.shuffle(spots);
 
-  const bracketMat = new THREE.MeshLambertMaterial({ color: 0x2a2420 });
+  // The sconce is a Blockbench model whose origin sits on the wall; its empty "flame" group marks the fire.
+  sconceTemplate ??= buildBBModel(sconceModel, MODEL_PX);
+  const fire = new THREE.Vector3().fromArray(sconceTemplate.userData.anchors.flame);
   const flames = [];
   for (const s of spots) {
-    const sg = new THREE.Group();
-    const bracket = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.3, 0.2), bracketMat);
-    bracket.position.set(0, -0.1, 0.08);
-    const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.06, 0.1, 6), bracketMat);
-    cup.position.set(0, 0.08, 0.18);
+    const sg = sconceTemplate.clone();
     const flame = new Flame({ width: 0.3, height: 0.46, pixel: 0.025, seed: rng.next() });
-    flame.position.set(0, 0.1, 0.18);
+    flame.position.copy(fire);
     const halo = glowSprite(0xff9040, 0.9, 0.55);
-    halo.position.set(0, 0.26, 0.2);
-    sg.add(bracket, cup, flame, halo);
-    sg.position.set(s.x, 1.85, s.z);
+    halo.position.set(fire.x, fire.y + 0.16, fire.z + 0.02);
+    sg.add(flame, halo);
+    // Spots are 0.1 m out from the wall face; step back onto it.
+    sg.position.set(s.x - Math.sin(s.ry) * 0.1, 1.85, s.z - Math.cos(s.ry) * 0.1);
     sg.rotation.y = s.ry;
     group.add(sg);
     const out = new THREE.Vector3(Math.sin(s.ry), 0, Math.cos(s.ry)); // away from the wall

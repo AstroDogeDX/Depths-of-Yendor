@@ -8,7 +8,6 @@ const Y = -3; // shifts the whole torch so the flame sits where the old one did
 const TORCH_PAL = {
   wood: P('#1f150d', '#2e2015', '#3e2b1c', '#4f3824', '#61452d', '#735436'),
   rags: P('#110c09', '#1c1510', '#291f17', '#372a1f', '#463628', '#574433'),
-  embers: P('#2a0c05', '#5a1707', '#8f2a0c', '#c84714', '#f07a22', '#ffb444', '#ffe28a'),
 };
 
 const mats = {
@@ -38,14 +37,6 @@ const mats = {
     v -= clamp01((p.y - (14.5 + Y)) / 2.5) * 0.22;
     return ramp(TORCH_PAL.rags, v, c.ax, c.ay);
   },
-  // Emissive: glowing coals broken up by black char, hottest at the crown.
-  embers(c) {
-    const { p } = c;
-    const g = noise3(p.x * 0.9, p.y * 0.9, p.z * 0.9, 71);
-    if (fract(g * 4.5) < 0.2) return ramp(TORCH_PAL.embers, 0.02, c.ax, c.ay);
-    const v = 0.3 + 0.45 * noise3(p.x * 0.6 + 4, p.y * 0.6, p.z * 0.6, 72) + clamp01((p.y - (17 + Y)) / 2.5) * 0.35;
-    return ramp(TORCH_PAL.embers, v, c.ax, c.ay);
-  },
 };
 
 // Head profile: [y, radius]; the bundle is lumpy, so each vertex gets a little random push.
@@ -63,7 +54,9 @@ export function torch() {
   });
   m.group('head', () => {
     const rings = [...HEAD.map(([y, r], i) => lumpy(y, r, i)), apex(8, [0.25, 19.3 + Y, -0.2])];
-    m.mesh('rags', loft(rings, { capEnd: false, mat: (seg) => (seg === 'start' || seg < 3 ? 'rags' : 'embers') }));
+    // The top of the bundle is burning coals, hottest at the crown.
+    m.mesh('rags', loft(rings, { capEnd: false, mat: (seg) => (seg === 'start' || seg < 3 ? 'rags' : 'embers') }),
+      { info: { heat: (p) => clamp01((p.y - (17 + Y)) / 2.5) } });
     m.mesh('collar', lathe([[9.6, 1.55], [10.2, 2.05], [12.4, 2.1], [12.9, 1.9]].map(([y, r]) => [y + Y, r])), { mat: 'iron' });
     // One iron strap cinching the bundle, repeated round it by rotation.
     const strap = loft(HEAD.slice(0, 4).map(([y, r]) => {

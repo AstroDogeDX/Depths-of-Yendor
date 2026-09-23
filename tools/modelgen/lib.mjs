@@ -101,6 +101,45 @@ export function loft(rings, { capStart = true, capEnd = true, caps = null, mat =
   if (capEnd) cap(rings[rings.length - 1], centers[rings.length - 1].clone().sub(centers[rings.length - 2]), 'end');
   return polys;
 }
+/**
+ * Surface of revolution about the y axis, for shapes with an inside such as bowls. `profile` is a list of
+ * [r, y] points walked with the outside of the surface on the right: e.g. out across the base, up the outer
+ * wall, in over the rim, then down the inner wall. `mat(i)` can pick a material per profile segment.
+ */
+export function revolve(profile, { sides = 8, phase = Math.PI / sides, mat = null } = {}) {
+  const polys = [];
+  for (let i = 0; i < profile.length - 1; i++) {
+    const [r0, y0] = profile[i], [r1, y1] = profile[i + 1];
+    const A = latheRing(y0, r0, r0, sides, phase), B = latheRing(y1, r1, r1, sides, phase);
+    for (let k = 0; k < sides; k++) {
+      const k2 = (k + 1) % sides;
+      const poly = dedupe([A[k], A[k2], B[k2], B[k]]);
+      if (poly.length < 3) continue;
+      // The profile's right-hand normal (dy, -dr), swung round to this face.
+      const a = phase + ((k + 0.5) * 2 * Math.PI) / sides;
+      const out = new THREE.Vector3((y1 - y0) * Math.cos(a), r0 - r1, (y1 - y0) * Math.sin(a));
+      polys.push({ pts: orient(poly, out), mat: typeof mat === 'function' ? mat(i) : mat, seg: i, side: k });
+    }
+  }
+  return polys;
+}
+/**
+ * Square bar along a path of points. `side` is a direction kept square across the bar, and `half` its
+ * half-width (or a function of 0..1 along the bar, to taper it).
+ */
+export function tube(path, { half = 0.8, side = [1, 0, 0], mat = null, capStart = true, capEnd = true } = {}) {
+  const pts = path.map(V);
+  const lens = pts.map((_, i) => pts.slice(1, i + 1).reduce((s, p, j) => s + p.distanceTo(pts[j]), 0));
+  const total = lens[lens.length - 1];
+  const rings = pts.map((c, i) => {
+    const t = pts[Math.min(i + 1, pts.length - 1)].clone().sub(pts[Math.max(i - 1, 0)]).normalize();
+    const u = V(side).addScaledVector(t, -t.dot(V(side))).normalize();
+    const v = t.clone().cross(u);
+    const h = typeof half === 'function' ? half(lens[i] / total) : half;
+    return [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([s1, s2]) => c.clone().addScaledVector(u, s1 * h).addScaledVector(v, s2 * h).toArray());
+  });
+  return loft(rings, { mat, capStart, capEnd });
+}
 /** Lathe: profile [[y, r] | [y, rx, rz]] around the y axis. */
 export function lathe(profile, { sides = 8, phase, mat, capStart = true, capEnd = true } = {}) {
   const rings = profile.map(([y, rx, rz]) => (rx <= 0 ? apex(sides, [0, y, 0]) : latheRing(y, rx, rz ?? rx, sides, phase)));
