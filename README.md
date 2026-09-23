@@ -20,7 +20,7 @@ npm run build      # static build in dist/, deployable anywhere
 | Mouse | Look (click the view to capture the pointer) |
 | Click / Space | Attack. Click swings once the meter is past 20%; holding re-swings only at full charge |
 | E | Pick up / use stairs |
-| I or Tab | Pack (↑↓ select, Enter use, T throw, D drop) |
+| I or Tab | Pack (click or ↑↓ select, double-click or Enter use, T throw, D drop) |
 | M | Full map |
 | F / right-click | Zap your last-used wand |
 | Q | Drink a potion you *know* is healing |

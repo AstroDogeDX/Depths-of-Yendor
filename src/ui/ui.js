@@ -47,6 +47,10 @@ export class UI {
       $('title').hidden = false;
       game.state = 'title';
     });
+    // The pause overlay covers the canvas, so it has to take the resume click itself.
+    $('pause').addEventListener('click', () => {
+      if (game.state === 'play' && !game.menu) game.resume();
+    });
     window.addEventListener('keydown', (e) => this.onKey(e));
   }
 
@@ -361,31 +365,49 @@ export class UI {
     else this.renderInventory();
   }
 
+  /** Full rebuild — only when the pack's contents may have changed. Keeps the list's scroll position. */
   renderInventory() {
     const g = this.game, p = g.player, k = g.knowledge;
     const inv = p.inventory;
     const list = $('inv-list');
+    const scroll = list.scrollTop;
     list.innerHTML = '';
     this.invSel = Math.max(0, Math.min(this.invSel, inv.length - 1));
     $('inv-count').textContent = `${inv.length} / ${INVENTORY_SIZE}   ·   ${p.gold} gold`;
+    // The prompt's space is always reserved so the list never shifts when it appears.
     $('inv-prompt').textContent = this.selectMode ? this.selectMode.prompt : '';
-    $('inv-prompt').hidden = !this.selectMode;
+    $('inv-prompt').classList.toggle('off', !this.selectMode);
 
     inv.forEach((it, i) => {
       const li = document.createElement('li');
       const ok = !this.selectMode || this.selectMode.filter(it);
-      li.className = (i === this.invSel ? 'sel ' : '') + (ok ? '' : 'dim');
+      li.className = ok ? '' : 'dim';
       const color = it.kind === 'potion' ? hex(k.color(it)) : KIND_COLOR[it.kind];
       const eq = equipTag(p, it);
       li.innerHTML = `<span class="glyph" style="color:${color}">${KIND_GLYPH[it.kind]}</span><span class="nm"></span>${eq ? `<span class="eq">${eq}</span>` : ''}`;
       li.querySelector('.nm').textContent = k.name(it);
-      li.addEventListener('mouseenter', () => { if (this.invSel !== i) { this.invSel = i; this.renderInventory(); } });
-      li.addEventListener('click', () => { this.invSel = i; this.activate(0); });
+      // Click selects; double-click performs the first action. Hover only highlights.
+      li.addEventListener('click', () => this.selectRow(i));
+      li.addEventListener('dblclick', () => { this.selectRow(i); this.activate(0); });
       list.appendChild(li);
     });
     if (!inv.length) list.innerHTML = '<li class="dim">Your pack is empty.</li>';
+    list.scrollTop = scroll;
+    this.selectRow(this.invSel);
+  }
 
-    const it = inv[this.invSel];
+  /** Change the selection without rebuilding the list. */
+  selectRow(i) {
+    this.invSel = i;
+    const rows = $('inv-list').children;
+    for (let r = 0; r < rows.length; r++) rows[r].classList.toggle('sel', r === i);
+    rows[i]?.scrollIntoView({ block: 'nearest' });
+    this.renderDetail();
+  }
+
+  renderDetail() {
+    const g = this.game, p = g.player, k = g.knowledge;
+    const it = p.inventory[this.invSel];
     const acts = $('inv-actions');
     acts.innerHTML = '';
     if (it) {
@@ -444,8 +466,8 @@ export class UI {
     const g = this.game;
     if (!g || g.menu !== 'inventory') return;
     const n = g.player.inventory.length;
-    if (e.code === 'ArrowUp' || e.code === 'KeyW') { this.invSel = (this.invSel - 1 + n) % Math.max(1, n); this.renderInventory(); }
-    else if (e.code === 'ArrowDown' || e.code === 'KeyS') { this.invSel = (this.invSel + 1) % Math.max(1, n); this.renderInventory(); }
+    if (e.code === 'ArrowUp' || e.code === 'KeyW') this.selectRow((this.invSel - 1 + n) % Math.max(1, n));
+    else if (e.code === 'ArrowDown' || e.code === 'KeyS') this.selectRow((this.invSel + 1) % Math.max(1, n));
     else if (e.code === 'Enter' || e.code === 'KeyE') this.activate(0);
     else if (e.code === 'KeyD' && !this.selectMode) {
       const it = g.player.inventory[this.invSel];
