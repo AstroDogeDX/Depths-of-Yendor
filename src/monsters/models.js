@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-// Every builder returns { root, animate(s), materials, height }.
+// Every builder returns { root, animate(s), materials, height } plus `weapon` for armed humanoids.
 // root's origin is at the creature's feet and it faces local +z.
 // animate(s) receives { t, walk, windup, strike, dead } where windup/strike are 0..1 progress or -1.
 
@@ -96,12 +96,14 @@ function humanoid(k, o) {
 
 const easeOut = (x) => 1 - (1 - x) * (1 - x);
 
+// Monster weapons point +z out of the hand. The overhead chop rotates the arm about x, which leads
+// with the weapon's -y side, so axe bits and halberd blades hang toward -y and blades are wide along y.
 function weaponBlade(k, parent, len, color = 0xb8bcc4) {
   const m = k.mat(color);
   const hilt = k.box(0.04, 0.04, 0.12, k.mat(0x3a2a1a));
   const blade = k.box(0.03, 0.05, len, m);
   blade.position.z = len / 2 + 0.05;
-  const guard = k.box(0.16, 0.03, 0.03, k.mat(0x6a5a3a));
+  const guard = k.box(0.03, 0.16, 0.03, k.mat(0x6a5a3a));
   guard.position.z = 0.06;
   const g = new THREE.Group();
   g.add(hilt, blade, guard);
@@ -114,7 +116,7 @@ function weaponAxe(k, parent, len) {
   const haft = k.box(0.05, 0.05, len, k.mat(0x5a3a1a));
   haft.position.z = len / 2;
   const headM = k.box(0.04, 0.32, 0.22, k.mat(0x8a8e94));
-  headM.position.set(0, 0.1, len - 0.1);
+  headM.position.set(0, -0.1, len - 0.1);
   g.add(haft, headM);
   parent.add(g);
   return g;
@@ -232,7 +234,7 @@ const BUILDERS = {
       parts.head.add(ear);
     }
     const w = weaponBlade(k, parts.hand, 0.28);
-    return { root: parts.root, animate, materials: k.materials, height: 1.15 };
+    return { root: parts.root, animate, materials: k.materials, height: 1.15, weapon: w };
   },
 
   archer() {
@@ -271,7 +273,7 @@ const BUILDERS = {
     }
     parts.torso.scale.set(0.3, 1, 0.6);
     const w = weaponBlade(k, parts.hand, 0.7);
-    return { root: parts.root, animate, materials: k.materials, height: 1.75 };
+    return { root: parts.root, animate, materials: k.materials, height: 1.75, weapon: w };
   },
 
   orc() {
@@ -283,7 +285,7 @@ const BUILDERS = {
       parts.head.add(tusk);
     }
     const w = weaponAxe(k, parts.hand, 0.8);
-    return { root: parts.root, animate, materials: k.materials, height: 1.95 };
+    return { root: parts.root, animate, materials: k.materials, height: 1.95, weapon: w };
   },
 
   wraith() {
@@ -405,10 +407,10 @@ const BUILDERS = {
     const pole = k.box(0.06, 0.06, 2.0, k.mat(0x2a1a10));
     pole.position.z = 0.5;
     const blade = k.box(0.04, 0.45, 0.35, gold);
-    blade.position.set(0, 0.18, 1.35);
+    blade.position.set(0, -0.18, 1.35);
     halberd.add(pole, blade);
     parts.hand.add(halberd);
-    return { root: parts.root, animate, materials: k.materials, height: 2.8 };
+    return { root: parts.root, animate, materials: k.materials, height: 2.8, weapon: halberd };
   },
 };
 

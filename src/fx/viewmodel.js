@@ -5,21 +5,27 @@ import { glowSprite } from './glow.js';
 // First-person hands: weapon on the right, torch on the left. Rendered in its own scene after the
 // world (with the depth buffer cleared) so the weapon never clips into walls.
 
-const REST = { p: [0.36, -0.42, -0.9], r: [-0.55, 0.12, 0.28] };
+// The weapon hangs off three nested groups so its edge always leads the cut:
+//   pivot (hand position + yaw) -> plane (roll: tilts the plane the cut travels in)
+//   -> arc (rotation about the blade's own x axis, i.e. the flat's normal) -> weapon mesh.
+// Because buildWeaponMesh puts the edge on -z and the tip on +y, decreasing `arc` swings the tip forward
+// and down with the edge in front. Rolling the plane makes the cut diagonal without twisting the edge.
+// Keep `roll` constant across the cutting keyframes so the cut is a pure arc.
 const SLASH = [
-  { t: 0.0, p: [0.36, -0.42, -0.9], r: [-0.55, 0.12, 0.28] },
-  { t: 0.22, p: [0.5, -0.26, -0.82], r: [0.2, 0.2, -0.7] },
-  { t: 0.5, p: [-0.2, -0.52, -0.98], r: [-1.4, -0.3, 1.2] },
-  { t: 1.0, p: [0.36, -0.42, -0.9], r: [-0.55, 0.12, 0.28] },
+  { t: 0.0, p: [0.36, -0.42, -0.9], yaw: 0.25, roll: 0.2, arc: -0.35 },  // guard: edge toward the enemy
+  { t: 0.24, p: [0.46, -0.24, -0.86], yaw: 0.25, roll: -0.6, arc: 0.4 }, // raised over the right shoulder
+  { t: 0.52, p: [-0.16, -0.5, -0.95], yaw: 0.25, roll: -0.6, arc: -2.3 }, // cut down and across to the left
+  { t: 1.0, p: [0.36, -0.42, -0.9], yaw: 0.25, roll: 0.2, arc: -0.35 },
 ];
 const THRUST = [
-  { t: 0.0, p: [0.3, -0.42, -0.88], r: [-1.25, 0, 0.1] },
-  { t: 0.25, p: [0.32, -0.38, -0.68], r: [-1.35, 0, 0.1] },
-  { t: 0.5, p: [0.12, -0.3, -1.35], r: [-1.5, 0, 0] },
-  { t: 1.0, p: [0.3, -0.42, -0.88], r: [-1.25, 0, 0.1] },
+  { t: 0.0, p: [0.3, -0.42, -0.88], yaw: 0.12, roll: 0, arc: -1.3 },
+  { t: 0.25, p: [0.32, -0.38, -0.66], yaw: 0.12, roll: 0, arc: -1.38 },  // draw back
+  { t: 0.5, p: [0.12, -0.3, -1.35], yaw: 0.12, roll: 0, arc: -1.52 },   // lunge
+  { t: 1.0, p: [0.3, -0.42, -0.88], yaw: 0.12, roll: 0, arc: -1.3 },
 ];
 
 const smooth = (x) => x * x * (3 - 2 * x);
+const lerp = (a, b, k) => a + (b - a) * k;
 
 function sample(keys, t) {
   for (let i = 0; i < keys.length - 1; i++) {
@@ -27,12 +33,13 @@ function sample(keys, t) {
     if (t <= b.t) {
       const k = smooth((t - a.t) / (b.t - a.t));
       return {
-        p: a.p.map((v, j) => v + (b.p[j] - v) * k),
-        r: a.r.map((v, j) => v + (b.r[j] - v) * k),
+        p: a.p.map((v, j) => lerp(v, b.p[j], k)),
+        yaw: lerp(a.yaw, b.yaw, k), roll: lerp(a.roll, b.roll, k), arc: lerp(a.arc, b.arc, k),
       };
     }
   }
-  return keys[keys.length - 1];
+  const last = keys[keys.length - 1];
+  return { ...last, p: [...last.p] };
 }
 
 export class ViewModel {
@@ -46,6 +53,10 @@ export class ViewModel {
     this.scene.add(this.torchLight);
 
     this.weaponPivot = new THREE.Group();
+    this.weaponPlane = new THREE.Group();
+    this.weaponArc = new THREE.Group();
+    this.weaponPivot.add(this.weaponPlane);
+    this.weaponPlane.add(this.weaponArc);
     this.scene.add(this.weaponPivot);
     this.weapon = null;
     this.keys = SLASH;
@@ -74,12 +85,12 @@ export class ViewModel {
   }
 
   setWeapon(model) {
-    if (this.weapon) this.weaponPivot.remove(this.weapon);
+    if (this.weapon) this.weaponArc.remove(this.weapon);
     this.weapon = model ? buildWeaponMesh(model) : null;
     this.keys = model === 'spear' || model === 'dagger' ? THRUST : SLASH;
     if (this.weapon) {
-      if (model === 'spear') this.weapon.position.y = -0.5;
-      this.weaponPivot.add(this.weapon);
+      if (model === 'spear') this.weapon.position.y = -0.5; // hold the long shaft nearer its middle
+      this.weaponArc.add(this.weapon);
     }
   }
 
@@ -98,8 +109,7 @@ export class ViewModel {
   }
 
   update(dt, { moving, bob, charge, time, lightLevel }) {
-    let pose = { p: [...REST.p], r: [...REST.r] };
-    if (this.keys === THRUST) pose = { p: [...THRUST[0].p], r: [...THRUST[0].r] };
+    let pose = sample(this.keys, 0);
     if (this.swingT >= 0) {
       this.swingT += dt / this.swingDur;
       if (this.swingT >= 1) this.swingT = -1;
@@ -107,7 +117,7 @@ export class ViewModel {
     } else {
       // Weapon sags while the attack meter refills, King's Field style.
       pose.p[1] -= (1 - charge) * 0.14;
-      pose.r[0] += (1 - charge) * 0.3;
+      pose.arc += (1 - charge) * 0.3;
     }
     if (this.dipT >= 0) {
       this.dipT += dt / 0.35;
@@ -117,7 +127,9 @@ export class ViewModel {
     const bx = moving ? Math.sin(bob) * 0.012 : 0;
     const by = moving ? Math.abs(Math.cos(bob)) * 0.014 : Math.sin(time * 1.5) * 0.003;
     this.weaponPivot.position.set(pose.p[0] + bx, pose.p[1] + by, pose.p[2]);
-    this.weaponPivot.rotation.set(pose.r[0], pose.r[1], pose.r[2]);
+    this.weaponPivot.rotation.set(0, pose.yaw, 0);
+    this.weaponPlane.rotation.set(0, 0, pose.roll);
+    this.weaponArc.rotation.set(pose.arc, 0, 0);
     this.torch.position.set(-0.5 - bx, -0.52 + by, -0.95);
 
     const flick = 0.85 + Math.sin(time * 23) * 0.06 + Math.sin(time * 7.3) * 0.08;
