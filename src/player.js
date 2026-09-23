@@ -1,5 +1,6 @@
 import {
   PLAYER_RADIUS, PLAYER_SPEED, TURN_SPEED, MOUSE_SENS, HUNGER_MAX, HUNGER_HUNGRY, HUNGER_WEAK, INVENTORY_SIZE, HOTBAR_SIZE,
+  STAMINA_BASE, STAMINA_PER_LEVEL, STAMINA_DRAIN, STAMINA_REGEN, STAMINA_REGEN_DELAY, STAMINA_RECOVER, MODE_SPEED, NOISE,
 } from './config.js';
 import { WEAPONS, ARMORS, ARTEFACTS } from './items/defs.js';
 import { stackable } from './items/generate.js';
@@ -21,6 +22,13 @@ export class Player {
     this.hotbar = new Array(HOTBAR_SIZE).fill(null);
     this.keys = {}; // depth -> iron keys held for that floor
     this.charge = 1;
+    this.maxStamina = STAMINA_BASE;
+    this.stamina = STAMINA_BASE;
+    this.winded = false; // ran dry: no sprinting or sneaking until it recovers
+    this.staminaRestT = 0;
+    this.mode = 'walk'; // walk | sprint | sneak
+    this.crouch = 0; // 0..1, eases the camera down while sneaking
+    this.noise = 0; // metres of walking distance at which monsters can hear you this frame
     this.swingT = -1; this.swingDur = 0.3; this.swingHit = false; this.swingPower = 1;
     this.status = { haste: 0, poison: 0, confusion: 0, blind: 0, paralysis: 0, mindvision: 0, invisible: 0, burning: 0 };
     this.artefactCD = [0, 0];
@@ -78,8 +86,7 @@ export class Player {
   stealth() {
     let s = 1;
     if (this.wearingRing('stealth')) s *= Math.max(0.15, 0.5 - this.ringBonus('stealth') * 0.1);
-    const a = this.equip.armor;
-    if (a && (a.type === 'plate' || a.type === 'splint')) s *= 1.25;
+    if (this.heavyArmor()) s *= 1.25;
     if (!this.moving) s *= 0.7;
     return s;
   }
@@ -116,6 +123,8 @@ export class Player {
     const gain = rand.int(4, 6);
     this.maxHp += gain;
     this.hp += gain;
+    this.maxStamina += STAMINA_PER_LEVEL;
+    this.stamina += STAMINA_PER_LEVEL;
     game.log(`Welcome to experience level ${this.level}!`, 'good');
     game.audio.levelUp();
   }
@@ -191,6 +200,13 @@ export class Player {
     let mx = fx * f + rx * s, mz = fz * f + rz * s;
     const ml = Math.hypot(mx, mz);
     this.moving = ml > 0;
+    // Sneak wins if both are held. Holding either while standing still costs nothing.
+    let mode = !para && input.sneak ? 'sneak' : !para && input.sprint ? 'sprint' : 'walk';
+    if (this.winded) mode = 'walk';
+    this.mode = mode;
+    this.crouch += ((mode === 'sneak' ? 1 : 0) - this.crouch) * Math.min(1, dt * 8);
+    this.updateStamina(dt, game, this.moving && mode !== 'walk');
+    this.noise = this.moving ? NOISE[mode] * (this.heavyArmor() ? 1.25 : 1) : 0;
     if (this.moving) {
       mx /= ml; mz /= ml;
       if (this.status.confusion > 0) {
@@ -198,12 +214,12 @@ export class Player {
         const c = Math.cos(a), sn = Math.sin(a);
         [mx, mz] = [mx * c - mz * sn, mx * sn + mz * c];
       }
-      const sp = this.moveSpeed();
+      const sp = this.moveSpeed() * MODE_SPEED[mode];
       this.x += mx * sp * dt;
       this.z += mz * sp * dt;
       const before = Math.floor(this.bob / Math.PI);
       this.bob += dt * 8.5 * (sp / PLAYER_SPEED);
-      if (Math.floor(this.bob / Math.PI) !== before) game.audio.step();
+      if (Math.floor(this.bob / Math.PI) !== before) game.audio.step(mode);
       // Walking into a closed door opens it (or tries its lock).
       const door = level.doorAhead(this.x, this.z, mx, mz, PLAYER_RADIUS);
       if (door) game.useDoor(door);
@@ -275,6 +291,29 @@ export class Player {
         if (s.burning > 0 && !game.over) game.hurtPlayer(rand.int(1, 3), { source: 'flames', ignoreArmor: true, dot: true, fire: true });
       }
     }
+  }
+
+  updateStamina(dt, game, spending) {
+    if (spending) {
+      this.stamina = Math.max(0, this.stamina - dt * STAMINA_DRAIN[this.mode]);
+      this.staminaRestT = 0;
+      if (this.stamina <= 0 && !this.winded) {
+        this.winded = true;
+        this.mode = 'walk';
+        game.log('You are out of breath.', 'warn');
+      }
+      return;
+    }
+    this.staminaRestT += dt;
+    if (this.staminaRestT > STAMINA_REGEN_DELAY) {
+      this.stamina = Math.min(this.maxStamina, this.stamina + dt * STAMINA_REGEN * (this.moving ? 1 : 1.5));
+    }
+    if (this.winded && this.stamina >= this.maxStamina * STAMINA_RECOVER) this.winded = false;
+  }
+
+  heavyArmor() {
+    const a = this.equip.armor;
+    return !!a && (a.type === 'plate' || a.type === 'splint');
   }
 
   updateHunger(dt, game) {

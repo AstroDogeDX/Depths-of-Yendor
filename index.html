@@ -32,6 +32,7 @@
       <div id="bars">
         <div class="bar" id="hp-bar"><div class="fill" id="hp-fill"></div><span id="hp-text"></span></div>
         <div class="bar" id="atk-bar"><div class="fill" id="atk-fill"></div><span>ATTACK</span></div>
+        <div class="bar" id="st-bar"><div class="fill" id="st-fill"></div><span>STAMINA</span></div>
         <div id="status-line"></div>
       </div>
       <div id="gear"></div>
@@ -43,6 +44,7 @@
       <div class="panel small">
         <h2>Paused</h2>
         <p>Click anywhere to take up your torch again.</p>
+        <label class="check" id="pause-fs"><input type="checkbox" id="fs-pause" /> Fullscreen</label>
       </div>
     </div>
 
@@ -120,8 +122,10 @@
           <label>Seed <input id="seed-in" maxlength="12" placeholder="random" autocomplete="off" /></label>
           <button id="start-btn">Descend</button>
         </div>
+        <label class="check"><input type="checkbox" id="fs-in" /> Play fullscreen <span>(recommended: stops Ctrl+W closing the tab while you sneak)</span></label>
         <div class="controls">
           <div><b>WASD</b> move · <b>Mouse</b> look · <b>← →</b> turn</div>
+          <div><b>Shift</b> sprint — fast, but loud &nbsp; <b>Ctrl / C</b> sneak — slow and near-silent, for striking sleepers unaware</div>
           <div><b>Click / Space</b> attack — your swing meter refills between blows, and partial swings hit softer</div>
           <div><b>E</b> pick up · use stairs &nbsp; <b>I</b> pack &nbsp; <b>M</b> map</div>
           <div><b>1–6</b> hotbar (assign from your pack) &nbsp; <b>F / Right-click</b> zap wand &nbsp; <b>Q</b> drink known healing &nbsp; <b>R / T</b> artefact powers</div>

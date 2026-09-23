@@ -60,7 +60,11 @@ export class Sfx {
     src.stop(t + dur + 0.05);
   }
 
-  step() { this.noise({ dur: 0.07, vol: 0.05, freq: 180 + Math.random() * 60, q: 0.8, type: 'lowpass' }); }
+  step(mode = 'walk') {
+    const vol = mode === 'sprint' ? 0.11 : mode === 'sneak' ? 0.012 : 0.05;
+    const freq = (mode === 'sprint' ? 140 : 180) + Math.random() * 60;
+    this.noise({ dur: mode === 'sprint' ? 0.09 : 0.07, vol, freq, q: 0.8, type: 'lowpass' });
+  }
   swing() { this.noise({ dur: 0.18, vol: 0.22, freq: 700, freq2: 2600, q: 0.9 }); }
   whiff() { this.noise({ dur: 0.14, vol: 0.1, freq: 2000, freq2: 800, q: 0.7 }); }
   hit() {

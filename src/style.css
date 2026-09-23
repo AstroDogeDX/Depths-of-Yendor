@@ -75,6 +75,14 @@ body.lowhp #hurt { animation: pulse 1.2s infinite; }
 #atk-bar span { top: -1px; font-size: 10px; opacity: 0.7; }
 #atk-fill { background: linear-gradient(#4a78c8, #20407a); }
 #atk-bar.ready #atk-fill { background: linear-gradient(#80b0ff, #3a68b8); }
+#st-bar { height: 10px; }
+#st-bar span { top: -2px; font-size: 9px; opacity: 0.7; }
+#st-fill { background: linear-gradient(#8ac860, #3e7a2a); transition: width 0.1s linear; }
+#st-bar.winded #st-fill { background: linear-gradient(#c89040, #7a4a1a); animation: winded 0.8s ease-in-out infinite; }
+@keyframes winded { 50% { opacity: 0.45; } }
+.st-winded { color: #e0a050 !important; }
+.st-sneak { color: #a0b8d0 !important; }
+.st-sprint { color: #c8e0a0 !important; }
 #status-line { font-size: 14px; min-height: 18px; display: flex; flex-wrap: wrap; gap: 8px; }
 #status-line span { color: #f0d060; }
 .st-poison, .st-burning, .st-starving, .st-paralysis { color: #ff7a60 !important; }
@@ -237,6 +245,10 @@ button.alt { background: linear-gradient(#5a5040, #3a3228); color: var(--ink); }
   background: #16120c; color: var(--ink); border: 1px solid var(--gold-dim);
 }
 #start-btn { font-size: 20px; padding: 10px 32px; align-self: flex-end; }
+.check { display: inline-flex; gap: 8px; align-items: center; font-size: 14px; cursor: pointer; }
+.check span { opacity: 0.55; font-size: 13px; }
+.check input { accent-color: #b08c48; }
+#pause-fs { margin-top: 6px; font-size: 13px; opacity: 0.8; }
 .controls { font-size: 14px; line-height: 1.8; opacity: 0.85; margin-top: 18px; }
 .controls b { color: var(--gold); font-weight: normal; font-family: var(--mono); }
 .lore { font-size: 14px; opacity: 0.6; line-height: 1.6; margin-top: 22px; }

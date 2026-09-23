@@ -207,7 +207,7 @@ export function readScroll(game, item) {
       announce();
       return false;
     case 'aggravate':
-      for (const m of level.monsters) if (!m.dead) { if (m.state !== 'hunt') m.notice(game); }
+      for (const m of level.monsters) if (!m.dead) m.notice(game);
       game.log('A piercing shriek echoes through the floor. Everything is awake now.', 'danger');
       announce();
       return false;

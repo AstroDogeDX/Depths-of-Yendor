@@ -18,6 +18,18 @@ export const PLAYER_SPEED = 3.1; // m/s — King's Field is deliberately unhurri
 export const TURN_SPEED = 2.2; // rad/s for keyboard turning
 export const MOUSE_SENS = 0.0022;
 
+// Stamina: spent while *moving* and sprinting (Shift) or sneaking (Ctrl / C). Never used by attacks.
+export const STAMINA_BASE = 100;
+export const STAMINA_PER_LEVEL = 10;
+export const STAMINA_DRAIN = { sprint: 22, sneak: 9 }; // per second while moving
+export const STAMINA_REGEN = 18; // per second, after a short pause; half as fast again when standing still
+export const STAMINA_REGEN_DELAY = 0.6;
+export const STAMINA_RECOVER = 0.3; // once winded, sprint/sneak return at this fraction of max
+export const MODE_SPEED = { walk: 1, sprint: 1.6, sneak: 0.5 };
+// How far (in metres of walking distance, round corners) monsters can hear your footsteps.
+export const NOISE = { walk: 6, sprint: 16, sneak: 1.5 };
+export const CROUCH_DROP = 0.4; // how far the camera sinks while sneaking
+
 export const INVENTORY_SIZE = 20;
 export const HOTBAR_SIZE = 6; // number keys 1..HOTBAR_SIZE
 export const HUNGER_MAX = 1000;

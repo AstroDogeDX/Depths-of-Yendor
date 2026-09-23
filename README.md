@@ -17,6 +17,8 @@ npm run build      # static build in dist/, deployable anywhere
 | Key | Action |
 | --- | --- |
 | WASD / arrows | Move; ← → turn (King's Field style) |
+| Shift | Sprint: 1.6× speed, but loud (uses stamina) |
+| Ctrl or C | Sneak: half speed, crouched and near-silent (uses stamina) |
 | Mouse | Look (click the view to capture the pointer) |
 | Click / Space | Attack. Click swings once the meter is past 20%; holding re-swings only at full charge |
 | E | Pick up / use stairs |
@@ -47,7 +49,7 @@ Potion, scroll and food slots remember the *type*, so a slot whose stack runs ou
 
 - **Attack meter instead of turns.** Every weapon has a recovery time. You can swing early, but damage scales with the charge, like King's Field's power bar. The weapon visibly sags while the meter refills.
 - **Telegraphed monster attacks.** Monsters wind up before striking, and during the windup they turn slowly toward you. Stepping back or circle-strafing makes them whiff, which replaces Rogue's to-hit dice for defence. Heavy hits can stagger a monster out of its windup.
-- **Stealth and sneak attacks.** Monsters start asleep or wandering. Unaware targets take double damage and cannot dodge (Pixel Dungeon's surprise attacks). Standing still, rings of stealth and light armour help. Heavy armour hurts.
+- **Stealth and sneak attacks.** Monsters start asleep or wandering. Unaware targets take double damage and cannot dodge (Pixel Dungeon's surprise attacks). Monsters notice you by sight and by the sound of your footsteps (see below). Standing still, rings of stealth and light armour help. Heavy armour hurts.
 - **Clocks tick in seconds.** Hunger, regeneration, status effects, wand recharge and ring identification all run on real time. The world pauses while the pack or map is open, but drinking, eating, throwing or changing equipment empties your attack meter, so doing it mid-fight still costs a swing.
 - **Paralysis means paralysis.** While paralysed you can't use items (from the pack or the hotbar), pick things up, take stairs or invoke artefacts. Only the map stays available.
 - **Identification is per run.** Potion colours, scroll labels, wand woods and ring gems are reshuffled from the seed. Potions reveal themselves when drunk, and throwing a potion identifies it if the splash does something visible. Weapons and armour reveal their enchantment after enough hits. Rings reveal themselves after about 100 s of wear.
@@ -61,6 +63,21 @@ Potion, scroll and food slots remember the *type*, so a slot whose stack runs ou
 - **Items:** 7 weapons with different reach and speed (spears out-reach swords, hammers hit hard but recover slowly), 5 armours with strength requirements, 10 potions, 9 scrolls, 5 wands, 6 rings, food.
 - **6 artefacts**, 4 per run in guarded shrines on floors 3, 5, 7 and 9: Chalice of Crimson Thirst (lifesteal), Eye of the Deep (see all monsters and traps), Horn of Thunder (stun blast), Cloak of Shadows (invisibility), Boots of the Wind (speed), Emberheart (burning strikes, fire immunity). You have two attunement slots.
 - A Rogue tombstone when you die. Seeds are shareable.
+
+## Stamina, sprinting and sneaking
+
+Stamina is a separate bar from the attack meter and is never spent on swings. It drains only while you're *moving* in a mode: sprinting uses 22 a second, sneaking 9. Holding the key while standing still is free. It refills (18 a second, half as fast again standing still) after a short pause. Run it dry and you're *Winded*: no sprinting or sneaking until it's back to 30%. You start with 100, and gain 10 more per level.
+
+- **Noise.** Your footsteps carry by walking distance, round corners but not through walls: about 6 m walking, 16 m sprinting, 1.5 m sneaking, and nothing standing still. Heavy armour is a quarter louder. A sprint can wake monsters in neighbouring rooms.
+- **Hearing and searching.** A monster that hears you comes *searching* (a **?**). Only when it actually sees you does it become fully aware (a **!**). Until then it can still be struck unaware.
+- **Sneaking up on sleepers.** Sleepers wake mostly to footsteps, or to someone standing right over them, and sneaking cuts both. In testing, sneaking up to within 2 m of a sleeper woke it about 14% of the time, against about 75% for walking up.
+
+**Ctrl and the browser:** Ctrl+W, Ctrl+T and Ctrl+N are reserved by browsers, and Ctrl+W is also "sneak forward". So:
+
+- **Fullscreen** (on by default; see the title screen or pause panel) uses Keyboard Lock in Chrome and Edge, so those keys go to the game.
+- **Outside fullscreen**, the game asks before the tab closes or reloads while Ctrl is held.
+- Other Ctrl shortcuts are suppressed during play.
+- **C** is an alternative sneak key with no conflicts at all.
 
 ## Floors and doors
 

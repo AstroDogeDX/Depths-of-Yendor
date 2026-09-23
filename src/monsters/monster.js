@@ -1,7 +1,7 @@
 import { MONSTERS } from './defs.js';
 import { buildMonsterModel } from './models.js';
 import { rand } from '../rng.js';
-import { PLAYER_RADIUS, EYE_H } from '../config.js';
+import { PLAYER_RADIUS, EYE_H, TILE } from '../config.js';
 import { spawnProjectile } from '../fx/projectiles.js';
 import { burst } from '../fx/particles.js';
 
@@ -47,6 +47,7 @@ export class Monster {
     this.dotAcc = 0;
     this.seeT = rand.range(0, 0.2);
     this.canSee = false;
+    this.seen = false; // has laid eyes on the player during this hunt (vs. searching for a noise)
     this.lostT = 0;
     this.decideT = 0;
     this.walk = 0;
@@ -87,7 +88,7 @@ export class Monster {
       this.seeT = 0.2;
       this.canSee = this.status.blind <= 0 && p.status.invisible <= 0 && dist < 18 &&
         level.los(this.x, this.z, p.x, p.z);
-      this.perceive(game, dist);
+      this.perceive(game, level, dist);
     }
 
     const speedMult = this.status.slowed > 0 ? 0.45 : 1;
@@ -151,29 +152,55 @@ export class Monster {
     }
   }
 
-  perceive(game, dist) {
-    const stealth = game.player.stealth();
+  perceive(game, level, dist) {
+    const p = game.player;
+    const stealth = p.stealth();
+    const heard = this.hearing(p, level);
     if (this.state === 'sleep') {
-      let chance = 0;
-      if (this.canSee) chance = dist < 3 ? 0.45 : dist < 8 ? 0.1 : 0.025;
-      else if (dist < 5) chance = 0.03;
+      // Sleepers don't watch: they wake to footsteps, or to someone looming right over them.
+      // Sneaking keeps your steps near-silent and your presence five times less likely to stir them.
+      let chance = 0.25 * heard;
+      if (this.canSee && dist < 5) chance += 0.12 * (1 - dist / 5) * (p.mode === 'sneak' ? 0.2 : 1);
       if (this.boss && this.canSee && dist < 9) chance = 1;
-      if (rand.chance(chance * stealth)) this.wake(game);
+      if (rand.chance(chance * stealth)) {
+        if (this.canSee) this.notice(game);
+        else this.hear(game, level);
+      }
     } else if (this.state === 'wander') {
       if (this.canSee && (dist < 4 || rand.chance(0.35 * stealth + 0.08))) this.notice(game);
+      else if (heard > 0 && rand.chance(0.45 * heard * stealth)) this.hear(game, level);
+    } else if (this.state === 'hunt' && this.canSee && !this.seen) {
+      this.notice(game);
     }
   }
 
-  wake(game) {
-    if (this.canSee) this.notice(game);
-    else this.state = 'wander';
+  /**
+   * 0..1: how clearly this monster hears the player's footsteps. Measured in walking distance using the
+   * player-rooted flow field, so sound carries along corridors and round corners but not through walls.
+   */
+  hearing(p, level) {
+    if (p.noise <= 0 || !level.flow) return 0;
+    const steps = level.flow[level.idx(level.toTile(this.x), level.toTile(this.z))];
+    if (steps < 0) return 0;
+    const d = steps * TILE;
+    return d < p.noise ? 1 - d / p.noise : 0;
+  }
+
+  /** Heard something: come and look, without knowing yet what it was. Still open to an unaware strike. */
+  hear(game, level) {
+    this.state = 'hunt';
+    this.seen = false;
+    this.lostT = 6; // searches for ~6s (hunters give up at 12) unless it lays eyes on you
+    this.wander = null;
+    if (level.isVisibleWorld(this.x, this.z)) game.popup(this.headPos(), '?', 'alert');
   }
 
   notice(game) {
-    if (this.state === 'hunt') return;
+    if (this.state === 'hunt' && this.seen) return;
     this.state = 'hunt';
+    this.seen = true;
     this.lostT = 0;
-    game.popup(this.headPos(), '!', 'alert');
+    if (game.level.isVisibleWorld(this.x, this.z)) game.popup(this.headPos(), '!', 'alert');
     game.audio.alert(this.boss ? 0.4 : 1 + (1.2 - this.height) * 0.4);
     if (this.boss) game.log(`The ${this.name} awakens. "You shall not take it."`, 'danger');
   }
@@ -183,6 +210,7 @@ export class Monster {
     const p = game.player;
     const speed = def.speed * speedMult;
 
+    if (this.state === 'hunt' && this.canSee) this.lostT = 0;
     if (this.state === 'hunt' && !this.canSee) {
       this.lostT += dt;
       if ((this.lostT > 12 && !this.boss) || p.status.invisible > 0) {
@@ -378,7 +406,7 @@ export class Monster {
       this.z += opts.knockback.z * 0.35;
       game.level.collide(this, this.radius);
     }
-    if (this.state !== 'hunt') this.notice(game);
+    this.notice(game); // no-op if it already knows where you are
     // Heavy blows stagger a monster out of its windup.
     if (this.attack.phase === 'windup' && !this.boss && amount >= this.maxHp * 0.3) {
       this.attack.phase = 'none';

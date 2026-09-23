@@ -67,6 +67,17 @@ export class UI {
       $('title').hidden = false;
       game.state = 'title';
     });
+    // One fullscreen preference, shown on the title screen and the pause panel.
+    for (const id of ['fs-in', 'fs-pause']) {
+      const box = $(id);
+      box.checked = game.fullscreenPref;
+      box.addEventListener('click', (e) => e.stopPropagation()); // don't let the pause panel's click resume
+      box.addEventListener('change', () => {
+        game.setFullscreenPref(box.checked);
+        $('fs-in').checked = $('fs-pause').checked = box.checked;
+      });
+    }
+    $('pause-fs').addEventListener('click', (e) => e.stopPropagation());
     // The pause overlay covers the canvas, so it has to take the resume click itself.
     $('pause').addEventListener('click', () => {
       if (game.state === 'play' && !game.menu) game.resume();
@@ -191,6 +202,8 @@ export class UI {
     $('hp-fill').style.width = `${hpFrac * 100}%`;
     this.set('hp-text', `HP ${Math.max(0, Math.ceil(p.hp))} / ${p.maxHp}`);
     $('atk-fill').style.width = `${p.charge * 100}%`;
+    $('st-fill').style.width = `${(p.stamina / p.maxStamina) * 100}%`;
+    $('st-bar').classList.toggle('winded', p.winded);
     $('atk-bar').classList.toggle('ready', p.charge >= 1);
     document.body.classList.toggle('lowhp', hpFrac < 0.25);
     document.body.classList.toggle('blind', p.status.blind > 0);
@@ -199,6 +212,9 @@ export class UI {
     const s = p.status;
     const lab = { haste: 'Hasted', poison: 'Poisoned', confusion: 'Confused', blind: 'Blind', paralysis: 'Paralysed', mindvision: 'Mind vision', invisible: 'Invisible', burning: 'Burning' };
     for (const key in lab) if (s[key] > 0) st.push(`<span class="st-${key}">${lab[key]} ${Math.ceil(s[key])}</span>`);
+    if (p.winded) st.push('<span class="st-winded">Winded</span>');
+    else if (p.mode === 'sneak') st.push('<span class="st-sneak">Sneaking</span>');
+    else if (p.mode === 'sprint' && p.moving) st.push('<span class="st-sprint">Sprinting</span>');
     if (p.hunger <= 0) st.push('<span class="st-starving">Starving</span>');
     else if (p.hunger < HUNGER_WEAK) st.push('<span class="st-weak">Weak</span>');
     else if (p.hunger < HUNGER_HUNGRY) st.push('<span class="st-hungry">Hungry</span>');
@@ -222,7 +238,7 @@ export class UI {
     const t = g.target;
     $('target').hidden = !t;
     if (t) {
-      const tag = t.state === 'sleep' ? ' (asleep)' : t.state !== 'hunt' ? ' (unaware)' : '';
+      const tag = t.state === 'sleep' ? ' (asleep)' : t.state !== 'hunt' ? ' (unaware)' : !t.seen ? ' (searching)' : '';
       this.set('target-name', t.name + tag);
       $('target-fill').style.width = `${Math.max(0, t.hp / t.maxHp) * 100}%`;
     }

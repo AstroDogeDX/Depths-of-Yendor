@@ -108,7 +108,7 @@ export class ViewModel {
     this.camera.updateProjectionMatrix();
   }
 
-  update(dt, { moving, bob, charge, time, lightLevel }) {
+  update(dt, { moving, bob, charge, time, lightLevel, sprint = false }) {
     let pose = sample(this.keys, 0);
     if (this.swingT >= 0) {
       this.swingT += dt / this.swingDur;
@@ -124,8 +124,11 @@ export class ViewModel {
       if (this.dipT >= 1) this.dipT = -1;
       else pose.p[1] -= Math.sin(Math.PI * this.dipT) * 0.25;
     }
-    const bx = moving ? Math.sin(bob) * 0.012 : 0;
-    const by = moving ? Math.abs(Math.cos(bob)) * 0.014 : Math.sin(time * 1.5) * 0.003;
+    // Running: the weapon drops a little and swings more with each stride.
+    const sway = sprint ? 2.2 : 1;
+    if (sprint && this.swingT < 0) pose.p[1] -= 0.06;
+    const bx = moving ? Math.sin(bob) * 0.012 * sway : 0;
+    const by = moving ? Math.abs(Math.cos(bob)) * 0.014 * sway : Math.sin(time * 1.5) * 0.003;
     this.weaponPivot.position.set(pose.p[0] + bx, pose.p[1] + by, pose.p[2]);
     this.weaponPivot.rotation.set(0, pose.yaw, 0);
     this.weaponPlane.rotation.set(0, 0, pose.roll);

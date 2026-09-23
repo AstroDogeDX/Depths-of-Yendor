@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TILE, EYE_H, MAX_DEPTH, ARTEFACT_DEPTHS, RENDER_HEIGHTS, HOTBAR_SIZE } from './config.js';
+import { TILE, EYE_H, MAX_DEPTH, ARTEFACT_DEPTHS, RENDER_HEIGHTS, HOTBAR_SIZE, CROUCH_DROP } from './config.js';
 import { RNG, rand } from './rng.js';
 import { generateLevel } from './dungeon/generator.js';
 import { Level } from './world/level.js';
@@ -11,7 +11,7 @@ import { itemActions, zapWand, drinkPotion, activateArtefact } from './items/use
 import { ViewModel } from './fx/viewmodel.js';
 import { burst, ring } from './fx/particles.js';
 import { playerPopupPos } from './combat.js';
-import { Input } from './input.js';
+import { Input, GAME_KEYS } from './input.js';
 import { Sfx } from './audio.js';
 import { useSlot } from './hotbar.js';
 
@@ -63,6 +63,19 @@ export class Game {
       if (locked) this.paused = false;
       else if (!this.menu) this.paused = true;
     };
+    try {
+      this.fullscreenPref = localStorage.getItem('doy.fullscreen') !== 'off';
+    } catch {
+      this.fullscreenPref = true;
+    }
+    // Sneak is Ctrl, and outside fullscreen the browser won't let us cancel Ctrl+W / Ctrl+R.
+    // If the page is about to go while Ctrl is down, ask first rather than lose the run.
+    window.addEventListener('beforeunload', (e) => {
+      if (this.state === 'play' && this.input.ctrlRecently()) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
     this.input.onLockError = () => {
       if (this.state === 'play' && !this.menu) this.paused = true;
     };
@@ -119,8 +132,26 @@ export class Game {
 
   resume() {
     this.audio.init();
+    this.enterFullscreen();
     this.input.lock();
     this.paused = false;
+  }
+
+  /** Fullscreen plus Keyboard Lock (Chromium) lets Ctrl+W/T/N reach the game, so Ctrl-sneaking is safe. */
+  enterFullscreen() {
+    const el = document.documentElement;
+    if (!this.fullscreenPref || document.fullscreenElement || !el.requestFullscreen) return;
+    el.requestFullscreen({ navigationUI: 'hide' })
+      .then(() => navigator.keyboard?.lock?.(GAME_KEYS))
+      .catch(() => {});
+  }
+
+  setFullscreenPref(on) {
+    this.fullscreenPref = on;
+    try {
+      localStorage.setItem('doy.fullscreen', on ? 'on' : 'off');
+    } catch { /* storage unavailable; the choice just won't persist */ }
+    if (!on && document.fullscreenElement) document.exitFullscreen().catch(() => {});
   }
 
   artefactFor(depth) {
@@ -197,6 +228,7 @@ export class Game {
     requestAnimationFrame(this.loop);
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
+    this.input.captureCtrl = this.state === 'play';
     if (this.state === 'play') {
       this.handleKeys();
       if (!this.paused && !this.menu && !this.over) this.update(dt);
@@ -268,7 +300,7 @@ export class Game {
     this.updateCamera(dt);
     const p = this.player;
     this.viewmodel.update(dt, {
-      moving: p.moving, bob: p.bob, charge: p.charge, time: this.time,
+      moving: p.moving, bob: p.bob, charge: p.charge, time: this.time, sprint: p.moving && p.mode === 'sprint',
       lightLevel: p.status.blind > 0 ? 0.1 : 1,
     });
     this.interaction = this.findInteraction();
@@ -279,8 +311,10 @@ export class Game {
     const p = this.player;
     if (!p) return;
     const cam = this.camera;
-    const bobY = p.moving ? Math.sin(p.bob * 2) * 0.03 : 0;
-    cam.position.set(p.x, EYE_H + bobY, p.z);
+    const eye = EYE_H - p.crouch * CROUCH_DROP;
+    const bobAmp = p.mode === 'sprint' ? 0.05 : p.mode === 'sneak' ? 0.015 : 0.03;
+    const bobY = p.moving ? Math.sin(p.bob * 2) * bobAmp : 0;
+    cam.position.set(p.x, eye + bobY, p.z);
     let roll = p.status.confusion > 0 ? Math.sin(this.time * 1.7) * 0.12 : 0;
     let pitch = p.pitch, yaw = p.yaw;
     if (this.shakeT > 0) {
@@ -294,7 +328,7 @@ export class Game {
 
     // The torch you carry is the main light: slightly left of and ahead of your eyes.
     const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
-    this.torch.position.set(p.x + fx * 0.35 + fz * 0.25, EYE_H - 0.1, p.z + fz * 0.35 - fx * 0.25);
+    this.torch.position.set(p.x + fx * 0.35 + fz * 0.25, eye - 0.1, p.z + fz * 0.35 - fx * 0.25);
     const flick = 0.9 + Math.sin(this.time * 21) * 0.04 + Math.sin(this.time * 7.7) * 0.06;
     const blind = p.status.blind > 0;
     this.torch.intensity = (blind ? 4 : 26) * flick;
@@ -585,7 +619,7 @@ export class Game {
       case 'alarm':
         this.log('A deafening alarm shrieks through the halls!', 'danger');
         for (const m of level.monsters) {
-          if (!m.dead && Math.hypot(m.x - p.x, m.z - p.z) < 30 && m.state !== 'hunt') m.notice(this);
+          if (!m.dead && Math.hypot(m.x - p.x, m.z - p.z) < 30) m.notice(this);
         }
         break;
     }

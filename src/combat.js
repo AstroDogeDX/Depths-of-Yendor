@@ -23,7 +23,8 @@ export function playerStrike(game, power) {
   if (!best) return false;
 
   const m = best;
-  const sneak = m.state !== 'hunt' || m.status.paralyzed > 0;
+  // Unaware: asleep, wandering, or still searching for a noise it hasn't traced to you.
+  const sneak = m.state !== 'hunt' || !m.seen || m.status.paralyzed > 0;
   const acc = Math.max(0.35, Math.min(0.98, 0.88 + w.accuracy - m.def.dodge + (p.level - m.depthLevel) * 0.015));
   if (!sneak && !rand.chance(acc)) {
     game.popup(m.headPos(), 'miss', 'miss');
