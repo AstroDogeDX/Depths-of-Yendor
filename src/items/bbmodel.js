@@ -27,13 +27,15 @@ function loadTexture(tex) {
 }
 
 // Blockbench texture render modes: 'emissive' ignores lighting, 'additive' also adds onto what's behind.
+// Render sides 'double' draws the back of each face too.
 function material(tex) {
   const map = tex.source ? loadTexture(tex) : null;
-  if (tex.render_mode === 'emissive') return new THREE.MeshBasicMaterial({ map, alphaTest: 0.5 });
+  const side = tex.render_sides === 'double' ? THREE.DoubleSide : THREE.FrontSide;
+  if (tex.render_mode === 'emissive') return new THREE.MeshBasicMaterial({ map, side, alphaTest: 0.5 });
   if (tex.render_mode === 'additive') {
-    return new THREE.MeshBasicMaterial({ map, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+    return new THREE.MeshBasicMaterial({ map, side, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
   }
-  return new THREE.MeshLambertMaterial({ map, flatShading: true, alphaTest: 0.5 });
+  return new THREE.MeshLambertMaterial({ map, side, flatShading: true, alphaTest: 0.5 });
 }
 
 class Builder {
@@ -41,6 +43,7 @@ class Builder {
     this.json = json;
     const res = json.resolution || { width: 16, height: 16 };
     this.textures = (json.textures || []).map((tex) => ({
+      name: (tex.name || '').replace(/\.png$/i, ''),
       uvW: tex.uv_width || res.width, uvH: tex.uv_height || res.height,
       material: material(tex),
     }));
@@ -131,7 +134,9 @@ class Builder {
       g.setAttribute('position', new THREE.Float32BufferAttribute(bk.pos, 3));
       g.setAttribute('uv', new THREE.Float32BufferAttribute(bk.uv, 2));
       g.computeVertexNormals();
-      group.add(new THREE.Mesh(g, bk.tex.material));
+      const mesh = new THREE.Mesh(g, bk.tex.material);
+      mesh.name = bk.tex.name || '';
+      group.add(mesh);
     }
     group.userData.anchors = this.anchors;
     return group;
@@ -152,7 +157,7 @@ function sortQuad(vertices, keys) {
 }
 
 /**
- * Parses a .bbmodel (JSON text or object) into a Group of meshes, one per texture.
+ * Parses a .bbmodel (JSON text or object) into a Group of meshes, one per texture and named after it.
  * `userData.anchors` maps each group's name to its pivot as [x, y, z] in the returned group's space.
  */
 export function buildBBModel(source, scale = 1 / 16) {

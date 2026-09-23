@@ -4,7 +4,7 @@ import { buildBBModel } from '../items/bbmodel.js';
 import { MODEL_PX } from '../config.js';
 import { glowSprite } from './glow.js';
 import { Flame } from './flame.js';
-import torchModel from '../../assets/models/torch.bbmodel?raw';
+import torchModel from '../../assets/models/torch.bbmodel';
 
 // First-person hands: weapon on the right, torch on the left. Rendered in its own scene after the
 // world (with the depth buffer cleared) so the weapon never clips into walls.

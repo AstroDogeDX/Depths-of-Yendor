@@ -12,12 +12,16 @@ import { fileURLToPath } from 'node:url';
 import { weapons } from './weapons.mjs';
 import { torch } from './torch.mjs';
 import { sconce } from './sconce.mjs';
+import { items } from './items.mjs';
+import { armors } from './armor.mjs';
+import { artefacts } from './artefacts.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const MODELS = {
   ...Object.fromEntries(Object.entries(weapons).map(([name, build]) => [name, { file: `weapons/${name}.bbmodel`, build }])),
   torch: { file: 'torch.bbmodel', build: torch },
   sconce: { file: 'sconce.bbmodel', build: sconce },
+  ...Object.fromEntries(Object.entries({ ...items, ...armors, ...artefacts }).map(([name, build]) => [name, { file: `items/${name}.bbmodel`, build }])),
 };
 
 const args = process.argv.slice(2);

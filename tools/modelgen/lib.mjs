@@ -124,21 +124,29 @@ export function revolve(profile, { sides = 8, phase = Math.PI / sides, mat = nul
   return polys;
 }
 /**
- * Square bar along a path of points. `side` is a direction kept square across the bar, and `half` its
- * half-width (or a function of 0..1 along the bar, to taper it).
+ * Bar along a path of points: square by default, or a `sides`-sided polygon of radius `half`. `side` is a
+ * direction kept square across the bar, and `half` its half-width (or a function of 0..1 along the bar, to
+ * taper it). A `closed` path joins its end back to its start, like a ring.
  */
-export function tube(path, { half = 0.8, side = [1, 0, 0], mat = null, capStart = true, capEnd = true } = {}) {
+export function tube(path, { half = 0.8, side = [1, 0, 0], sides = 4, closed = false, mat = null, capStart = true, capEnd = true } = {}) {
   const pts = path.map(V);
+  const n = pts.length;
   const lens = pts.map((_, i) => pts.slice(1, i + 1).reduce((s, p, j) => s + p.distanceTo(pts[j]), 0));
-  const total = lens[lens.length - 1];
+  const total = lens[n - 1];
+  const at = (i) => pts[closed ? (i + n) % n : Math.max(0, Math.min(n - 1, i))];
   const rings = pts.map((c, i) => {
-    const t = pts[Math.min(i + 1, pts.length - 1)].clone().sub(pts[Math.max(i - 1, 0)]).normalize();
-    const u = V(side).addScaledVector(t, -t.dot(V(side))).normalize();
+    const t = at(i + 1).clone().sub(at(i - 1)).normalize();
+    // `side` can't square the bar where the path runs along it; fall back to another axis there.
+    const s = Math.abs(t.dot(V(side))) > 0.99 ? V(Math.abs(t.z) < 0.9 ? [0, 0, 1] : [0, 1, 0]) : V(side);
+    const u = s.addScaledVector(t, -t.dot(s)).normalize();
     const v = t.clone().cross(u);
     const h = typeof half === 'function' ? half(lens[i] / total) : half;
-    return [[1, 1], [1, -1], [-1, -1], [-1, 1]].map(([s1, s2]) => c.clone().addScaledVector(u, s1 * h).addScaledVector(v, s2 * h).toArray());
+    const corners = sides === 4 ? [[1, 1], [1, -1], [-1, -1], [-1, 1]]
+      : Array.from({ length: sides }, (_, k) => [Math.cos((k * 2 * Math.PI) / sides), Math.sin((k * 2 * Math.PI) / sides)]);
+    return corners.map(([s1, s2]) => c.clone().addScaledVector(u, s1 * h).addScaledVector(v, s2 * h).toArray());
   });
-  return loft(rings, { mat, capStart, capEnd });
+  if (closed) rings.push(rings[0]);
+  return loft(rings, { mat, capStart: capStart && !closed, capEnd: capEnd && !closed });
 }
 /** Lathe: profile [[y, r] | [y, rx, rz]] around the y axis. */
 export function lathe(profile, { sides = 8, phase, mat, capStart = true, capEnd = true } = {}) {
@@ -147,10 +155,33 @@ export function lathe(profile, { sides = 8, phase, mat, capStart = true, capEnd 
 }
 
 // ---------- model ----------
+/**
+ * Model builder with the usual textures: one sheet named after the model, plus `<name>_tint` for the `tint`
+ * materials (painted in greys; the game multiplies them by the item's colour), `<name>_glow` (emissive) for
+ * the `glow` materials and `<name>_cloth` (double-sided) for the `double` materials. Returns () => Model.
+ */
+export function defineModel(name, materials, fill, { tint = [], glow = [], double = [] } = {}) {
+  return () => {
+    const sheets = [{ name, mode: 'default' }], sheetOf = {};
+    const extra = (suffix, mode, mats, sides) => {
+      if (!mats.length) return;
+      sheets.push({ name: `${name}_${suffix}`, mode, sides });
+      for (const mat of mats) sheetOf[mat] = sheets.length - 1;
+    };
+    extra('tint', 'default', tint);
+    extra('glow', 'emissive', glow);
+    extra('cloth', 'default', double, 'double');
+    const m = new Model(name, { materials, sheets, sheetOf });
+    fill(m);
+    return m;
+  };
+}
+
 export class Model {
   /**
    * `materials` maps material names to painters (see materials.mjs).
-   * `sheets` are the project's textures ({ name, mode }: mode is Blockbench's render mode, e.g. 'emissive');
+   * `sheets` are the project's textures ({ name, mode, sides }: mode is Blockbench's render mode, e.g.
+   * 'emissive'; sides 'double' draws both sides of each face, e.g. for cloth);
    * `sheetOf` maps a material name to the sheet it is painted on (default 0).
    */
   constructor(name, { materials, sheets = [{ name, mode: 'default' }], sheetOf = {} } = {}) {
@@ -360,7 +391,7 @@ export class Model {
         path: '', name: `${sheet.name}.png`, folder: '', namespace: '', id: String(i), group: '',
         width: this.W, height: this.H, uv_width: this.W, uv_height: this.H,
         particle: false, use_as_default: false, layers_enabled: false, sync_to_project: '',
-        render_mode: sheet.mode, render_sides: 'auto', pbr_channel: 'color',
+        render_mode: sheet.mode, render_sides: sheet.sides || 'auto', pbr_channel: 'color',
         frame_time: 1, frame_order_type: 'loop', frame_order: '', frame_interpolate: false,
         visible: true, internal: true, saved: true, uuid: this.uuid(),
         source: `data:image/png;base64,${pngs[i].toString('base64')}`,

@@ -1,6 +1,6 @@
 # Depths of Yendor
 
-A first-person, real-time roguelike for the browser, in the spirit of **King's Field** (slow, deliberate first-person melee in dark stone corridors) crossed with **Rogue / Pixel Dungeon** (procedural floors, unidentified items, curses, permadeath). Built with three.js and plain ES modules. Nearly everything is generated in code: textures, sound and most models. The weapons, the hand torch and the wall sconces are the exception. They are Blockbench models (see [Blockbench models](#blockbench-models)).
+A first-person, real-time roguelike for the browser, in the spirit of **King's Field** (slow, deliberate first-person melee in dark stone corridors) crossed with **Rogue / Pixel Dungeon** (procedural floors, unidentified items, curses, permadeath). Built with three.js and plain ES modules. The dungeon, its textures, the monsters and the sound are all generated in code. The weapons, the torch, the wall sconces and the items you find are Blockbench models (see [Blockbench models](#blockbench-models)).
 
 Descend ten floors and take the **Amulet of Yendor** from its Warden. Then choose: invoke the Amulet and escape at once, or carry it back up through every floor to the surface for double score while the dungeon throws everything it has at you.
 
@@ -95,17 +95,25 @@ A doorway is either an open arch or a wooden door. Doors swing open when anyone 
 
 ## Blockbench models
 
-The weapons you hold and find, the torch in your other hand and the sconces on the walls are [Blockbench](https://www.blockbench.net) projects in `assets/models/`. Weapons live in `weapons/`, one per `model` name in `items/defs.js` (`dagger`, `sword`, `longsword`, `mace`, `spear`, `axe`, `hammer`). The torch is `torch.bbmodel` and the sconce is `sconce.bbmodel`. The game reads the `.bbmodel` files directly, so there is no export step. Open one in Blockbench (desktop or web), edit it, save over the file, and the dev server reloads.
+The weapons you hold and find, the torch in your other hand, the sconces on the walls and the items lying on the floor are [Blockbench](https://www.blockbench.net) projects in `assets/models/`:
+
+- `weapons/` has one per `model` name in `items/defs.js` (`dagger`, `sword`, `longsword`, `mace`, `spear`, `axe`, `hammer`).
+- `items/` has one per kind of item (`potion`, `scroll`, `wand`, `ring`, `gold`, `key`, `amulet`), plus one per armour (`armor_leather` … `armor_plate`), artefact (`chalice`, `eye`, `horn`, `cloak`, `boots`, `ember`) and food (`apple`, `ration`).
+- `torch.bbmodel` and `sconce.bbmodel`.
+
+The game reads the `.bbmodel` files directly, so there is no export step. Open one in Blockbench (desktop or web), edit it, save over the file, and the dev server reloads. (`vite.config.js` imports them as JSON, which keeps the bundle smaller than importing them as text.)
 
 - **Format:** Generic Model. Cubes, meshes and groups (with pivots and rotations) all work. Each texture becomes one flat-shaded material, and texels under 50% alpha are cut out. Elements with *Export* unticked are left out.
 - **Glowing parts:** a texture whose render mode is *Emissive* ignores lighting, like the torch's burning crown. *Additive* also blends onto whatever is behind it.
+- **Tinted parts:** the parts of an item that change colour from run to run (a potion's liquid, a wand's shaft, a ring's stone) are painted in greys on a texture whose name ends in `_tint`. The game multiplies that texture by the item's colour, so in Blockbench those parts look grey.
+- **Double-sided faces:** set a texture's render sides to *Double* for thin things you can see from both sides, like the cloak's open hem.
 - **Anchors:** the game can find a group's pivot by the group's name. The torch and the sconce each have an empty `flame` group that marks where the fire burns, so moving that group in Blockbench moves the flame.
-- **Scale:** one Blockbench pixel is 1/64 m, so a 16-pixel block is 25 cm.
-- **Orientation:** for things you hold, the pivot (0, 0, 0) is where the hand grips and the tip or head points up (+Y). On weapons, the cutting edge or striking face points north (−Z), which the swing animation depends on. The sconce's pivot sits on the wall, and it stands out to the south (+Z).
+- **Scale:** one Blockbench pixel is 1/64 m, so a 16-pixel block is 25 cm. Build items life-size: in the world, the game draws anything whose longest side is under a quarter of a tile (`ITEM_MIN_SIZE` in `config.js`) bigger, so it can be seen from across a room.
+- **Orientation:** +Y is always up. For things you hold, the pivot (0, 0, 0) is where the hand grips and the tip or head points up. On weapons, the cutting edge or striking face points north (−Z), which the swing animation depends on. The sconce's pivot sits on the wall, and it stands out to the south (+Z). Floor items bob and spin about their pivot, which should be their middle.
 - **Textures** must stay embedded in the project file, which is Blockbench's default. The game ignores texture file paths.
 - **New weapons:** give the `WEAPONS` entry a new `model` name and add `<name>.bbmodel` to the folder.
 
-These models were first built in code by `tools/modelgen/`. It shapes low-poly meshes from lathes and lofts, unwraps their UVs automatically and paints pixel-art textures procedurally. `npm run models -- sword torch` rebuilds the named models, and `all` rebuilds every one. Rebuilding replaces the whole file, so any Blockbench edits to it are lost. The script skips a file with uncommitted changes unless you pass `--force`, and `--out <dir>` writes the results somewhere else so you can compare first. To add a model, write a builder like `torch.mjs` or `sconce.mjs` and list it in `build.mjs`.
+These models were first built in code by `tools/modelgen/`. It shapes low-poly meshes from lathes and lofts, unwraps their UVs automatically and paints pixel-art textures procedurally. `npm run models -- sword torch` rebuilds the named models, and `all` rebuilds every one. Rebuilding replaces the whole file, so any Blockbench edits to it are lost. The script skips a file with uncommitted changes unless you pass `--force`, and `--out <dir>` writes the results somewhere else so you can compare first. To add a model, write a builder like those in `items.mjs` or `sconce.mjs` and list it in `build.mjs`.
 
 ## Code map
 
@@ -130,11 +138,11 @@ src/
   items/identify.js    per-run appearance shuffle, naming, descriptions
   items/generate.js    random items by depth, enchant/curse rolls
   items/use.js         potions, scrolls, wands, equip/curses, throwing, artefact powers
-  items/models.js      item models: primitives for most items, Blockbench files for weapons
+  items/models.js      loads the weapon and item models, tinting each item in its colour
   items/bbmodel.js     loads Blockbench .bbmodel projects (cubes, meshes, groups, textures) into three.js
   fx/                  viewmodel (hands), pixel-art flames, projectiles, particles, glow sprites
   ui/ui.js             HUD, minimap, message log, floating text, pack, dialogs, end screens
-assets/models/         Blockbench models: weapons/, the hand torch and the wall sconce
+assets/models/         Blockbench models: weapons/, items/, the hand torch and the wall sconce
 tools/modelgen/        builds those models from code (npm run models)
 ```
 

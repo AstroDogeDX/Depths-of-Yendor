@@ -12,6 +12,18 @@ export const PAL = {
   cord: P('#2b0c09', '#45130e', '#621d15', '#80291d', '#9c3828', '#b54b35'),
   rust: P('#221610', '#35211a', '#4a2c1c', '#5e3822', '#724428'),
   embers: P('#2a0c05', '#5a1707', '#8f2a0c', '#c84714', '#f07a22', '#ffb444', '#ffe28a'),
+  gold: P('#3a2708', '#5e420f', '#876118', '#b08424', '#d4a838', '#ecc85a', '#fbe697'),
+  // Neutral greys for "_tint" textures, which the game multiplies by an item's colour.
+  grey: P('#303030', '#484848', '#636363', '#808080', '#9e9e9e', '#bdbdbd', '#dcdcdc', '#f6f6f6'),
+};
+
+/** Faceted stone: each face shaded by how it faces a light up and to the front, with glinting edges. */
+export const gem = (pal) => (c) => {
+  const { n } = c;
+  let v = 0.3 + 0.5 * Math.max(0, n.x * 0.35 + n.y * 0.75 + n.z * 0.56);
+  if (Math.min(c.W, c.H) >= 4 && c.edge < 1) v += 0.18;
+  if (rand(c.ax, c.ay, 111) > 0.94) v += 0.25;
+  return ramp(pal, v, c.ax, c.ay);
 };
 
 export const clamp01 = (v) => Math.max(0, Math.min(1, v));
@@ -74,6 +86,12 @@ export const MAT = {
     let v = gx < 0.2 || gy < 0.2 ? 0.22 : gy < 0.6 ? 0.62 : 0.44;
     v += bevel(c, 0.15);
     return ramp(PAL.iron, v, c.ax, c.ay);
+  },
+  gold(c) {
+    const { p, n } = c;
+    let v = 0.55 + 0.14 * patches(p, 101, 0.4) + 0.14 * n.y + bevel(c, 0.25);
+    if (rand(c.ax, c.ay, 102) > 0.985) v -= 0.16;
+    return ramp(PAL.gold, v, c.ax, c.ay);
   },
   brass(c) {
     const { p, n } = c;

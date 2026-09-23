@@ -6,7 +6,7 @@ import { RNG } from '../rng.js';
 import { glowSprite } from '../fx/glow.js';
 import { Flame } from '../fx/flame.js';
 import { buildBBModel } from '../items/bbmodel.js';
-import sconceModel from '../../assets/models/sconce.bbmodel?raw';
+import sconceModel from '../../assets/models/sconce.bbmodel';
 
 const SCONCE_LIGHTS = 6; // constant per level so shaders never need recompiling between floors
 let sconceTemplate = null; // built once; every sconce is a clone sharing its geometry and materials

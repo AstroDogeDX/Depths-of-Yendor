@@ -277,7 +277,7 @@ export class Level {
   // --- Contents ---
 
   addItem(item, x, z, { onPedestal = false } = {}) {
-    const mesh = buildItemModel(item, this.game.knowledge.color(item));
+    const mesh = buildItemModel(item, this.game.knowledge.color(item), { floor: true });
     if (item.kind === 'artefact' || item.kind === 'amulet' || item.kind === 'key') mesh.add(glowSprite(this.game.knowledge.color(item), 1.1, 0.7));
     const y0 = onPedestal ? 1.4 : 0.22;
     mesh.position.set(x, y0, z);
