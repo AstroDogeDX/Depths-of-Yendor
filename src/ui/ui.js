@@ -1,0 +1,507 @@
+import * as THREE from 'three';
+import { KIND_GLYPH, ARTEFACTS } from '../items/defs.js';
+import { T } from '../dungeon/generator.js';
+import { TRAP_COLORS } from '../world/level.js';
+import { HUNGER_HUNGRY, HUNGER_WEAK, INVENTORY_SIZE, TILE } from '../config.js';
+
+const $ = (id) => document.getElementById(id);
+const hex = (n) => '#' + n.toString(16).padStart(6, '0');
+const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+const KIND_COLOR = {
+  weapon: '#c8ccd4', armor: '#c0a880', scroll: '#e8dcb0', wand: '#a0c8ff', ring: '#e0a0ff',
+  food: '#c09060', artefact: '#ffb040', amulet: '#ffd040', gold: '#ffd040',
+};
+const POPUP_LIFE = { alert: 1.1, zzz: 1.6 };
+
+export class UI {
+  constructor() {
+    this.popups = [];
+    this.logEntries = [];
+    this.invSel = 0;
+    this.selectMode = null;
+    this.cache = {};
+    this.v = new THREE.Vector3();
+  }
+
+  bind(game) {
+    this.game = game;
+    const start = () => {
+      $('title').hidden = true;
+      game.newRun({ seed: $('seed-in').value.trim().toUpperCase(), name: $('name-in').value.trim() });
+    };
+    $('start-btn').addEventListener('click', start);
+    for (const id of ['seed-in', 'name-in']) {
+      $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') start(); });
+    }
+    $('again-btn').addEventListener('click', () => {
+      $('end').hidden = true;
+      game.newRun({ seed: '', name: game.playerName });
+    });
+    $('retry-btn').addEventListener('click', () => {
+      $('end').hidden = true;
+      game.newRun({ seed: game.seed, name: game.playerName });
+    });
+    $('menu-btn').addEventListener('click', () => {
+      $('end').hidden = true;
+      $('hud').hidden = true;
+      $('title').hidden = false;
+      game.state = 'title';
+    });
+    window.addEventListener('keydown', (e) => this.onKey(e));
+  }
+
+  reset() {
+    this.logEntries.forEach((e) => e.el.remove());
+    this.logEntries = [];
+    this.popups.forEach((p) => p.el.remove());
+    this.popups = [];
+    this.closeMenus();
+    $('hud').hidden = false;
+    $('end').hidden = true;
+  }
+
+  onLevelChanged() {
+    this.cache = {};
+  }
+
+  // --- Messages & feedback ---
+
+  log(text, cls = '') {
+    const el = document.createElement('div');
+    el.className = `msg ${cls}`;
+    el.textContent = text;
+    $('log').appendChild(el);
+    this.logEntries.push({ el, t: 0 });
+    while (this.logEntries.length > 7) this.logEntries.shift().el.remove();
+  }
+
+  popup(pos, text, cls = '') {
+    const el = document.createElement('div');
+    el.className = `popup ${cls}`;
+    el.textContent = text;
+    $('popups').appendChild(el);
+    this.popups.push({ el, x: pos.x, y: pos.y, z: pos.z, t: 0, life: POPUP_LIFE[cls] ?? 0.9 });
+    while (this.popups.length > 40) this.popups.shift().el.remove();
+  }
+
+  flash(color, strength = 0.4) {
+    const el = $('flash');
+    el.style.transition = 'none';
+    el.style.background = color;
+    el.style.opacity = strength;
+    void el.offsetWidth;
+    el.style.transition = 'opacity 0.5s ease-out';
+    el.style.opacity = 0;
+  }
+
+  hurtFlash(k) {
+    const el = $('hurt');
+    el.style.transition = 'none';
+    el.style.opacity = 0.35 + k * 0.65;
+    void el.offsetWidth;
+    el.style.transition = 'opacity 0.6s ease-out';
+    el.style.opacity = 0;
+  }
+
+  fadeTransition() {
+    const el = $('fade');
+    el.style.transition = 'none';
+    el.style.opacity = 1;
+    void el.offsetWidth;
+    el.style.transition = 'opacity 0.7s ease-in';
+    el.style.opacity = 0;
+  }
+
+  set(id, text) {
+    if (this.cache[id] !== text) {
+      this.cache[id] = text;
+      $(id).textContent = text;
+    }
+  }
+
+  setHtml(id, html) {
+    if (this.cache[id] !== html) {
+      this.cache[id] = html;
+      $(id).innerHTML = html;
+    }
+  }
+
+  // --- Per-frame ---
+
+  update(dt) {
+    const g = this.game;
+    if (g.state !== 'play' || !g.player || !g.level) return;
+    const p = g.player, lvl = g.level, k = g.knowledge;
+
+    this.set('depth-line', `Depth ${lvl.depth} · ${lvl.theme.name}${p.hasAmulet() ? '  ✦ Amulet' : ''}`);
+    this.set('stat-line', `Lv ${p.level}   XP ${p.xp}/${p.xpToNext()}   Str ${p.str}   Def ${p.defense}   Gold ${p.gold}`);
+
+    const hpFrac = Math.max(0, p.hp / p.maxHp);
+    $('hp-fill').style.width = `${hpFrac * 100}%`;
+    this.set('hp-text', `HP ${Math.max(0, Math.ceil(p.hp))} / ${p.maxHp}`);
+    $('atk-fill').style.width = `${p.charge * 100}%`;
+    $('atk-bar').classList.toggle('ready', p.charge >= 1);
+    document.body.classList.toggle('lowhp', hpFrac < 0.25);
+    document.body.classList.toggle('blind', p.status.blind > 0);
+
+    const st = [];
+    const s = p.status;
+    const lab = { haste: 'Hasted', poison: 'Poisoned', confusion: 'Confused', blind: 'Blind', paralysis: 'Paralysed', mindvision: 'Mind vision', invisible: 'Invisible', burning: 'Burning' };
+    for (const key in lab) if (s[key] > 0) st.push(`<span class="st-${key}">${lab[key]} ${Math.ceil(s[key])}</span>`);
+    if (p.hunger <= 0) st.push('<span class="st-starving">Starving</span>');
+    else if (p.hunger < HUNGER_WEAK) st.push('<span class="st-weak">Weak</span>');
+    else if (p.hunger < HUNGER_HUNGRY) st.push('<span class="st-hungry">Hungry</span>');
+    this.setHtml('status-line', st.join(' '));
+
+    const gear = [];
+    gear.push(`<div>${p.equip.weapon ? k.name(p.equip.weapon) : 'bare hands'}</div>`);
+    p.equip.artefacts.forEach((a, i) => {
+      if (!a) return;
+      const def = ARTEFACTS[a.type];
+      const cd = p.artefactCD[i];
+      gear.push(`<div class="art">${def.active ? `[${i === 0 ? 'R' : 'T'}] ` : ''}${def.name}${def.active ? (cd > 0 ? ` <span class="cd">${Math.ceil(cd)}s</span>` : ' <span class="ok">ready</span>') : ''}</div>`);
+    });
+    const wand = p.lastWand && p.inventory.includes(p.lastWand) ? p.lastWand : p.inventory.find((i) => i.kind === 'wand');
+    if (wand) gear.push(`<div class="wand">[F] ${k.name(wand)}</div>`);
+    this.setHtml('gear', gear.join(''));
+
+    const prompt = g.interaction && !g.menu ? `[E] ${g.interaction.label}` : '';
+    this.set('prompt', prompt);
+
+    const t = g.target;
+    $('target').hidden = !t;
+    if (t) {
+      const tag = t.state === 'sleep' ? ' (asleep)' : t.state !== 'hunt' ? ' (unaware)' : '';
+      this.set('target-name', t.name + tag);
+      $('target-fill').style.width = `${Math.max(0, t.hp / t.maxHp) * 100}%`;
+    }
+
+    const heading = ((-p.yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+    this.set('compass', COMPASS[Math.round(heading / (Math.PI / 4)) % 8]);
+
+    for (const e of this.logEntries) {
+      e.t += dt;
+      if (e.t > 14 && !e.old) {
+        e.old = true;
+        e.el.classList.add('old');
+      }
+    }
+
+    this.updatePopups(dt);
+    this.drawMinimap();
+    $('pause').hidden = !(g.paused && !g.menu && !g.over);
+  }
+
+  updatePopups(dt) {
+    const cam = this.game.camera;
+    const W = window.innerWidth, H = window.innerHeight;
+    for (let i = this.popups.length - 1; i >= 0; i--) {
+      const pp = this.popups[i];
+      pp.t += dt;
+      if (pp.t > pp.life) {
+        pp.el.remove();
+        this.popups.splice(i, 1);
+        continue;
+      }
+      this.v.set(pp.x, pp.y + pp.t * 0.7, pp.z).project(cam);
+      if (this.v.z > 1 || this.v.z < -1) {
+        pp.el.style.display = 'none';
+        continue;
+      }
+      pp.el.style.display = '';
+      const x = (this.v.x * 0.5 + 0.5) * W, y = (-this.v.y * 0.5 + 0.5) * H;
+      pp.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%)`;
+      pp.el.style.opacity = 1 - (pp.t / pp.life) ** 2;
+    }
+  }
+
+  // --- Maps ---
+
+  drawMap(ctx, size, cx, cy, scale, full) {
+    const g = this.game, lvl = g.level, p = g.player;
+    ctx.fillStyle = '#0b0a09';
+    ctx.fillRect(0, 0, size, size);
+    const x0 = full ? 0 : Math.floor(cx - size / scale / 2), y0 = full ? 0 : Math.floor(cy - size / scale / 2);
+    const x1 = full ? lvl.w - 1 : Math.ceil(cx + size / scale / 2), y1 = full ? lvl.h - 1 : Math.ceil(cy + size / scale / 2);
+    const ox = full ? (size - lvl.w * scale) / 2 : size / 2 - cx * scale;
+    const oy = full ? (size - lvl.h * scale) / 2 : size / 2 - cy * scale;
+    const px = (tx) => ox + tx * scale, py = (ty) => oy + ty * scale;
+
+    for (let ty = Math.max(0, y0); ty <= Math.min(lvl.h - 1, y1); ty++) {
+      for (let tx = Math.max(0, x0); tx <= Math.min(lvl.w - 1, x1); tx++) {
+        const i = lvl.idx(tx, ty);
+        if (!lvl.explored[i]) continue;
+        const t = lvl.grid[i];
+        let c;
+        if (t === T.WALL) c = '#857b6b';
+        else if (t === T.STAIRS_DOWN) c = '#5aa0ff';
+        else if (t === T.STAIRS_UP) c = '#ffd27a';
+        else if (t === T.PEDESTAL) c = '#d0a040';
+        else c = lvl.visible[i] ? '#4e473d' : '#302b25';
+        ctx.fillStyle = c;
+        ctx.fillRect(px(tx), py(ty), scale, scale);
+      }
+    }
+    for (const tr of lvl.traps) {
+      if (tr.hidden) continue;
+      ctx.fillStyle = hex(TRAP_COLORS[tr.type]);
+      ctx.fillRect(px(tr.x) + scale * 0.25, py(tr.y) + scale * 0.25, scale * 0.5, scale * 0.5);
+    }
+    const TS = TILE;
+    for (const it of lvl.items) {
+      if (!it.seen) continue;
+      ctx.fillStyle = it.item.kind === 'amulet' || it.item.kind === 'artefact' ? '#ffb040' : '#e8d070';
+      const s = Math.max(2, scale * 0.4);
+      ctx.fillRect(ox + (it.x / TS) * scale - s / 2, oy + (it.z / TS) * scale - s / 2, s, s);
+    }
+    const sense = p.status.mindvision > 0 || p.hasArtefact('eye');
+    for (const m of lvl.monsters) {
+      if (m.dead) continue;
+      const seen = lvl.isVisibleWorld(m.x, m.z) && p.status.blind <= 0;
+      if (!seen && !sense) continue;
+      ctx.fillStyle = m.boss ? '#ff40ff' : seen ? '#ff4030' : '#b03060';
+      const s = Math.max(3, scale * (m.boss ? 0.9 : 0.6));
+      ctx.fillRect(ox + (m.x / TS) * scale - s / 2, oy + (m.z / TS) * scale - s / 2, s, s);
+    }
+    // Player arrow
+    const ax = ox + (p.x / TS) * scale, ay = oy + (p.z / TS) * scale;
+    const fx = -Math.sin(p.yaw), fy = -Math.cos(p.yaw);
+    const r = Math.max(4, scale * 0.9);
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(ax + fx * r, ay + fy * r);
+    ctx.lineTo(ax - fx * r * 0.6 + fy * r * 0.6, ay - fy * r * 0.6 - fx * r * 0.6);
+    ctx.lineTo(ax - fx * r * 0.6 - fy * r * 0.6, ay - fy * r * 0.6 + fx * r * 0.6);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  drawMinimap() {
+    const c = $('minimap');
+    const g = this.game, p = g.player;
+    this.drawMap(c.getContext('2d'), c.width, p.x / TILE, p.z / TILE, 5, false);
+  }
+
+  openMap() {
+    const c = $('bigmap');
+    const size = Math.floor(Math.min(window.innerWidth, window.innerHeight) * 0.85);
+    c.width = c.height = size;
+    $('mapview').hidden = false;
+    const lvl = this.game.level;
+    this.drawMap(c.getContext('2d'), size, 0, 0, Math.floor(size / Math.max(lvl.w, lvl.h)), true);
+  }
+
+  closeMenus() {
+    $('inventory').hidden = true;
+    $('mapview').hidden = true;
+    $('dialog').hidden = true;
+    this.selectMode = null;
+  }
+
+  // --- Dialogs & end screens ---
+
+  dialog({ title, body, buttons }) {
+    $('dialog-title').textContent = title;
+    $('dialog-body').textContent = body;
+    const box = $('dialog-buttons');
+    box.innerHTML = '';
+    for (const b of buttons) {
+      const el = document.createElement('button');
+      el.textContent = b.label;
+      el.addEventListener('click', b.fn);
+      box.appendChild(el);
+    }
+    $('dialog').hidden = false;
+  }
+
+  showEnd(info) {
+    $('hud').hidden = true;
+    this.closeMenus();
+    const mins = Math.floor(info.time / 60), secs = Math.floor(info.time % 60).toString().padStart(2, '0');
+    const stats = [
+      ['Score', info.score], ['Deepest floor', info.maxDepth], ['Level', info.level],
+      ['Kills', info.kills], ['Gold', info.gold], ['Time', `${mins}:${secs}`], ['Seed', info.seed],
+    ].map(([a, b]) => `<div><span>${a}</span><b>${b}</b></div>`).join('');
+    $('end-stats').innerHTML = stats;
+
+    const tomb = $('tomb');
+    if (!info.won && info.killedBy) {
+      $('end-title').textContent = 'You have died';
+      $('end-text').textContent = '';
+      tomb.hidden = false;
+      tomb.textContent = tombstone(info);
+    } else {
+      tomb.hidden = true;
+      const texts = {
+        ascended: [`${info.name} returns in triumph`, `You climb out into the daylight with the Amulet of Yendor. Every floor, every horror, behind you. The bards will sing of ${info.name} for a thousand years.`],
+        invoked: ['The Amulet answers', 'The Amulet flares, and the dungeon falls away like a dream. You wake on the hillside with the Amulet cold in your hand. A victory — though the bards will mutter that you took the easy road.'],
+        fled: ['You abandon the quest', 'You clamber out into the light, empty-handed but alive. The Amulet waits below for someone braver.'],
+      };
+      const [title, text] = texts[info.mode];
+      $('end-title').textContent = title;
+      $('end-text').textContent = text;
+    }
+    $('end').hidden = false;
+  }
+
+  // --- Inventory ---
+
+  openInventory() {
+    this.invSel = Math.min(this.invSel, Math.max(0, this.game.player.inventory.length - 1));
+    $('inventory').hidden = false;
+    this.renderInventory();
+  }
+
+  selectItem(prompt, filter, cb) {
+    this.selectMode = { prompt, filter, cb };
+    const inv = this.game.player.inventory;
+    const first = inv.findIndex(filter);
+    if (first >= 0) this.invSel = first;
+    if (this.game.menu !== 'inventory') this.game.openMenu('inventory');
+    else this.renderInventory();
+  }
+
+  renderInventory() {
+    const g = this.game, p = g.player, k = g.knowledge;
+    const inv = p.inventory;
+    const list = $('inv-list');
+    list.innerHTML = '';
+    this.invSel = Math.max(0, Math.min(this.invSel, inv.length - 1));
+    $('inv-count').textContent = `${inv.length} / ${INVENTORY_SIZE}   ·   ${p.gold} gold`;
+    $('inv-prompt').textContent = this.selectMode ? this.selectMode.prompt : '';
+    $('inv-prompt').hidden = !this.selectMode;
+
+    inv.forEach((it, i) => {
+      const li = document.createElement('li');
+      const ok = !this.selectMode || this.selectMode.filter(it);
+      li.className = (i === this.invSel ? 'sel ' : '') + (ok ? '' : 'dim');
+      const color = it.kind === 'potion' ? hex(k.color(it)) : KIND_COLOR[it.kind];
+      const eq = equipTag(p, it);
+      li.innerHTML = `<span class="glyph" style="color:${color}">${KIND_GLYPH[it.kind]}</span><span class="nm"></span>${eq ? `<span class="eq">${eq}</span>` : ''}`;
+      li.querySelector('.nm').textContent = k.name(it);
+      li.addEventListener('mouseenter', () => { if (this.invSel !== i) { this.invSel = i; this.renderInventory(); } });
+      li.addEventListener('click', () => { this.invSel = i; this.activate(0); });
+      list.appendChild(li);
+    });
+    if (!inv.length) list.innerHTML = '<li class="dim">Your pack is empty.</li>';
+
+    const it = inv[this.invSel];
+    const acts = $('inv-actions');
+    acts.innerHTML = '';
+    if (it) {
+      $('inv-name').textContent = k.name(it);
+      $('inv-desc').textContent = k.describe(it);
+      if (this.selectMode) {
+        const ok = this.selectMode.filter(it);
+        const b = document.createElement('button');
+        b.textContent = ok ? 'Choose this' : 'Not a valid choice';
+        b.disabled = !ok;
+        b.addEventListener('click', () => this.activate(0));
+        acts.appendChild(b);
+      } else {
+        g.actionsFor(it).forEach((a, ai) => {
+          const b = document.createElement('button');
+          b.textContent = a.label;
+          b.addEventListener('click', () => this.activate(ai));
+          acts.appendChild(b);
+        });
+      }
+    } else {
+      $('inv-name').textContent = '';
+      $('inv-desc').textContent = '';
+    }
+
+    const e = p.equip;
+    const nm = (x) => (x ? k.name(x) : '—');
+    $('inv-equip').innerHTML =
+      `<div><span>Wielding</span>${esc(nm(e.weapon))}</div><div><span>Wearing</span>${esc(nm(e.armor))}</div>` +
+      `<div><span>Rings</span>${esc(nm(e.rings[0]))} · ${esc(nm(e.rings[1]))}</div>` +
+      `<div><span>Artefacts</span>${esc(e.artefacts[0] ? ARTEFACTS[e.artefacts[0].type].name : '—')} · ${esc(e.artefacts[1] ? ARTEFACTS[e.artefacts[1].type].name : '—')}</div>`;
+  }
+
+  activate(actionIndex) {
+    const g = this.game, p = g.player;
+    const it = p.inventory[this.invSel];
+    if (!it) return;
+    if (this.selectMode) {
+      if (!this.selectMode.filter(it)) return;
+      const cb = this.selectMode.cb;
+      this.selectMode = null;
+      cb(it);
+      g.closeMenu();
+      return;
+    }
+    const acts = g.actionsFor(it);
+    const a = acts[actionIndex];
+    if (!a) return;
+    const res = a.fn();
+    if (g.over || g.menu === 'dialog') return;
+    if (res === true) g.closeMenu();
+    else this.renderInventory();
+  }
+
+  onKey(e) {
+    const g = this.game;
+    if (!g || g.menu !== 'inventory') return;
+    const n = g.player.inventory.length;
+    if (e.code === 'ArrowUp' || e.code === 'KeyW') { this.invSel = (this.invSel - 1 + n) % Math.max(1, n); this.renderInventory(); }
+    else if (e.code === 'ArrowDown' || e.code === 'KeyS') { this.invSel = (this.invSel + 1) % Math.max(1, n); this.renderInventory(); }
+    else if (e.code === 'Enter' || e.code === 'KeyE') this.activate(0);
+    else if (e.code === 'KeyD' && !this.selectMode) {
+      const it = g.player.inventory[this.invSel];
+      if (it) this.activate(g.actionsFor(it).length - 1);
+    } else if (e.code === 'KeyT' && !this.selectMode) {
+      const it = g.player.inventory[this.invSel];
+      if (it && it.kind === 'potion') this.activate(1);
+    }
+  }
+}
+
+function equipTag(p, it) {
+  const e = p.equip;
+  if (e.weapon === it) return 'in hand';
+  if (e.armor === it) return 'worn';
+  if (e.rings.includes(it)) return 'on finger';
+  if (e.artefacts.includes(it)) return 'attuned';
+  return '';
+}
+
+function esc(s) {
+  return s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+}
+
+function killerPhrase(src) {
+  if (['poison', 'starvation', 'flames'].includes(src)) return src;
+  if (/^(a|an|the) /.test(src)) return src;
+  if (/^[A-Z]/.test(src)) return `the ${src}`;
+  return (/^[aeiou]/.test(src) ? 'an ' : 'a ') + src;
+}
+
+function tombstone(info) {
+  const W = 18;
+  const center = (s) => {
+    s = s.slice(0, W);
+    const l = Math.floor((W - s.length) / 2);
+    return ' '.repeat(l) + s + ' '.repeat(W - s.length - l);
+  };
+  const killer = killerPhrase(info.killedBy);
+  const words = killer.split(' ');
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    if ((cur + ' ' + w).trim().length > W - 2) { lines.push(cur.trim()); cur = w; } else cur += ' ' + w;
+  }
+  lines.push(cur.trim());
+  const body = [info.name, `${info.gold} Au`, 'killed by', ...lines, `on depth ${info.depth}`, String(new Date().getFullYear())];
+  return [
+    '              __________',
+    '             /          \\',
+    '            /    REST    \\',
+    '           /      IN      \\',
+    '          /     PEACE      \\',
+    '         /                  \\',
+    ...body.map((l) => `         |${center(l)}|`),
+    '        *|     *  *  *      | *',
+    '________)/\\\\_//(\\/(/\\)/\\//\\/|_)_______',
+  ].join('\n');
+}

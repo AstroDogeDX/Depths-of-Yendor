@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Depths of Yendor</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <div id="hurt" class="fx"></div>
+    <div id="flash" class="fx"></div>
+    <div id="dark" class="fx"></div>
+    <div id="fade" class="fx"></div>
+
+    <div id="hud" hidden>
+      <div id="stats">
+        <div id="depth-line"></div>
+        <div id="stat-line"></div>
+      </div>
+      <div id="map-wrap">
+        <canvas id="minimap" width="176" height="176"></canvas>
+        <div id="compass">N</div>
+      </div>
+      <div id="target" hidden>
+        <div id="target-name"></div>
+        <div class="tbar"><div id="target-fill"></div></div>
+      </div>
+      <div id="crosshair"></div>
+      <div id="prompt"></div>
+      <div id="log"></div>
+      <div id="bars">
+        <div class="bar" id="hp-bar"><div class="fill" id="hp-fill"></div><span id="hp-text"></span></div>
+        <div class="bar" id="atk-bar"><div class="fill" id="atk-fill"></div><span>ATTACK</span></div>
+        <div id="status-line"></div>
+      </div>
+      <div id="gear"></div>
+      <div id="popups"></div>
+    </div>
+
+    <div id="pause" class="overlay" hidden>
+      <div class="panel small">
+        <h2>Paused</h2>
+        <p>Click anywhere to take up your torch again.</p>
+      </div>
+    </div>
+
+    <div id="inventory" class="overlay" hidden>
+      <div class="panel inv">
+        <div class="inv-head">
+          <h2>Pack</h2>
+          <span id="inv-count"></span>
+        </div>
+        <div id="inv-prompt" hidden></div>
+        <div class="inv-cols">
+          <ul id="inv-list"></ul>
+          <div id="inv-detail">
+            <h3 id="inv-name"></h3>
+            <p id="inv-desc"></p>
+            <div id="inv-actions"></div>
+          </div>
+        </div>
+        <div id="inv-equip"></div>
+        <div class="hint">↑↓ select · Enter use · T throw · D drop · I / Esc close</div>
+      </div>
+    </div>
+
+    <div id="mapview" class="overlay" hidden>
+      <div class="map-inner">
+        <canvas id="bigmap"></canvas>
+        <div class="hint">[M] / Esc close</div>
+      </div>
+    </div>
+
+    <div id="dialog" class="overlay" hidden>
+      <div class="panel small">
+        <h2 id="dialog-title"></h2>
+        <p id="dialog-body"></p>
+        <div id="dialog-buttons"></div>
+      </div>
+    </div>
+
+    <div id="title" class="screen">
+      <div class="title-inner">
+        <h1>Depths of Yendor</h1>
+        <p class="sub">Descend ten floors. Take the Amulet. Climb home — if you can.</p>
+        <div class="form">
+          <label>Name <input id="name-in" maxlength="16" value="Adventurer" autocomplete="off" /></label>
+          <label>Seed <input id="seed-in" maxlength="12" placeholder="random" autocomplete="off" /></label>
+          <button id="start-btn">Descend</button>
+        </div>
+        <div class="controls">
+          <div><b>WASD</b> move · <b>Mouse</b> look · <b>← →</b> turn</div>
+          <div><b>Click / Space</b> attack — your swing meter refills between blows, and partial swings hit softer</div>
+          <div><b>E</b> pick up · use stairs &nbsp; <b>I</b> pack &nbsp; <b>M</b> map</div>
+          <div><b>F / Right-click</b> zap wand &nbsp; <b>Q</b> drink known healing &nbsp; <b>R / T</b> artefact powers</div>
+          <div><b>P</b> change pixel resolution &nbsp; <b>Esc</b> pause</div>
+        </div>
+        <p class="lore">
+          Potions, scrolls, wands and rings are unidentified: their colours, labels and woods are shuffled every run.
+          Drink, read and wear at your own risk. Some equipment is cursed and will not come off.
+          Monsters sleep until they notice you — strike first and strike hard.
+        </p>
+      </div>
+    </div>
+
+    <div id="end" class="screen" hidden>
+      <div class="title-inner">
+        <h1 id="end-title"></h1>
+        <pre id="tomb" hidden></pre>
+        <p id="end-text"></p>
+        <div id="end-stats"></div>
+        <div class="form">
+          <button id="again-btn">Descend again</button>
+          <button id="retry-btn" class="alt">Same seed</button>
+          <button id="menu-btn" class="alt">Title</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
