@@ -195,6 +195,14 @@ export function buildItemModel(item, color) {
     case 'artefact':
       g.add(artefactModel(item.type, color));
       break;
+    case 'key': {
+      const iron = lam(0xb8b0a0, { emissive: 0x202018 });
+      const bow = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.014, 4, 10), iron);
+      bow.position.x = -0.1;
+      g.add(bow, box(0.16, 0.022, 0.022, iron, 0.03, 0), box(0.02, 0.045, 0.02, iron, 0.09, -0.03),
+        box(0.02, 0.03, 0.02, iron, 0.05, -0.025));
+      break;
+    }
     case 'amulet': {
       const chain = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.012, 4, 14), lam(0xffd040, { emissive: 0x403000 }));
       const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.07, 0), new THREE.MeshBasicMaterial({ color: 0xff2040 }));

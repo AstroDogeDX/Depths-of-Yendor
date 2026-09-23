@@ -246,7 +246,7 @@ export class Monster {
       return false;
     }
     if (!this.wander || (this.wander.t -= dt) <= 0) {
-      const room = rand.pick(level.data.rooms);
+      const room = rand.pick(level.wanderRooms);
       const tx = rand.int(room.x, room.x + room.w - 1), ty = rand.int(room.y, room.y + room.h - 1);
       if (!level.isFloorTile(tx, ty)) return false;
       this.wander = { tx, ty, field: level.fieldTo(tx, ty), t: 25 };
@@ -271,6 +271,9 @@ export class Monster {
     if (d < 0.02) return;
     dx /= d;
     dz /= d;
+    // Monsters open unlocked doors in their way; locked ones are already walls to their pathfinding.
+    const door = level.doorAhead(this.x, this.z, dx, dz, this.radius);
+    if (door) level.openDoor(door);
     let jitter = 0;
     if (this.def.erratic) jitter += Math.sin(this.t * 3.1) * 0.9;
     if (this.status.confused > 0) jitter += Math.sin(this.t * 2.3) * 2.4;

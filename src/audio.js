@@ -77,6 +77,22 @@ export class Sfx {
     this.tone({ f: 660, dur: 0.08, type: 'triangle', vol: 0.14 });
     this.tone({ f: 990, dur: 0.12, type: 'triangle', vol: 0.14, delay: 0.07 });
   }
+  door(open) {
+    if (open) {
+      this.tone({ f: 140, f2: 90, dur: 0.45, type: 'sawtooth', vol: 0.05 });
+      this.noise({ dur: 0.35, vol: 0.12, freq: 700, freq2: 300, q: 3 });
+    } else {
+      this.noise({ dur: 0.2, vol: 0.28, freq: 160, type: 'lowpass', q: 0.8 });
+    }
+  }
+  locked() {
+    this.noise({ dur: 0.08, vol: 0.2, freq: 1800, q: 4 });
+    this.noise({ dur: 0.08, vol: 0.2, freq: 1500, q: 4, delay: 0.11 });
+  }
+  unlock() {
+    this.tone({ f: 900, f2: 1400, dur: 0.06, type: 'square', vol: 0.08 });
+    this.noise({ dur: 0.12, vol: 0.2, freq: 2400, q: 3, delay: 0.08 });
+  }
   equip() { this.noise({ dur: 0.12, vol: 0.18, freq: 1500, q: 2 }); }
   stairs() { this.noise({ dur: 0.9, vol: 0.3, freq: 300, freq2: 60, type: 'lowpass', q: 0.7 }); }
   drink() { for (let i = 0; i < 4; i++) this.tone({ f: 380 + i * 90, f2: 260, dur: 0.07, type: 'sine', vol: 0.12, delay: i * 0.08 }); }

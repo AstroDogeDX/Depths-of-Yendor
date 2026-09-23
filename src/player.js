@@ -19,6 +19,7 @@ export class Player {
     this.inventory = [];
     this.equip = { weapon: null, armor: null, rings: [null, null], artefacts: [null, null] };
     this.hotbar = new Array(HOTBAR_SIZE).fill(null);
+    this.keys = {}; // depth -> iron keys held for that floor
     this.charge = 1;
     this.swingT = -1; this.swingDur = 0.3; this.swingHit = false; this.swingPower = 1;
     this.status = { haste: 0, poison: 0, confusion: 0, blind: 0, paralysis: 0, mindvision: 0, invisible: 0, burning: 0 };
@@ -129,6 +130,10 @@ export class Player {
       this.gold += item.qty;
       return true;
     }
+    if (item.kind === 'key') {
+      this.keys[item.depth] = (this.keys[item.depth] || 0) + 1;
+      return true;
+    }
     if (stackable(item)) {
       const same = this.inventory.find((i) => i.kind === item.kind && i.type === item.type);
       if (same) {
@@ -199,6 +204,9 @@ export class Player {
       const before = Math.floor(this.bob / Math.PI);
       this.bob += dt * 8.5 * (sp / PLAYER_SPEED);
       if (Math.floor(this.bob / Math.PI) !== before) game.audio.step();
+      // Walking into a closed door opens it (or tries its lock).
+      const door = level.doorAhead(this.x, this.z, mx, mz, PLAYER_RADIUS);
+      if (door) game.useDoor(door);
     }
     level.collide(this, PLAYER_RADIUS);
     for (const m of level.monsters) {

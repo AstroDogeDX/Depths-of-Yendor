@@ -116,5 +116,5 @@ export const RING_GEMS = [
 
 export const KIND_GLYPH = {
   weapon: ')', armor: '[', potion: '!', scroll: '?', wand: '/', ring: '=', food: '%',
-  artefact: '*', amulet: '"', gold: '$',
+  artefact: '*', amulet: '"', gold: '$', key: '-',
 };

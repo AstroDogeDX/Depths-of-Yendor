@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { KIND_GLYPH, ARTEFACTS, WEAPONS, ARMORS } from '../items/defs.js';
 import { equipSlotFor } from '../items/use.js';
-import { T } from '../dungeon/generator.js';
+import { T } from '../dungeon/tiles.js';
 import { TRAP_COLORS } from '../world/level.js';
 import { HUNGER_HUNGRY, HUNGER_WEAK, INVENTORY_SIZE, TILE, HOTBAR_SIZE, PLAYER_SPEED } from '../config.js';
 import { canHotbar, slotItem, slotHolds, slotAction, assignSlot, clearSlot } from '../hotbar.js';
@@ -184,7 +184,8 @@ export class UI {
     const p = g.player, lvl = g.level, k = g.knowledge;
 
     this.set('depth-line', `Depth ${lvl.depth} · ${lvl.theme.name}${p.hasAmulet() ? '  ✦ Amulet' : ''}`);
-    this.set('stat-line', `Lv ${p.level}   XP ${p.xp}/${p.xpToNext()}   Str ${p.str}   Def ${p.defense}   Gold ${p.gold}`);
+    const keys = p.keys[lvl.depth] || 0;
+    this.set('stat-line', `Lv ${p.level}   XP ${p.xp}/${p.xpToNext()}   Str ${p.str}   Def ${p.defense}   Gold ${p.gold}${keys ? `   Keys ${keys}` : ''}`);
 
     const hpFrac = Math.max(0, p.hp / p.maxHp);
     $('hp-fill').style.width = `${hpFrac * 100}%`;
@@ -288,6 +289,10 @@ export class UI {
         else if (t === T.STAIRS_DOWN) c = '#5aa0ff';
         else if (t === T.STAIRS_UP) c = '#ffd27a';
         else if (t === T.PEDESTAL) c = '#d0a040';
+        else if (t === T.DOOR) {
+          const d = lvl.doorAt(tx, ty);
+          c = d.locked ? '#e8c040' : d.open ? '#6a4a2a' : '#b0703a';
+        }
         else c = lvl.visible[i] ? '#4e473d' : '#302b25';
         ctx.fillStyle = c;
         ctx.fillRect(px(tx), py(ty), scale, scale);

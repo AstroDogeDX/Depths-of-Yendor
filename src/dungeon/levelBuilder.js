@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { TILE, WALL_H } from '../config.js';
-import { T } from './generator.js';
-import { getTextures } from './textures.js';
+import { T } from './tiles.js';
+import { getTextures, getDoorTexture } from './textures.js';
 import { RNG } from '../rng.js';
 import { glowSprite } from '../fx/glow.js';
 
@@ -107,7 +107,58 @@ export function buildLevelMeshes(data) {
   }
 
   const { flames, lights } = buildSconces(data, group, rng, isWall);
-  return { group, flames, lights, obstacles };
+
+  const frameMat = new THREE.MeshLambertMaterial({ map: tex.wall, color: 0x8a8070 });
+  const doorMats = {
+    plain: new THREE.MeshLambertMaterial({ map: getDoorTexture(false) }),
+    locked: new THREE.MeshLambertMaterial({ map: getDoorTexture(true) }),
+    lock: new THREE.MeshLambertMaterial({ color: 0xc8a030, emissive: 0x302000 }),
+  };
+  const doors = data.doors.map((d) => {
+    const built = buildDoor(d, frameMat, doorMats);
+    group.add(built.group);
+    return built;
+  });
+  return { group, flames, lights, obstacles, doors };
+}
+
+export const DOOR_HEIGHT = 2.35;
+
+/**
+ * A door in a wall-ring tile: lintel, jambs and a leaf hinged on one side. Built with the passage along
+ * local z, then turned for east/west walls. The leaf swings into the room (see Level.update for `swing`).
+ */
+function buildDoor(d, frameMat, mats) {
+  const g = new THREE.Group();
+  const half = TILE / 2, DH = DOOR_HEIGHT, depth = 0.5;
+  const lintel = new THREE.Mesh(new THREE.BoxGeometry(TILE, WALL_H - DH, depth), frameMat);
+  lintel.position.set(0, DH + (WALL_H - DH) / 2, 0);
+  g.add(lintel);
+  for (const s of [-1, 1]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, DH, depth), frameMat);
+    post.position.set(s * (half - 0.08), DH / 2, 0);
+    g.add(post);
+  }
+  const pivot = new THREE.Group();
+  pivot.position.set(-half + 0.16, 0, 0);
+  const leafW = TILE - 0.32;
+  const leaf = new THREE.Mesh(new THREE.BoxGeometry(leafW, DH - 0.03, 0.1), d.locked ? mats.locked : mats.plain);
+  leaf.position.set(leafW / 2, DH / 2, 0);
+  pivot.add(leaf);
+  if (d.locked) {
+    for (const z of [-0.07, 0.07]) {
+      const lock = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.18, 0.05), mats.lock);
+      lock.position.set(leafW - 0.25, 1.1, z);
+      pivot.add(lock);
+    }
+  }
+  g.add(pivot);
+  const alongZ = d.side === 'N' || d.side === 'S';
+  g.rotation.y = alongZ ? 0 : Math.PI / 2;
+  g.position.set((d.x + 0.5) * TILE, 0, (d.y + 0.5) * TILE);
+  // The room lies on local +z for north/west doors, -z for south/east; a negative turn swings toward +z.
+  const swing = d.side === 'N' || d.side === 'W' ? -1 : 1;
+  return { group: g, pivot, swing, leaf };
 }
 
 function buildDownStairs(s, stoneMat, pitMat) {

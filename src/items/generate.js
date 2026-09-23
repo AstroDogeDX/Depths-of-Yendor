@@ -9,7 +9,7 @@ export function makeItem(kind, type, extra = {}) {
     qty: 1,
     ench: 0,
     cursed: false,
-    identified: kind === 'food' || kind === 'artefact' || kind === 'amulet' || kind === 'gold',
+    identified: kind === 'food' || kind === 'artefact' || kind === 'amulet' || kind === 'gold' || kind === 'key',
     curseKnown: false,
     ...extra,
   };

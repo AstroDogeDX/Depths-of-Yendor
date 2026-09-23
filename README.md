@@ -56,11 +56,25 @@ Potion, scroll and food slots remember the *type*, so a slot whose stack runs ou
 
 ## What's in it
 
-- **10 floors in 4 themes:** Upper Catacombs, Sunken Halls, Ember Deep, Yendor's Vault. Floors are rooms and corridors (MST plus loops), with pillared halls, wall sconces, hidden traps (spike, poison gas, teleport, alarm) and seeded layouts.
+- **10 floors in 4 themes:** Upper Catacombs, Sunken Halls, Ember Deep, Yendor's Vault. Seeded layouts with pillared halls, wall sconces, doors and hidden traps (spike, poison gas, teleport, alarm). See *Floors and doors* below.
 - **12 monsters:** rat, bat, ooze, goblin, goblin archer, skeleton, orc, wraith, fire imp, troll, stone golem, and the **Warden of Yendor**, who fires bolt volleys and raises the dead at half health.
 - **Items:** 7 weapons with different reach and speed (spears out-reach swords, hammers hit hard but recover slowly), 5 armours with strength requirements, 10 potions, 9 scrolls, 5 wands, 6 rings, food.
 - **6 artefacts**, 4 per run in guarded shrines on floors 3, 5, 7 and 9: Chalice of Crimson Thirst (lifesteal), Eye of the Deep (see all monsters and traps), Horn of Thunder (stun blast), Cloak of Shadows (invisibility), Boots of the Wind (speed), Emberheart (burning strikes, fire immunity). You have two attunement slots.
 - A Rogue tombstone when you die. Seeds are shareable.
+
+## Floors and doors
+
+Floors are generated the Pixel Dungeon way, graph first:
+
+- **The loop.** A ring of rooms with the entrance stairs on one side and the exit (or, on the last floor, the Amulet's vault) opposite. There are always two independent routes between them, so both stair rooms always have at least two ways in and out.
+- **Branches.** Rooms that hang off the loop, or off other branches, as dead ends. The artefact shrine is one: a side room behind a door.
+- **Sealed rooms.** Every connection is a doorway on each room's wall plus an A*-routed corridor. Corridors can never cut through a room, so a room can only be entered through its own doorways.
+
+A doorway is either an open arch or a wooden door. Doors swing open when anyone walks into them (or on **E**), and swing shut once the doorway has been clear for a couple of seconds. A closed door blocks sight, arrows and bolts, so slipping through one is a way to break a chase. Monsters path through doors and open them.
+
+**Locked doors** are fully working but not placed yet. They can only go on a branch, never the loop. Each needs an iron key, which is always placed somewhere on that floor's loop so it can never be locked away. Keys don't take pack slots: they show as *Keys* on the stat line and are used up when you walk into (or use) the locked door. Monsters can't path through a locked door, and teleports never drop you inside a locked room.
+
+**Adding a specialist room:** add a type to `dungeon/rooms.js` (size, door style, whether the normal population pass may use it, and a `furnish(ctx, room)` that places its contents), then put it in the plan in `dungeon/generator.js` as a branch, e.g. `{ type: 'treasury', locked: true }`.
 
 ## Code map
 
@@ -72,10 +86,12 @@ src/
   combat.js            player melee resolution
   hotbar.js            hotbar bindings and what each slot does when pressed
   input.js / audio.js  pointer-lock input; WebAudio synth sfx + ambient drone
-  dungeon/generator.js pure data: rooms, corridors, stairs, shrines, population (seeded)
-  dungeon/levelBuilder.js  merged wall/floor/ceiling geometry with baked corner AO, stairwells, sconces
+  dungeon/generator.js pure data: plans the loop and branches, lays out rooms, routes corridors, populates (seeded)
+  dungeon/rooms.js     room types (entrance, exit, standard, vault, shrine): sizes, door style, furnishing
+  dungeon/tiles.js     tile types
+  dungeon/levelBuilder.js  merged wall/floor/ceiling geometry with baked corner AO, stairwells, sconces, doors
   dungeon/textures.js  procedural canvas textures per theme
-  world/level.js       runtime level: collision, line of sight, BFS flow field, fog of war, spawning
+  world/level.js       runtime level: collision, line of sight, doors, BFS flow field, fog of war, spawning
   monsters/defs.js     bestiary stats + depth spawn tables
   monsters/monster.js  AI state machine (sleep → wander → hunt, fear, ranged kiting), attacks, statuses
   monsters/models.js   low-poly primitive models with per-type animation
@@ -92,7 +108,7 @@ Balance numbers live in `monsters/defs.js`, `items/defs.js` and `config.js`. `wi
 ## Possible next steps
 
 - Save on exit (serialise the level map and player to localStorage) for proper roguelike permadeath-with-resume
-- Doors, secret doors, keys and locked vaults
+- Specialist side rooms behind locked doors (treasuries, libraries, armouries), secret doors
 - Shops (Pixel Dungeon style) to give gold a use
 - More level shapes: caves via cellular automata, flooded rooms, chasms that drop you a floor
 - Mimics, splitting oozes, invisible stalkers, thieves who steal and teleport away

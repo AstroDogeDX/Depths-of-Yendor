@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { TILE, VIEW_RADIUS_TILES, MAX_DEPTH } from '../config.js';
-import { T } from '../dungeon/generator.js';
+import { TILE, VIEW_RADIUS_TILES, MAX_DEPTH, PLAYER_RADIUS } from '../config.js';
+import { T } from '../dungeon/tiles.js';
 import { buildLevelMeshes } from '../dungeon/levelBuilder.js';
 import { getTrapTexture } from '../dungeon/textures.js';
 import { buildItemModel } from '../items/models.js';
@@ -30,6 +30,17 @@ export class Level {
     this.flames = built.flames;
     this.lights = built.lights;
     this.obstacles = built.obstacles;
+
+    // Doors: open when something walks into them, swing shut once the doorway has been clear a while.
+    this.doors = data.doors.map((d, i) => ({ ...d, open: false, amt: 0, clearT: 0, ...built.doors[i] }));
+    this.doorByTile = new Map(this.doors.map((d) => [d.y * this.w + d.x, d]));
+    // Tiles inside locked rooms: never a teleport destination or a wanderer's spawn point.
+    this.lockedMask = new Uint8Array(this.w * this.h);
+    for (const r of data.rooms) {
+      if (!r.locked) continue;
+      for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) this.lockedMask[y * this.w + x] = 1;
+    }
+    this.wanderRooms = data.rooms.filter((r) => !r.locked);
 
     this.explored = new Uint8Array(this.w * this.h);
     this.visible = new Uint8Array(this.w * this.h);
@@ -67,13 +78,28 @@ export class Level {
   toTile(v) { return Math.floor(v / TILE); }
   center(t) { return (t + 0.5) * TILE; }
 
-  /** Movement blockers: walls and the stair structures. */
+  doorAt(tx, ty) {
+    return tx < 0 || ty < 0 || tx >= this.w || ty >= this.h ? undefined : this.doorByTile.get(ty * this.w + tx);
+  }
+
+  /** Movement blockers: walls, the stair structures and closed doors. */
   isSolid(tx, ty) {
     const t = this.tile(tx, ty);
+    if (t === T.DOOR) return !this.doorAt(tx, ty).open;
     return t === T.WALL || t === T.STAIRS_DOWN || t === T.STAIRS_UP;
   }
 
-  blocksSight(tx, ty) { return this.tile(tx, ty) === T.WALL; }
+  blocksSight(tx, ty) {
+    const t = this.tile(tx, ty);
+    return t === T.WALL || (t === T.DOOR && !this.doorAt(tx, ty).open);
+  }
+
+  /** For pathfinding: closed doors are routes (monsters open them), locked ones are walls. */
+  blocksPath(tx, ty) {
+    const t = this.tile(tx, ty);
+    if (t === T.DOOR) return this.doorAt(tx, ty).locked;
+    return t === T.WALL || t === T.STAIRS_DOWN || t === T.STAIRS_UP;
+  }
 
   /** Grid line of sight between two world points (Amanatides–Woo traversal). */
   los(x0, z0, x1, z1) {
@@ -136,7 +162,7 @@ export class Level {
   randomFloorPos({ awayFrom = null, minDist = 0, hidden = false } = {}) {
     for (let tries = 0; tries < 300; tries++) {
       const tx = rand.int(1, this.w - 2), ty = rand.int(1, this.h - 2);
-      if (!this.isFloorTile(tx, ty)) continue;
+      if (!this.isFloorTile(tx, ty) || this.lockedMask[this.idx(tx, ty)]) continue;
       const x = this.center(tx), z = this.center(ty);
       if (awayFrom && Math.hypot(x - awayFrom.x, z - awayFrom.z) < minDist) continue;
       if (hidden && this.visible[this.idx(tx, ty)]) continue;
@@ -161,8 +187,8 @@ export class Level {
       const cx = c % this.w, cy = (c / this.w) | 0;
       for (const [dx, dy] of N8) {
         const nx = cx + dx, ny = cy + dy;
-        if (this.isSolid(nx, ny)) continue;
-        if (dx && dy && (this.isSolid(cx + dx, cy) || this.isSolid(cx, cy + dy))) continue;
+        if (this.blocksPath(nx, ny)) continue;
+        if (dx && dy && (this.blocksPath(cx + dx, cy) || this.blocksPath(cx, cy + dy))) continue;
         const n = this.idx(nx, ny);
         if (dist[n] >= 0) continue;
         dist[n] = dist[c] + 1;
@@ -185,8 +211,8 @@ export class Level {
       const cx = c % this.w, cy = (c / this.w) | 0;
       for (const [dx, dy] of N8) {
         const nx = cx + dx, ny = cy + dy;
-        if (this.isSolid(nx, ny)) continue;
-        if (dx && dy && (this.isSolid(cx + dx, cy) || this.isSolid(cx, cy + dy))) continue;
+        if (this.blocksPath(nx, ny)) continue;
+        if (dx && dy && (this.blocksPath(cx + dx, cy) || this.blocksPath(cx, cy + dy))) continue;
         const n = this.idx(nx, ny);
         if (dist[n] >= 0) continue;
         dist[n] = dist[c] + 1;
@@ -204,8 +230,8 @@ export class Level {
     let best = null, bestD = here;
     for (const [dx, dy] of N8) {
       const nx = tx + dx, ny = ty + dy;
-      if (this.isSolid(nx, ny)) continue;
-      if (dx && dy && (this.isSolid(tx + dx, ty) || this.isSolid(tx, ty + dy))) continue;
+      if (this.blocksPath(nx, ny)) continue;
+      if (dx && dy && (this.blocksPath(tx + dx, ty) || this.blocksPath(tx, ty + dy))) continue;
       const d = field[this.idx(nx, ny)];
       if (d < 0) continue;
       if (flee ? d > bestD : d < bestD) { bestD = d; best = { x: this.center(nx), z: this.center(ny) }; }
@@ -252,7 +278,7 @@ export class Level {
 
   addItem(item, x, z, { onPedestal = false } = {}) {
     const mesh = buildItemModel(item, this.game.knowledge.color(item));
-    if (item.kind === 'artefact' || item.kind === 'amulet') mesh.add(glowSprite(this.game.knowledge.color(item), 1.1, 0.7));
+    if (item.kind === 'artefact' || item.kind === 'amulet' || item.kind === 'key') mesh.add(glowSprite(this.game.knowledge.color(item), 1.1, 0.7));
     const y0 = onPedestal ? 1.4 : 0.22;
     mesh.position.set(x, y0, z);
     this.group.add(mesh);
@@ -285,6 +311,51 @@ export class Level {
 
   trapAt(tx, ty) { return this.traps.find((t) => t.x === tx && t.y === ty && !t.triggered); }
 
+  // --- Doors ---
+
+  /** The closed door just ahead of something at (x, z) moving along (dx, dz), if any. */
+  doorAhead(x, z, dx, dz, r) {
+    const d = this.doorAt(this.toTile(x + dx * (r + 0.3)), this.toTile(z + dz * (r + 0.3)));
+    return d && !d.open ? d : null;
+  }
+
+  /** Opens an unlocked door. Locked doors are the player's business (see Game.useDoor). */
+  openDoor(d) {
+    if (d.open || d.locked) return false;
+    d.open = true;
+    d.clearT = 0;
+    if (this.nearPlayer(d, 14)) this.game.audio.door(true);
+    return true;
+  }
+
+  nearPlayer(d, range) {
+    const p = this.game.player;
+    return Math.hypot(p.x - this.center(d.x), p.z - this.center(d.y)) < range;
+  }
+
+  doorOccupied(d) {
+    const x0 = d.x * TILE, z0 = d.y * TILE;
+    const overlaps = (e, r) => e.x + r > x0 && e.x - r < x0 + TILE && e.z + r > z0 && e.z - r < z0 + TILE;
+    return overlaps(this.game.player, PLAYER_RADIUS) || this.monsters.some((m) => !m.dead && overlaps(m, m.radius));
+  }
+
+  updateDoors(dt) {
+    for (const d of this.doors) {
+      if (d.open) {
+        if (this.doorOccupied(d)) d.clearT = 0;
+        else if ((d.clearT += dt) > 2.5) {
+          d.open = false;
+          if (this.nearPlayer(d, 14)) this.game.audio.door(false);
+        }
+      }
+      const target = d.open ? 1 : 0;
+      if (d.amt !== target) {
+        d.amt += Math.max(-dt * 3, Math.min(dt * 3, target - d.amt));
+        d.pivot.rotation.y = (d.swing * d.amt * Math.PI) / 2;
+      }
+    }
+  }
+
   // --- Per-frame ---
 
   update(dt, game) {
@@ -301,6 +372,8 @@ export class Level {
       it.mesh.position.y = it.y0 + Math.sin(t * 2 + it.phase) * 0.05;
       it.mesh.rotation.y += dt * (it.onPedestal ? 1.2 : 0.6);
     }
+
+    this.updateDoors(dt);
 
     this.visT -= dt;
     if (this.visT <= 0) {

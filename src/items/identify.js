@@ -69,6 +69,7 @@ export class Knowledge {
       case 'food': return 0x8a5a2a;
       case 'gold': return 0xf0c040;
       case 'amulet': return 0xffd040;
+      case 'key': return 0xb8b0a0;
     }
     return 0xffffff;
   }
@@ -124,6 +125,7 @@ export class Knowledge {
       case 'artefact': return ARTEFACTS[item.type].name;
       case 'amulet': return 'the Amulet of Yendor';
       case 'gold': return `${q} gold`;
+      case 'key': return 'iron key';
     }
     return 'strange object';
   }
@@ -159,6 +161,7 @@ export class Knowledge {
       case 'artefact': return ARTEFACTS[item.type].desc;
       case 'amulet': return 'The Amulet of Yendor. It thrums with the heartbeat of the dungeon itself. Invoke it to escape now, or carry it back to the surface for true glory.';
       case 'gold': return 'Shiny.';
+      case 'key': return `A heavy iron key. It opens a locked door somewhere on depth ${item.depth}.`;
     }
     return '';
   }

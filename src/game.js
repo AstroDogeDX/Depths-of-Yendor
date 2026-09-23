@@ -351,6 +351,12 @@ export class Game {
     if (best) {
       return { kind: 'item', entry: best, label: `Pick up ${this.knowledge.name(best.item, { article: true })}` };
     }
+    const door = level.doorAt(level.toTile(p.x + fx * 1.4), level.toTile(p.z + fz * 1.4));
+    if (door && !door.open) {
+      if (!door.locked) return { kind: 'door', door, label: 'Open the door' };
+      const keys = p.keys[level.depth] || 0;
+      return { kind: 'door', door, label: keys ? 'Unlock the door (uses an iron key)' : 'Locked. It needs an iron key from this floor' };
+    }
     const near = (s) => s && Math.hypot((s.x + 0.5) * TILE - p.x, (s.y + 0.5) * TILE - p.z) < 1.95;
     if (near(level.data.down)) return { kind: 'down', label: `Descend to depth ${level.depth + 1}` };
     if (near(level.data.up)) {
@@ -385,6 +391,7 @@ export class Game {
     const p = this.player;
     switch (it.kind) {
       case 'item': this.pickUp(it.entry); break;
+      case 'door': this.useDoor(it.door); break;
       case 'down': this.changeLevel(this.level.depth + 1, 'down'); break;
       case 'up': this.changeLevel(this.level.depth - 1, 'up'); break;
       case 'surface':
@@ -413,6 +420,10 @@ export class Game {
     this.audio.pickup();
     if (item.kind === 'gold') {
       this.log(`You pick up ${item.qty} gold.`);
+      return;
+    }
+    if (item.kind === 'key') {
+      this.log('You pick up an iron key. Somewhere on this floor, a lock is waiting for it.', 'good');
       return;
     }
     this.log(`You pick up ${k.name(item, { article: true })}.`);
@@ -455,6 +466,29 @@ export class Game {
         },
       })),
     });
+  }
+
+  /** Open a door the player walked into or used. Locked doors take an iron key for this floor. */
+  useDoor(door) {
+    if (door.open) return;
+    const p = this.player, depth = this.level.depth;
+    if (door.locked) {
+      if ((p.keys[depth] || 0) > 0) {
+        p.keys[depth]--;
+        door.locked = false;
+        this.audio.unlock();
+        this.log('You turn the iron key in the lock. The door grinds open.', 'good');
+      } else {
+        // Bumping a locked door repeatedly shouldn't spam the log.
+        if (this.time - (door.lastRattle ?? -Infinity) > 2) {
+          door.lastRattle = this.time;
+          this.audio.locked();
+          this.log('The door is locked. Its key must be somewhere on this floor.', 'warn');
+        }
+        return;
+      }
+    }
+    this.level.openDoor(door);
   }
 
   quickZap() {
