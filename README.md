@@ -1,6 +1,6 @@
 # Depths of Yendor
 
-A first-person, real-time roguelike for the browser, in the spirit of **King's Field** (slow, deliberate first-person melee in dark stone corridors) crossed with **Rogue / Pixel Dungeon** (procedural floors, unidentified items, curses, permadeath). Built with three.js and plain ES modules. The dungeon, its textures, the monsters and the sound are all generated in code. The weapons, the torch, the wall sconces and the items you find are Blockbench models (see [Blockbench models](#blockbench-models)).
+A first-person, real-time roguelike for the browser, in the spirit of **King's Field** (slow, deliberate first-person melee in dark stone corridors) crossed with **Rogue / Pixel Dungeon** (procedural floors, unidentified items, curses, permadeath). Built with three.js and plain ES modules. The dungeon, its textures and the sound are generated in code. The monsters, the weapons, the torch, the wall sconces and the items you find are Blockbench models (see [Blockbench models](#blockbench-models)).
 
 Descend ten floors and take the **Amulet of Yendor** from its Warden. Then choose: invoke the Amulet and escape at once, or carry it back up through every floor to the surface for double score while the dungeon throws everything it has at you.
 
@@ -95,8 +95,9 @@ A doorway is either an open arch or a wooden door. Doors swing open when anyone 
 
 ## Blockbench models
 
-The weapons you hold and find, the torch in your other hand, the sconces on the walls and the items lying on the floor are [Blockbench](https://www.blockbench.net) projects in `assets/models/`:
+The monsters, the weapons you hold and find, the torch in your other hand, the sconces on the walls and the items lying on the floor are [Blockbench](https://www.blockbench.net) projects in `assets/models/`:
 
+- `monsters/` has one per monster type in `monsters/defs.js` (`rat`, `bat`, `slime`, `goblin`, `archer`, `skeleton`, `orc`, `wraith`, `imp`, `troll`, `golem`, `warden`).
 - `weapons/` has one per `model` name in `items/defs.js` (`dagger`, `sword`, `longsword`, `mace`, `spear`, `axe`, `hammer`).
 - `items/` has one per kind of item (`potion`, `scroll`, `wand`, `ring`, `gold`, `key`, `amulet`), plus one per armour (`armor_leather` … `armor_plate`), artefact (`chalice`, `eye`, `horn`, `cloak`, `boots`, `ember`) and food (`apple`, `ration`).
 - `torch.bbmodel` and `sconce.bbmodel`.
@@ -107,13 +108,21 @@ The game reads the `.bbmodel` files directly, so there is no export step. Open o
 - **Glowing parts:** a texture whose render mode is *Emissive* ignores lighting, like the torch's burning crown. *Additive* also blends onto whatever is behind it.
 - **Tinted parts:** the parts of an item that change colour from run to run (a potion's liquid, a wand's shaft, a ring's stone) are painted in greys on a texture whose name ends in `_tint`. The game multiplies that texture by the item's colour, so in Blockbench those parts look grey.
 - **Double-sided faces:** set a texture's render sides to *Double* for thin things you can see from both sides, like the cloak's open hem.
+- **See-through parts:** a texture whose name ends in `_translucent` is blended by its alpha instead of having low-alpha texels cut out, like the slime's gel and the wraith's robe.
 - **Anchors:** the game can find a group's pivot by the group's name. The torch and the sconce each have an empty `flame` group that marks where the fire burns, so moving that group in Blockbench moves the flame.
 - **Scale:** one Blockbench pixel is 1/64 m, so a 16-pixel block is 25 cm. Build items life-size: in the world, the game draws anything whose longest side is under a quarter of a tile (`ITEM_MIN_SIZE` in `config.js`) bigger, so it can be seen from across a room.
 - **Orientation:** +Y is always up. For things you hold, the pivot (0, 0, 0) is where the hand grips and the tip or head points up. On weapons, the cutting edge or striking face points north (−Z), which the swing animation depends on. The sconce's pivot sits on the wall, and it stands out to the south (+Z). Floor items bob and spin about their pivot, which should be their middle.
 - **Textures** must stay embedded in the project file, which is Blockbench's default. The game ignores texture file paths.
 - **New weapons:** give the `WEAPONS` entry a new `model` name and add `<name>.bbmodel` to the folder.
 
-These models were first built in code by `tools/modelgen/`. It shapes low-poly meshes from lathes and lofts, unwraps their UVs automatically and paints pixel-art textures procedurally. `npm run models -- sword torch` rebuilds the named models, and `all` rebuilds every one. Rebuilding replaces the whole file, so any Blockbench edits to it are lost. The script skips a file with uncommitted changes unless you pass `--force`, and `--out <dir>` writes the results somewhere else so you can compare first. To add a model, write a builder like those in `items.mjs` or `sconce.mjs` and list it in `build.mjs`.
+**Monster rigs.** A monster's moving parts are groups, and the game animates them by turning and shifting each group about its pivot, so put a group's pivot on its joint. The code finds them by name (see `monsters/models.js`):
+
+- Bipeds (goblin, archer, skeleton, orc, imp, troll, golem, Warden): `body` (pivoting at the hips) holds `head` and `arm_left`/`arm_right` (at the shoulders), with `leg_left`/`leg_right` beside it. The weapon belongs in `arm_right`, pointing forward (+Z) from the hand. The imp adds `wing_left`/`wing_right`.
+- The rat has `body`, `tail` and `leg_front_left`, `leg_front_right`, `leg_back_left` and `leg_back_right`. The bat has `body` holding `wing_left`/`wing_right`, the slime a single `blob` squashed about its base, and the wraith `body` holding `arm_left`/`arm_right`.
+
+Animations add to each group's pose in Blockbench, so a limb you rotate there stays rotated in the game. Monsters face south (+Z) with their origin between their feet. Each one gets its own copy of the lit materials so it can flash red when hurt.
+
+These models were first built in code by `tools/modelgen/`. It shapes low-poly meshes from lathes and lofts, unwraps their UVs automatically and paints pixel-art textures procedurally. `npm run models -- sword torch` rebuilds the named models, and `all` rebuilds every one. Rebuilding replaces the whole file, so any Blockbench edits to it are lost. The script skips a file with uncommitted changes unless you pass `--force`, and `--out <dir>` writes the results somewhere else so you can compare first. To add a model, write a builder like those in `items.mjs`, `monsters.mjs` or `sconce.mjs` and list it in `build.mjs`.
 
 ## Code map
 
@@ -133,7 +142,7 @@ src/
   world/level.js       runtime level: collision, line of sight, doors, BFS flow field, fog of war, spawning
   monsters/defs.js     bestiary stats + depth spawn tables
   monsters/monster.js  AI state machine (sleep → wander → hunt, fear, ranged kiting), attacks, statuses
-  monsters/models.js   low-poly primitive models with per-type animation
+  monsters/models.js   loads the rigged Blockbench monsters and animates their bones
   items/defs.js        item catalog and unidentified appearances
   items/identify.js    per-run appearance shuffle, naming, descriptions
   items/generate.js    random items by depth, enchant/curse rolls
@@ -142,7 +151,7 @@ src/
   items/bbmodel.js     loads Blockbench .bbmodel projects (cubes, meshes, groups, textures) into three.js
   fx/                  viewmodel (hands), pixel-art flames, projectiles, particles, glow sprites
   ui/ui.js             HUD, minimap, message log, floating text, pack, dialogs, end screens
-assets/models/         Blockbench models: weapons/, items/, the hand torch and the wall sconce
+assets/models/         Blockbench models: monsters/, weapons/, items/, the hand torch and the wall sconce
 tools/modelgen/        builds those models from code (npm run models)
 ```
 

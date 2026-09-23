@@ -4,7 +4,7 @@ import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import * as THREE from 'three';
 
-export const D = 2; // texels per model pixel
+export const D = 2; // texels per model pixel, unless a model sets its own `density`
 const PAD = 1;
 const r4 = (v) => Math.round(v * 10000) / 10000;
 
@@ -158,9 +158,11 @@ export function lathe(profile, { sides = 8, phase, mat, capStart = true, capEnd 
 /**
  * Model builder with the usual textures: one sheet named after the model, plus `<name>_tint` for the `tint`
  * materials (painted in greys; the game multiplies them by the item's colour), `<name>_glow` (emissive) for
- * the `glow` materials and `<name>_cloth` (double-sided) for the `double` materials. Returns () => Model.
+ * the `glow` materials, `<name>_cloth` (double-sided) for the `double` materials and `<name>_translucent`
+ * (see-through in the game, and double-sided) for the `translucent` ones. `density` overrides texels per pixel (D), for big
+ * models that would not fit their textures otherwise. Returns () => Model.
  */
-export function defineModel(name, materials, fill, { tint = [], glow = [], double = [] } = {}) {
+export function defineModel(name, materials, fill, { tint = [], glow = [], double = [], translucent = [], density } = {}) {
   return () => {
     const sheets = [{ name, mode: 'default' }], sheetOf = {};
     const extra = (suffix, mode, mats, sides) => {
@@ -171,7 +173,8 @@ export function defineModel(name, materials, fill, { tint = [], glow = [], doubl
     extra('tint', 'default', tint);
     extra('glow', 'emissive', glow);
     extra('cloth', 'default', double, 'double');
-    const m = new Model(name, { materials, sheets, sheetOf });
+    extra('translucent', 'default', translucent, 'double');
+    const m = new Model(name, { materials, sheets, sheetOf, density });
     fill(m);
     return m;
   };
@@ -184,8 +187,9 @@ export class Model {
    * 'emissive'; sides 'double' draws both sides of each face, e.g. for cloth);
    * `sheetOf` maps a material name to the sheet it is painted on (default 0).
    */
-  constructor(name, { materials, sheets = [{ name, mode: 'default' }], sheetOf = {} } = {}) {
+  constructor(name, { materials, sheets = [{ name, mode: 'default' }], sheetOf = {}, density = D } = {}) {
     this.name = name;
+    this.D = density;
     this.materials = materials;
     this.sheets = sheets;
     this.sheetOf = sheetOf;
@@ -294,15 +298,15 @@ export class Model {
         f.w = Math.max(...p2.map((q) => q[0])) - f.amin; f.h = Math.max(...p2.map((q) => q[1])) - f.bmin;
         f.origin = o; f.right = right; f.down = down; f.poly2 = p2.map(([a, b]) => [a - f.amin, b - f.bmin]);
       }
-      f.tw = Math.max(1, Math.ceil(f.w * D - 1e-6)) + PAD * 2;
-      f.th = Math.max(1, Math.ceil(f.h * D - 1e-6)) + PAD * 2;
+      f.tw = Math.max(1, Math.ceil(f.w * this.D - 1e-6)) + PAD * 2;
+      f.th = Math.max(1, Math.ceil(f.h * this.D - 1e-6)) + PAD * 2;
     }
   }
 
   pack() {
     for (const f of this.faces) f.sheet = this.sheetOf[f.mat] ?? 0;
     const sizes = [];
-    for (const w of [32, 64, 128, 256]) for (const h of [32, 64, 128, 256]) if (h >= w) sizes.push([w, h]);
+    for (const w of [32, 64, 128, 256, 512]) for (const h of [32, 64, 128, 256, 512]) if (h >= w) sizes.push([w, h]);
     // Smallest area first, but avoid very thin strips: they are awkward to paint on in Blockbench.
     const cost = ([w, h]) => w * h * (h / w > 4 ? 2.5 : 1) + (h - w) * 0.01;
     sizes.sort((a, b) => cost(a) - cost(b));
@@ -320,7 +324,7 @@ export class Model {
     for (const [W, H] of sizes) {
       if (this.sheets.every((_, i) => fits(W, H, this.faces.filter((f) => f.sheet === i)))) { this.W = W; this.H = H; return; }
     }
-    throw new Error(`${this.name}: faces do not fit in 256x256`);
+    throw new Error(`${this.name}: faces do not fit in 512x512`);
   }
 
   paint() {
@@ -340,13 +344,13 @@ export class Model {
       const area = P.reduce((s, p, i) => { const q = P[(i + 1) % P.length]; return s + p[0] * q[1] - q[0] * p[1]; }, 0);
       for (let ty = 0; ty < f.th; ty++) {
         for (let tx = 0; tx < f.tw; tx++) {
-          const a = Math.min(f.w, Math.max(0, (tx - PAD + 0.5) / D)), b = Math.min(f.h, Math.max(0, (ty - PAD + 0.5) / D));
+          const a = Math.min(f.w, Math.max(0, (tx - PAD + 0.5) / this.D)), b = Math.min(f.h, Math.max(0, (ty - PAD + 0.5) / this.D));
           let edge = Infinity, edgeUp = 0;
           for (let i = 0; i < P.length; i++) {
             const p = P[i], q = P[(i + 1) % P.length];
             const ex = q[0] - p[0], ey = q[1] - p[1], len2 = ex * ex + ey * ey || 1;
             const k = Math.max(0, Math.min(1, ((a - p[0]) * ex + (b - p[1]) * ey) / len2));
-            const d = Math.hypot(a - p[0] - ex * k, b - p[1] - ey * k) * D;
+            const d = Math.hypot(a - p[0] - ex * k, b - p[1] - ey * k) * this.D;
             if (d < edge) {
               edge = d;
               // How far the edge's outward normal points up the texture (b runs down).
@@ -359,15 +363,15 @@ export class Model {
           // edge: texels to the face's nearest edge, info: the element's and face's extra data.
           const col = paint({ p: p3, n, W: f.tw - PAD * 2, H: f.th - PAD * 2, ax, ay, edge, edgeUp, info: f.info });
           const o = (ay * W + ax) * 4;
-          px[o] = col[0]; px[o + 1] = col[1]; px[o + 2] = col[2]; px[o + 3] = 255;
+          px[o] = col[0]; px[o + 1] = col[1]; px[o + 2] = col[2]; px[o + 3] = col[3] ?? 255;
         }
       }
       // UVs
       const ox = f.rx + PAD, oy = f.ry + PAD;
       if (f.kind === 'cube') {
-        f.face.uv = [ox, oy, ox + f.w * D, oy + f.h * D].map(r4);
+        f.face.uv = [ox, oy, ox + f.w * this.D, oy + f.h * this.D].map(r4);
       } else {
-        f.face.vertices.forEach((k, i) => { f.face.uv[k] = [r4(ox + f.poly2[i][0] * D), r4(oy + f.poly2[i][1] * D)]; });
+        f.face.vertices.forEach((k, i) => { f.face.uv[k] = [r4(ox + f.poly2[i][0] * this.D), r4(oy + f.poly2[i][1] * this.D)]; });
       }
     }
   }
