@@ -19,6 +19,7 @@ export const TURN_SPEED = 2.2; // rad/s for keyboard turning
 export const MOUSE_SENS = 0.0022;
 
 export const INVENTORY_SIZE = 20;
+export const HOTBAR_SIZE = 6; // number keys 1..HOTBAR_SIZE
 export const HUNGER_MAX = 1000;
 export const HUNGER_HUNGRY = 250;
 export const HUNGER_WEAK = 80;

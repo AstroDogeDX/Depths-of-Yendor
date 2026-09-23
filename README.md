@@ -22,18 +22,30 @@ npm run build      # static build in dist/, deployable anywhere
 | E | Pick up / use stairs |
 | I or Tab | Pack (click or ↑↓ select, double-click or Enter use, T throw, D drop) |
 | M | Full map |
+| 1–6 | Hotbar slots (see below) |
 | F / right-click | Zap your last-used wand |
 | Q | Drink a potion you *know* is healing |
 | R / T | Active power of artefact slot 1 / 2 |
 | P | Cycle internal render resolution (270p → 360p → 540p → native) |
 | Esc | Pause |
 
+## Hotbar
+
+Open your pack, select a potion, scroll, food, wand or artefact, then press 1–6 (or click a slot on the pack's hotbar row) to bind it. Pressing the same number on the same item unbinds it, and right-clicking a slot clears it. In play, the number key uses the item:
+
+- **Potions** are drunk, unless you've identified them as harmful (poison, confusion, darkness, paralysis, liquid flame), in which case they're **thrown** where you're looking. Unidentified potions are always drunk, so the hotbar never gives away what a potion is.
+- **Scrolls** are read, **food** is eaten, and **wands** are zapped at the crosshair.
+- **Artefacts** trigger their active power if you're attuned to them. The slot shows the cooldown.
+
+Potion, scroll and food slots remember the *type*, so a slot whose stack runs out shows 0 and refills when you pick up more. Wand and artefact slots remember that specific item.
+
 ## Moving Rogue to real time
 
 - **Attack meter instead of turns.** Every weapon has a recovery time. You can swing early, but damage scales with the charge, like King's Field's power bar. The weapon visibly sags while the meter refills.
 - **Telegraphed monster attacks.** Monsters wind up before striking, and during the windup they turn slowly toward you. Stepping back or circle-strafing makes them whiff, which replaces Rogue's to-hit dice for defence. Heavy hits can stagger a monster out of its windup.
 - **Stealth and sneak attacks.** Monsters start asleep or wandering. Unaware targets take double damage and cannot dodge (Pixel Dungeon's surprise attacks). Standing still, rings of stealth and light armour help. Heavy armour hurts.
-- **Clocks tick in seconds.** Hunger, regeneration, status effects, wand recharge and ring identification all run on real time. The world pauses while the pack or map is open, but using an item empties your attack meter, so drinking mid-fight still costs a swing.
+- **Clocks tick in seconds.** Hunger, regeneration, status effects, wand recharge and ring identification all run on real time. The world pauses while the pack or map is open, but drinking, eating, throwing or changing equipment empties your attack meter, so doing it mid-fight still costs a swing.
+- **Paralysis means paralysis.** While paralysed you can't use items (from the pack or the hotbar), pick things up, take stairs or invoke artefacts. Only the map stays available.
 - **Identification is per run.** Potion colours, scroll labels, wand woods and ring gems are reshuffled from the seed. Potions reveal themselves when drunk, and throwing a potion identifies it if the splash does something visible. Weapons and armour reveal their enchantment after enough hits. Rings reveal themselves after about 100 s of wear.
 - **Curses.** About 16% of equipment is cursed with a negative enchantment and binds to you when equipped. Scrolls of remove curse or enchanting break the curse.
 - **Persistent floors.** Levels are kept when you leave, so you can go back up. The dungeon also restocks itself slowly, and fast and angrily once you carry the Amulet.
@@ -54,6 +66,7 @@ src/
   game.js              run lifecycle, level transitions, rendering, interaction, traps, endings
   player.js            movement, attack meter, stats, statuses, hunger/regen, inventory
   combat.js            player melee resolution
+  hotbar.js            hotbar bindings and what each slot does when pressed
   input.js / audio.js  pointer-lock input; WebAudio synth sfx + ambient drone
   dungeon/generator.js pure data: rooms, corridors, stairs, shrines, population (seeded)
   dungeon/levelBuilder.js  merged wall/floor/ceiling geometry with baked corner AO, stairwells, sconces

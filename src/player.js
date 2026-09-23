@@ -1,5 +1,5 @@
 import {
-  PLAYER_RADIUS, PLAYER_SPEED, TURN_SPEED, MOUSE_SENS, HUNGER_MAX, HUNGER_HUNGRY, HUNGER_WEAK, INVENTORY_SIZE,
+  PLAYER_RADIUS, PLAYER_SPEED, TURN_SPEED, MOUSE_SENS, HUNGER_MAX, HUNGER_HUNGRY, HUNGER_WEAK, INVENTORY_SIZE, HOTBAR_SIZE,
 } from './config.js';
 import { WEAPONS, ARMORS, ARTEFACTS } from './items/defs.js';
 import { stackable } from './items/generate.js';
@@ -18,6 +18,7 @@ export class Player {
     this.hunger = HUNGER_MAX;
     this.inventory = [];
     this.equip = { weapon: null, armor: null, rings: [null, null], artefacts: [null, null] };
+    this.hotbar = new Array(HOTBAR_SIZE).fill(null);
     this.charge = 1;
     this.swingT = -1; this.swingDur = 0.3; this.swingHit = false; this.swingPower = 1;
     this.status = { haste: 0, poison: 0, confusion: 0, blind: 0, paralysis: 0, mindvision: 0, invisible: 0, burning: 0 };

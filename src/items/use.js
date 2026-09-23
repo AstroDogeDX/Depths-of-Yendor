@@ -38,6 +38,7 @@ export function eatFood(game, item) {
   const one = p.takeOne(item);
   p.hunger = Math.min(HUNGER_MAX, p.hunger + FOOD[one.type].nutrition);
   p.hungerState = 0;
+  p.charge = 0;
   game.log(one.type === 'ration' ? 'That ration hit the spot.' : 'Crunchy, if a little sad.', 'good');
   game.audio.pickup();
   return false;

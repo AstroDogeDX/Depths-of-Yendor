@@ -86,6 +86,29 @@ body.lowhp #hurt { animation: pulse 1.2s infinite; }
 #gear .cd { color: #a09080; }
 #gear .ok { color: #a8e890; }
 
+#hotbar { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; gap: 6px; }
+#hotbar .slot {
+  position: relative; width: 54px; height: 54px; overflow: hidden;
+  background: rgba(0, 0, 0, 0.6); border: 1px solid var(--gold-dim); box-shadow: inset 0 0 6px #000;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+#hotbar .slot.empty { opacity: 0.35; }
+#hotbar .slot.missing .glyph, #hotbar .slot.na .glyph { opacity: 0.3; }
+#hotbar .slot.fired { border-color: #fff4d8; box-shadow: 0 0 12px rgba(255, 210, 140, 0.8), inset 0 0 6px #000; transition: none; }
+#hotbar .key { position: absolute; top: 2px; left: 4px; font-size: 11px; font-family: var(--mono); color: var(--gold); }
+#hotbar .glyph {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 24px; font-weight: bold;
+}
+#hotbar .qty { position: absolute; right: 4px; top: 2px; font-size: 11px; font-family: var(--mono); }
+#hotbar .act {
+  position: absolute; left: 0; right: 0; bottom: 3px; text-align: center;
+  font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.75;
+}
+#hotbar .act.throw { color: #ff9a70; opacity: 1; }
+#hotbar .act.attune { color: #a09080; }
+#hotbar .cd { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); }
+
 #popups { position: absolute; inset: 0; overflow: hidden; }
 .popup {
   position: absolute; left: 0; top: 0; font-size: 20px; font-weight: bold; color: #fff;
@@ -122,7 +145,7 @@ button:disabled { opacity: 0.4; cursor: default; }
 button.alt { background: linear-gradient(#5a5040, #3a3228); color: var(--ink); }
 
 /* Fixed-size pack: nothing inside may change the panel's size, so rows and buttons never move under the cursor. */
-.inv { width: min(900px, 94vw); height: min(640px, 90vh); display: flex; flex-direction: column; }
+.inv { width: min(900px, 94vw); height: min(700px, 92vh); display: flex; flex-direction: column; }
 .inv-head { flex: none; display: flex; align-items: baseline; gap: 16px; }
 .inv-head h2 { margin: 0; }
 #inv-count { font-family: var(--mono); font-size: 13px; opacity: 0.8; }
@@ -147,6 +170,23 @@ button.alt { background: linear-gradient(#5a5040, #3a3228); color: var(--ink); }
 #inv-detail h3 { flex: none; margin: 0 0 8px; color: var(--gold); font-weight: normal; }
 #inv-desc { flex: 1; min-height: 0; overflow-y: auto; margin: 0; white-space: pre-line; line-height: 1.45; font-size: 15px; }
 #inv-actions { flex: none; display: flex; gap: 8px; flex-wrap: wrap; padding-top: 12px; min-height: 52px; }
+#inv-hot { flex: none; margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(216, 184, 112, 0.25); }
+.inv-hot-head { display: flex; gap: 14px; align-items: baseline; margin-bottom: 6px; font-size: 14px; }
+.inv-hot-head > span:first-child { color: var(--gold); }
+#inv-hot-note { font-size: 12px; opacity: 0.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#inv-hot-note.warn { color: #f0d060; opacity: 1; }
+#inv-hot-slots { display: grid; gap: 6px; } /* columns set from HOTBAR_SIZE in ui.js */
+.hs {
+  height: 32px; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 0 8px;
+  background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(216, 184, 112, 0.25); cursor: pointer; user-select: none;
+}
+.hs:hover { border-color: var(--gold-dim); background: rgba(216, 184, 112, 0.08); }
+.hs.has-sel { border-color: var(--gold); background: rgba(216, 184, 112, 0.16); }
+.hs .k { font-family: var(--mono); font-size: 11px; color: var(--gold); }
+.hs .g { font-family: var(--mono); font-weight: bold; }
+.hs .n { flex: 1; min-width: 0; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hs .n.none { opacity: 0.35; font-style: italic; }
+.hs.missing .g, .hs.missing .n { opacity: 0.4; }
 #inv-equip {
   flex: none; margin-top: 14px; padding-top: 10px; border-top: 1px solid rgba(216, 184, 112, 0.25);
   display: grid; grid-template-columns: 1fr 1fr; gap: 4px 20px; font-size: 14px;

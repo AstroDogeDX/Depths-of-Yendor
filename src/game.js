@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TILE, EYE_H, MAX_DEPTH, ARTEFACT_DEPTHS, RENDER_HEIGHTS } from './config.js';
+import { TILE, EYE_H, MAX_DEPTH, ARTEFACT_DEPTHS, RENDER_HEIGHTS, HOTBAR_SIZE } from './config.js';
 import { RNG, rand } from './rng.js';
 import { generateLevel } from './dungeon/generator.js';
 import { Level } from './world/level.js';
@@ -13,6 +13,7 @@ import { burst, ring } from './fx/particles.js';
 import { playerPopupPos } from './combat.js';
 import { Input } from './input.js';
 import { Sfx } from './audio.js';
+import { useSlot } from './hotbar.js';
 
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, matches stair `dir`
 
@@ -93,6 +94,7 @@ export class Game {
     this.time = 0;
     this.over = false;
     this.amuletTaken = false;
+    this.paraMsgT = -Infinity;
     this.menu = null;
 
     const p = this.player;
@@ -215,18 +217,32 @@ export class Game {
       return;
     }
     if (this.over || this.paused) return;
-    if (inp.wasPressed('KeyI') || inp.wasPressed('Tab')) this.openMenu('inventory');
+    // The map is memory, not action, so it stays available while paralysed; everything else checks canAct().
+    if ((inp.wasPressed('KeyI') || inp.wasPressed('Tab')) && this.canAct()) this.openMenu('inventory');
     else if (inp.wasPressed('KeyM')) this.openMenu('map');
-    if (inp.wasPressed('KeyE')) this.interact();
-    if (inp.wasPressed('KeyF') || inp.wasPressed('Mouse2')) this.quickZap();
-    if (inp.wasPressed('KeyQ')) this.quickHeal();
-    if (inp.wasPressed('KeyR')) activateArtefact(this, 0);
-    if (inp.wasPressed('KeyT')) activateArtefact(this, 1);
+    if (inp.wasPressed('KeyE') && this.canAct()) this.interact();
+    if ((inp.wasPressed('KeyF') || inp.wasPressed('Mouse2')) && this.canAct()) this.quickZap();
+    if (inp.wasPressed('KeyQ') && this.canAct()) this.quickHeal();
+    for (let i = 0; i < HOTBAR_SIZE; i++) {
+      if ((inp.wasPressed(`Digit${i + 1}`) || inp.wasPressed(`Numpad${i + 1}`)) && useSlot(this, i)) this.ui.flashSlot(i);
+    }
+    if (inp.wasPressed('KeyR') && this.canAct()) activateArtefact(this, 0);
+    if (inp.wasPressed('KeyT') && this.canAct()) activateArtefact(this, 1);
     if (inp.wasPressed('KeyP')) {
       this.resIdx = (this.resIdx + 1) % RENDER_HEIGHTS.length;
       this.resize();
       this.log(`Render resolution: ${RENDER_HEIGHTS[this.resIdx] || 'native'}.`, 'info');
     }
+  }
+
+  /** False while paralysed: no item use, pickups, stairs or powers. Says so, at most every 0.6s. */
+  canAct() {
+    if (this.player.status.paralysis <= 0) return true;
+    if (this.time - this.paraMsgT >= 0.6) {
+      this.paraMsgT = this.time;
+      this.log('You cannot move a muscle!', 'warn');
+    }
+    return false;
   }
 
   openMenu(which) {

@@ -2,7 +2,9 @@ import * as THREE from 'three';
 import { KIND_GLYPH, ARTEFACTS } from '../items/defs.js';
 import { T } from '../dungeon/generator.js';
 import { TRAP_COLORS } from '../world/level.js';
-import { HUNGER_HUNGRY, HUNGER_WEAK, INVENTORY_SIZE, TILE } from '../config.js';
+import { HUNGER_HUNGRY, HUNGER_WEAK, INVENTORY_SIZE, TILE, HOTBAR_SIZE } from '../config.js';
+import { canHotbar, slotItem, slotHolds, slotAction, assignSlot, clearSlot } from '../hotbar.js';
+import { stackable } from '../items/generate.js';
 
 const $ = (id) => document.getElementById(id);
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
@@ -12,6 +14,8 @@ const KIND_COLOR = {
   food: '#c09060', artefact: '#ffb040', amulet: '#ffd040', gold: '#ffd040',
 };
 const POPUP_LIFE = { alert: 1.1, zzz: 1.6 };
+const HOT_HINT = `Press 1–${HOTBAR_SIZE} or click a slot to put the selected item there · right-click a slot to clear it`;
+const glyphColor = (k, it) => (it.kind === 'potion' ? hex(k.color(it)) : KIND_COLOR[it.kind]);
 
 export class UI {
   constructor() {
@@ -52,6 +56,17 @@ export class UI {
       if (game.state === 'play' && !game.menu) game.resume();
     });
     window.addEventListener('keydown', (e) => this.onKey(e));
+
+    this.hotEls = [];
+    this.hotKeys = [];
+    for (let i = 0; i < HOTBAR_SIZE; i++) {
+      const el = document.createElement('div');
+      el.className = 'slot';
+      $('hotbar').appendChild(el);
+      this.hotEls.push(el);
+    }
+    $('inv-hot-note').textContent = HOT_HINT;
+    $('inv-hot-slots').style.gridTemplateColumns = `repeat(${HOTBAR_SIZE}, minmax(0, 1fr))`;
   }
 
   reset() {
@@ -60,6 +75,7 @@ export class UI {
     this.popups.forEach((p) => p.el.remove());
     this.popups = [];
     this.closeMenus();
+    this.hotKeys = [];
     $('hud').hidden = false;
     $('end').hidden = true;
   }
@@ -191,6 +207,7 @@ export class UI {
       }
     }
 
+    this.updateHotbar();
     this.updatePopups(dt);
     this.drawMinimap();
     $('pause').hidden = !(g.paused && !g.menu && !g.over);
@@ -382,7 +399,7 @@ export class UI {
       const li = document.createElement('li');
       const ok = !this.selectMode || this.selectMode.filter(it);
       li.className = ok ? '' : 'dim';
-      const color = it.kind === 'potion' ? hex(k.color(it)) : KIND_COLOR[it.kind];
+      const color = glyphColor(k, it);
       const eq = equipTag(p, it);
       li.innerHTML = `<span class="glyph" style="color:${color}">${KIND_GLYPH[it.kind]}</span><span class="nm"></span>${eq ? `<span class="eq">${eq}</span>` : ''}`;
       li.querySelector('.nm').textContent = k.name(it);
@@ -403,6 +420,7 @@ export class UI {
     for (let r = 0; r < rows.length; r++) rows[r].classList.toggle('sel', r === i);
     rows[i]?.scrollIntoView({ block: 'nearest' });
     this.renderDetail();
+    this.renderHotStrip();
   }
 
   renderDetail() {
@@ -445,6 +463,10 @@ export class UI {
     const g = this.game, p = g.player;
     const it = p.inventory[this.invSel];
     if (!it) return;
+    if (!g.canAct()) {
+      g.closeMenu();
+      return;
+    }
     if (this.selectMode) {
       if (!this.selectMode.filter(it)) return;
       const cb = this.selectMode.cb;
@@ -458,7 +480,8 @@ export class UI {
     if (!a) return;
     const res = a.fn();
     if (g.over || g.menu === 'dialog') return;
-    if (res === true) g.closeMenu();
+    // Close on request, or if that action just paralysed you (a potion of paralysis drunk from the pack).
+    if (res === true || p.status.paralysis > 0) g.closeMenu();
     else this.renderInventory();
   }
 
@@ -466,6 +489,8 @@ export class UI {
     const g = this.game;
     if (!g || g.menu !== 'inventory') return;
     const n = g.player.inventory.length;
+    const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
+    if (digit && +digit[1] <= HOTBAR_SIZE) { this.assignSelected(+digit[1] - 1); return; }
     if (e.code === 'ArrowUp' || e.code === 'KeyW') this.selectRow((this.invSel - 1 + n) % Math.max(1, n));
     else if (e.code === 'ArrowDown' || e.code === 'KeyS') this.selectRow((this.invSel + 1) % Math.max(1, n));
     else if (e.code === 'Enter' || e.code === 'KeyE') this.activate(0);
@@ -476,6 +501,106 @@ export class UI {
       const it = g.player.inventory[this.invSel];
       if (it && it.kind === 'potion') this.activate(1);
     }
+  }
+
+  // --- Hotbar ---
+
+  updateHotbar() {
+    const g = this.game, p = g.player, k = g.knowledge;
+    for (let i = 0; i < HOTBAR_SIZE; i++) {
+      const el = this.hotEls[i];
+      const b = p.hotbar[i];
+      const it = b ? slotItem(p, i) : null;
+      let html = `<span class="key">${i + 1}</span>`;
+      let unattuned = false;
+      if (b) {
+        const probe = it ?? { ...b, qty: 0 };
+        let qty = '', cd = 0;
+        if (stackable(b)) qty = String(it ? it.qty : 0);
+        else if (b.kind === 'wand' && it) qty = it.identified ? String(it.charges) : '?';
+        else if (b.kind === 'artefact' && it) {
+          const s = p.equip.artefacts.indexOf(it);
+          if (s < 0) unattuned = true;
+          else if (p.artefactCD[s] > 0) {
+            cd = p.artefactCD[s] / ARTEFACTS[it.type].active.cooldown;
+            qty = `${Math.ceil(p.artefactCD[s])}s`;
+          }
+        }
+        const act = it ? (unattuned ? 'attune' : slotAction(g, it)) : '';
+        // Cooldown shade sits over the glyph but under the text, so a recharging power reads as dimmed.
+        html = `<span class="glyph" style="color:${glyphColor(k, probe)}">${KIND_GLYPH[b.kind]}</span>` +
+          (cd > 0 ? `<span class="cd" style="height:${Math.round(cd * 100)}%"></span>` : '') +
+          html + `<span class="qty">${qty}</span><span class="act ${act}">${act}</span>`;
+      }
+      if (this.hotKeys[i] !== html) {
+        this.hotKeys[i] = html;
+        el.innerHTML = html;
+      }
+      el.classList.toggle('empty', !b);
+      el.classList.toggle('missing', !!b && !it);
+      el.classList.toggle('na', unattuned);
+    }
+  }
+
+  flashSlot(i) {
+    const el = this.hotEls[i];
+    el.classList.remove('fired');
+    void el.offsetWidth;
+    el.classList.add('fired');
+    clearTimeout(el.fireT);
+    el.fireT = setTimeout(() => el.classList.remove('fired'), 180);
+  }
+
+  renderHotStrip() {
+    const g = this.game, p = g.player, k = g.knowledge;
+    const sel = p.inventory[this.invSel];
+    const box = $('inv-hot-slots');
+    box.innerHTML = '';
+    for (let i = 0; i < HOTBAR_SIZE; i++) {
+      const b = p.hotbar[i];
+      const it = b ? slotItem(p, i) : null;
+      const probe = it ?? (b ? { ...b, qty: 1 } : null);
+      const cell = document.createElement('div');
+      cell.className = 'hs' + (b && !it ? ' missing' : '') + (sel && slotHolds(b, sel) ? ' has-sel' : '');
+      cell.innerHTML = `<span class="k">${i + 1}</span>` + (probe
+        ? `<span class="g" style="color:${glyphColor(k, probe)}">${KIND_GLYPH[probe.kind]}</span><span class="n"></span>`
+        : '<span class="n none">empty</span>');
+      if (probe) {
+        const name = k.name(probe);
+        cell.querySelector('.n').textContent = name;
+        cell.title = name;
+      }
+      cell.addEventListener('click', () => this.assignSelected(i));
+      cell.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        clearSlot(p, i);
+        this.renderHotStrip();
+      });
+      box.appendChild(cell);
+    }
+  }
+
+  assignSelected(i) {
+    const p = this.game.player;
+    const it = p.inventory[this.invSel];
+    if (this.selectMode || !it) return;
+    if (!canHotbar(it)) {
+      this.hotNote(it.kind === 'artefact' ? 'That artefact has no power to invoke.' : 'Only potions, scrolls, food, wands and artefact powers go on the hotbar.');
+      return;
+    }
+    assignSlot(p, i, it);
+    this.renderHotStrip();
+  }
+
+  hotNote(text) {
+    const el = $('inv-hot-note');
+    el.textContent = text;
+    el.classList.add('warn');
+    clearTimeout(this.hotNoteT);
+    this.hotNoteT = setTimeout(() => {
+      el.textContent = HOT_HINT;
+      el.classList.remove('warn');
+    }, 2200);
   }
 }
 
