@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { WEAPONS } from './defs.js';
 import { buildBBModel } from './bbmodel.js';
+import { MODEL_PX } from '../config.js';
 
 const lam = (color, opts = {}) => new THREE.MeshLambertMaterial({ color, flatShading: true, ...opts });
 
@@ -16,9 +17,8 @@ const cyl = (r, h, m, y = 0, seg = 5) => {
 };
 
 // Weapon models are Blockbench projects (Generic Model format), one per WEAPONS[type].model, read straight
-// from the saved .bbmodel files. One Blockbench pixel is 1/64 m.
+// from the saved .bbmodel files.
 const WEAPON_FILES = import.meta.glob('../../assets/models/weapons/*.bbmodel', { query: '?raw', import: 'default', eager: true });
-const WEAPON_PX = 1 / 64;
 const weaponCache = new Map();
 
 /**
@@ -35,7 +35,7 @@ export function buildWeaponMesh(model) {
   if (!weaponCache.has(model)) {
     const src = WEAPON_FILES[`../../assets/models/weapons/${model}.bbmodel`];
     if (!src) console.warn(`No weapon model assets/models/weapons/${model}.bbmodel`);
-    weaponCache.set(model, src ? buildBBModel(src, WEAPON_PX) : box(0.05, 0.5, 0.02, lam(0xb8bcc4), 0, 0.25));
+    weaponCache.set(model, src ? buildBBModel(src, MODEL_PX) : box(0.05, 0.5, 0.02, lam(0xb8bcc4), 0, 0.25));
   }
   // Clones share geometry and materials with the cached original.
   return weaponCache.get(model).clone();

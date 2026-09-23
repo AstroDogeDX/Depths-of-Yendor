@@ -26,21 +26,31 @@ function loadTexture(tex) {
   return t;
 }
 
+// Blockbench texture render modes: 'emissive' ignores lighting, 'additive' also adds onto what's behind.
+function material(tex) {
+  const map = tex.source ? loadTexture(tex) : null;
+  if (tex.render_mode === 'emissive') return new THREE.MeshBasicMaterial({ map, alphaTest: 0.5 });
+  if (tex.render_mode === 'additive') {
+    return new THREE.MeshBasicMaterial({ map, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+  }
+  return new THREE.MeshLambertMaterial({ map, flatShading: true, alphaTest: 0.5 });
+}
+
 class Builder {
   constructor(json) {
     this.json = json;
     const res = json.resolution || { width: 16, height: 16 };
     this.textures = (json.textures || []).map((tex) => ({
       uvW: tex.uv_width || res.width, uvH: tex.uv_height || res.height,
-      material: new THREE.MeshLambertMaterial({
-        map: tex.source ? loadTexture(tex) : null, flatShading: true, alphaTest: 0.5,
-      }),
+      material: material(tex),
     }));
     this.fallback = { uvW: res.width, uvH: res.height, material: new THREE.MeshLambertMaterial({ color: 0xff00ff, flatShading: true }) };
     this.elements = new Map((json.elements || []).map((e) => [e.uuid, e]));
     this.groups = new Map((json.groups || []).map((g) => [g.uuid, g]));
     // Per texture: flat arrays of positions and uvs, already in model space.
     this.buckets = new Map();
+    // Group pivots by name, in model space: empty groups make handy attachment points.
+    this.anchors = {};
   }
 
   // Faces with no texture assigned use the first one; a missing texture shows magenta.
@@ -102,7 +112,10 @@ class Builder {
         new THREE.Vector3(...(node.scale || [1, 1, 1])),
       );
       const matrix = parentMatrix.clone().multiply(local);
-      if (isGroup) this.walk(item.children || [], matrix, origin);
+      if (isGroup) {
+        this.anchors[node.name] = new THREE.Vector3().setFromMatrixPosition(matrix).toArray();
+        this.walk(item.children || [], matrix, origin);
+      }
       else if (node.type === 'mesh') this.mesh(node, matrix);
       else if (!node.type || node.type === 'cube') this.cube(node, matrix);
     }
@@ -120,6 +133,7 @@ class Builder {
       g.computeVertexNormals();
       group.add(new THREE.Mesh(g, bk.tex.material));
     }
+    group.userData.anchors = this.anchors;
     return group;
   }
 }
@@ -137,7 +151,10 @@ function sortQuad(vertices, keys) {
   return keys;
 }
 
-/** Parses a .bbmodel (JSON text or object) into a Group of meshes, one per texture. */
+/**
+ * Parses a .bbmodel (JSON text or object) into a Group of meshes, one per texture.
+ * `userData.anchors` maps each group's name to its pivot as [x, y, z] in the returned group's space.
+ */
 export function buildBBModel(source, scale = 1 / 16) {
   const json = typeof source === 'string' ? JSON.parse(source) : source;
   return new Builder(json).build(scale);

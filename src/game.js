@@ -300,7 +300,7 @@ export class Game {
     this.updateCamera(dt);
     const p = this.player;
     this.viewmodel.update(dt, {
-      moving: p.moving, bob: p.bob, charge: p.charge, time: this.time, sprint: p.moving && p.mode === 'sprint',
+      moving: p.moving, bob: p.bob, charge: p.charge, time: this.time, yaw: p.yaw, sprint: p.moving && p.mode === 'sprint',
       lightLevel: p.status.blind > 0 ? 0.1 : 1,
     });
     this.interaction = this.findInteraction();

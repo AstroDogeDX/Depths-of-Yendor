@@ -4,6 +4,7 @@ import { T } from './tiles.js';
 import { getTextures, getDoorTexture } from './textures.js';
 import { RNG } from '../rng.js';
 import { glowSprite } from '../fx/glow.js';
+import { Flame } from '../fx/flame.js';
 
 const SCONCE_LIGHTS = 6; // constant per level so shaders never need recompiling between floors
 
@@ -268,8 +269,6 @@ function buildSconces(data, group, rng, isWall) {
   rng.shuffle(spots);
 
   const bracketMat = new THREE.MeshLambertMaterial({ color: 0x2a2420 });
-  const flameMat = new THREE.MeshBasicMaterial({ color: 0xffa040, fog: false });
-  const coreMat = new THREE.MeshBasicMaterial({ color: 0xfff0a0, fog: false });
   const flames = [];
   for (const s of spots) {
     const sg = new THREE.Group();
@@ -277,18 +276,16 @@ function buildSconces(data, group, rng, isWall) {
     bracket.position.set(0, -0.1, 0.08);
     const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.06, 0.1, 6), bracketMat);
     cup.position.set(0, 0.08, 0.18);
-    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.26, 5), flameMat);
-    flame.position.set(0, 0.25, 0.18);
-    const core = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.14, 4), coreMat);
-    core.position.set(0, 0.2, 0.18);
+    const flame = new Flame({ width: 0.3, height: 0.46, pixel: 0.025, seed: rng.next() });
+    flame.position.set(0, 0.1, 0.18);
     const halo = glowSprite(0xff9040, 0.9, 0.55);
     halo.position.set(0, 0.26, 0.2);
-    sg.add(bracket, cup, flame, core, halo);
+    sg.add(bracket, cup, flame, halo);
     sg.position.set(s.x, 1.85, s.z);
     sg.rotation.y = s.ry;
     group.add(sg);
     const out = new THREE.Vector3(Math.sin(s.ry), 0, Math.cos(s.ry)); // away from the wall
-    flames.push({ mesh: flame, halo, phase: rng.next() * 10, pos: new THREE.Vector3(s.x, 2.0, s.z).addScaledVector(out, 0.6) });
+    flames.push({ flame, halo, phase: rng.next() * 10, pos: new THREE.Vector3(s.x, 2.0, s.z).addScaledVector(out, 0.6) });
   }
 
   const lights = [];

@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import { buildWeaponMesh } from '../items/models.js';
+import { buildBBModel } from '../items/bbmodel.js';
+import { MODEL_PX } from '../config.js';
 import { glowSprite } from './glow.js';
+import { Flame } from './flame.js';
+import torchModel from '../../assets/models/torch.bbmodel?raw';
 
 // First-person hands: weapon on the right, torch on the left. Rendered in its own scene after the
 // world (with the depth buffer cleared) so the weapon never clips into walls.
@@ -64,21 +68,19 @@ export class ViewModel {
     this.swingDur = 0.3;
     this.dipT = -1;
 
-    // Torch
+    // Torch: a Blockbench model whose empty "flame" group marks where the fire sits. Its glowing crown
+    // uses an emissive (unlit) texture, which pulses with the flame.
     this.torch = new THREE.Group();
-    const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, 0.4, 5), new THREE.MeshLambertMaterial({ color: 0x4a3020 }));
-    const wrap = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.08, 5), new THREE.MeshLambertMaterial({ color: 0x2a1a10 }));
-    wrap.position.y = 0.2;
-    const additive = (color, opacity) => new THREE.MeshBasicMaterial({
-      color, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false,
-    });
-    this.flame = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.15, 5), additive(0xff8a20, 0.85));
-    this.flame.position.y = 0.3;
-    this.flameCore = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.08, 4), additive(0xfff0a0, 0.9));
-    this.flameCore.position.y = 0.27;
+    const model = buildBBModel(torchModel, MODEL_PX);
+    this.embers = model.children.find((m) => m.material.isMeshBasicMaterial)?.material;
+    const top = new THREE.Vector3().fromArray(model.userData.anchors.flame);
+    this.flame = new Flame({ width: 0.14, height: 0.26, pixel: 0.01 });
+    this.flame.position.copy(top);
     this.halo = glowSprite(0xff9030, 0.42, 0.55);
-    this.halo.position.y = 0.3;
-    this.torch.add(stick, wrap, this.flame, this.flameCore, this.halo);
+    this.halo.position.set(top.x, top.y + 0.07, top.z);
+    this.torch.add(model, this.flame, this.halo);
+    this.lean = 0;
+    this.lastYaw = null;
     this.torch.position.set(-0.5, -0.52, -0.95);
     this.torch.rotation.set(-0.25, 0, 0.2);
     this.scene.add(this.torch);
@@ -105,7 +107,7 @@ export class ViewModel {
     this.camera.updateProjectionMatrix();
   }
 
-  update(dt, { moving, bob, charge, time, lightLevel, sprint = false }) {
+  update(dt, { moving, bob, charge, time, lightLevel, yaw = 0, sprint = false }) {
     let pose = sample(this.keys, 0);
     if (this.swingT >= 0) {
       this.swingT += dt / this.swingDur;
@@ -133,7 +135,13 @@ export class ViewModel {
     this.torch.position.set(-0.5 - bx, -0.52 + by, -0.95);
 
     const flick = 0.85 + Math.sin(time * 23) * 0.06 + Math.sin(time * 7.3) * 0.08;
-    this.flame.scale.set(1, flick, 1);
+    // The flame trails behind when you turn and sways with your stride.
+    const turn = this.lastYaw === null || dt <= 0 ? 0 : Math.atan2(Math.sin(yaw - this.lastYaw), Math.cos(yaw - this.lastYaw)) / dt;
+    this.lastYaw = yaw;
+    const leanTo = THREE.MathUtils.clamp(turn * 0.18, -0.4, 0.4) + (moving ? Math.sin(bob) * 0.06 * sway : 0);
+    this.lean += (leanTo - this.lean) * Math.min(1, dt * 10);
+    this.flame.update(time, flick, this.lean);
+    if (this.embers) this.embers.color.setScalar(0.8 + (flick - 0.85) * 1.6);
     this.halo.material.opacity = 0.45 + (flick - 0.85) * 1.5;
     this.torchLight.intensity = 2.2 * flick * lightLevel;
     this.ambient.intensity = 0.25 + lightLevel * 0.45;

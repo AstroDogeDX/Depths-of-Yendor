@@ -2,6 +2,8 @@
 export const TILE = 2;
 export const WALL_H = 2.8;
 export const EYE_H = 1.55;
+// Blockbench models (assets/models) are built in pixels; this is one pixel in metres.
+export const MODEL_PX = 1 / 64;
 
 // The Amulet of Yendor waits at the bottom of this many floors.
 export const MAX_DEPTH = 10;

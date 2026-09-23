@@ -364,7 +364,7 @@ export class Level {
 
     for (const f of this.flames) {
       const k = 0.85 + Math.sin(t * 17 + f.phase) * 0.08 + Math.sin(t * 5.3 + f.phase * 2) * 0.07;
-      f.mesh.scale.set(1, k, 1);
+      f.flame.update(t, k);
       f.halo.material.opacity = 0.35 + (k - 0.85) * 1.6;
       if (f.light) f.light.intensity = f.light.userData.base * k;
     }
