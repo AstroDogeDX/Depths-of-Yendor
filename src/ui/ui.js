@@ -1,8 +1,9 @@
 import * as THREE from 'three';
-import { KIND_GLYPH, ARTEFACTS } from '../items/defs.js';
+import { KIND_GLYPH, ARTEFACTS, WEAPONS, ARMORS } from '../items/defs.js';
+import { equipSlotFor } from '../items/use.js';
 import { T } from '../dungeon/generator.js';
 import { TRAP_COLORS } from '../world/level.js';
-import { HUNGER_HUNGRY, HUNGER_WEAK, INVENTORY_SIZE, TILE, HOTBAR_SIZE } from '../config.js';
+import { HUNGER_HUNGRY, HUNGER_WEAK, INVENTORY_SIZE, TILE, HOTBAR_SIZE, PLAYER_SPEED } from '../config.js';
 import { canHotbar, slotItem, slotHolds, slotAction, assignSlot, clearSlot } from '../hotbar.js';
 import { stackable } from '../items/generate.js';
 
@@ -15,6 +16,21 @@ const KIND_COLOR = {
 };
 const POPUP_LIFE = { alert: 1.1, zzz: 1.6 };
 const HOT_HINT = `Press 1–${HOTBAR_SIZE} or click a slot to put the selected item there · right-click a slot to clear it`;
+// Paper-doll slots, positioned over the 240x300 figure in index.html.
+const DOLL_SLOTS = [
+  { key: 'art0', label: 'Artefact', x: 14, y: 12 },
+  { key: 'art1', label: 'Artefact', x: 174, y: 12 },
+  { key: 'armor', label: 'Armor', x: 94, y: 88 },
+  { key: 'weapon', label: 'Weapon', x: 14, y: 150 },
+  { key: 'ring0', label: 'Ring', x: 20, y: 228, small: true },
+  { key: 'ring1', label: 'Ring', x: 180, y: 228, small: true },
+];
+const equippedIn = (p, key) => {
+  if (key === 'weapon') return p.equip.weapon;
+  if (key === 'armor') return p.equip.armor;
+  if (key.startsWith('ring')) return p.equip.rings[+key[4]];
+  return p.equip.artefacts[+key[3]];
+};
 const glyphColor = (k, it) => (it.kind === 'potion' ? hex(k.color(it)) : KIND_COLOR[it.kind]);
 
 export class UI {
@@ -66,6 +82,20 @@ export class UI {
       this.hotEls.push(el);
     }
     $('inv-hot-note').textContent = HOT_HINT;
+    this.dollEls = {};
+    for (const d of DOLL_SLOTS) {
+      const el = document.createElement('div');
+      el.className = 'ds' + (d.small ? ' ring' : '');
+      el.style.left = `${d.x}px`;
+      el.style.top = `${d.y}px`;
+      // Clicking a filled slot selects that item in the list; equipping still goes through the action buttons.
+      el.addEventListener('click', () => {
+        const it = equippedIn(this.game.player, d.key);
+        if (it) this.selectRow(this.game.player.inventory.indexOf(it));
+      });
+      $('inv-doll').appendChild(el);
+      this.dollEls[d.key] = el;
+    }
     $('inv-hot-slots').style.gridTemplateColumns = `repeat(${HOTBAR_SIZE}, minmax(0, 1fr))`;
   }
 
@@ -421,6 +451,7 @@ export class UI {
     rows[i]?.scrollIntoView({ block: 'nearest' });
     this.renderDetail();
     this.renderHotStrip();
+    this.renderDoll();
   }
 
   renderDetail() {
@@ -450,13 +481,50 @@ export class UI {
       $('inv-name').textContent = '';
       $('inv-desc').textContent = '';
     }
+  }
 
-    const e = p.equip;
-    const nm = (x) => (x ? k.name(x) : '—');
-    $('inv-equip').innerHTML =
-      `<div><span>Wielding</span>${esc(nm(e.weapon))}</div><div><span>Wearing</span>${esc(nm(e.armor))}</div>` +
-      `<div><span>Rings</span>${esc(nm(e.rings[0]))} · ${esc(nm(e.rings[1]))}</div>` +
-      `<div><span>Artefacts</span>${esc(e.artefacts[0] ? ARTEFACTS[e.artefacts[0].type].name : '—')} · ${esc(e.artefacts[1] ? ARTEFACTS[e.artefacts[1].type].name : '—')}</div>`;
+  renderDoll() {
+    const g = this.game, p = g.player, k = g.knowledge;
+    const sel = p.inventory[this.invSel];
+    // Where the selected, not-yet-equipped item would go (same rule equipItem uses).
+    const target = sel && !this.selectMode && !p.isEquipped(sel) ? equipSlotFor(p, sel) : null;
+    for (const d of DOLL_SLOTS) {
+      const el = this.dollEls[d.key];
+      const it = equippedIn(p, d.key);
+      el.classList.toggle('empty', !it);
+      el.classList.toggle('cursed', !!it && it.cursed && it.curseKnown);
+      el.classList.toggle('sel', !!it && it === sel);
+      el.classList.toggle('target', d.key === target);
+      if (it) {
+        const showEnch = it.identified && (it.kind === 'weapon' || it.kind === 'armor' || (it.kind === 'ring' && it.type !== 'teleportation'));
+        const ench = showEnch ? `<span class="de">${it.ench >= 0 ? '+' : ''}${it.ench}</span>` : '';
+        el.innerHTML = `<span class="dg" style="color:${glyphColor(k, it)}">${KIND_GLYPH[it.kind]}</span>${ench}`;
+        el.title = k.name(it);
+      } else {
+        el.innerHTML = `<span class="dl">${d.label}</span>`;
+        el.title = '';
+      }
+    }
+    // Worn armor tints the figure's torso.
+    const a = p.equip.armor;
+    $('doll-torso').style.fill = a ? hex(ARMORS[a.type].color) : '';
+
+    const w = p.weaponStats(), wi = p.equip.weapon;
+    const known = !wi || wi.identified; // an unidentified enchantment must not leak through the numbers
+    const heavy = !!wi && WEAPONS[wi.type].str > p.str;
+    const slow = !!a && ARMORS[a.type].str > p.str;
+    const lo = Math.max(1, w.dmg[0] + (known ? w.ench : 0));
+    const hi = Math.max(1, w.dmg[1] + (known ? w.ench : 0) + w.excess);
+    // Two label/value pairs per row: wide values on the left, short ones on the right.
+    const rows = [
+      ['Damage', `${lo}–${hi}${known ? '' : ' (+?)'}`, heavy], ['Reach', `${w.reach}m`],
+      ['Recovery', `${w.recharge.toFixed(2)}s`, heavy], ['Defense', String(p.defense)],
+      ['Speed', `${Math.round((p.moveSpeed() / PLAYER_SPEED) * 100)}%`, slow], ['Strength', String(p.str)],
+    ];
+    let html = rows.map(([label, v, bad]) => `<span>${label}</span><b${bad ? ' class="bad"' : ''}>${v}</b>`).join('');
+    if (heavy) html += '<div class="warn">Your weapon is too heavy for you.</div>';
+    if (slow) html += '<div class="warn">Your armor is weighing you down.</div>';
+    $('inv-stats').innerHTML = html;
   }
 
   activate(actionIndex) {
@@ -613,9 +681,6 @@ function equipTag(p, it) {
   return '';
 }
 
-function esc(s) {
-  return s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-}
 
 function killerPhrase(src) {
   if (['poison', 'starvation', 'flames'].includes(src)) return src;

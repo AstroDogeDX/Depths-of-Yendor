@@ -29,6 +29,10 @@ npm run build      # static build in dist/, deployable anywhere
 | P | Cycle internal render resolution (270p → 360p → 540p → native) |
 | Esc | Pause |
 
+## The pack
+
+The left of the pack shows a paper doll of what you have equipped: weapon in hand, armor on the chest (tinting the figure), two rings and two artefact attunements. A known curse gives the slot a red border. Clicking a filled slot selects that item. Selecting something you haven't equipped highlights the slot it would go into. Underneath are your derived stats (damage, recovery, reach, defense, speed, strength), with anything too heavy for you shown in red. An unidentified weapon's enchantment stays hidden: its damage shows as *(+?)*.
+
 ## Hotbar
 
 Open your pack, select a potion, scroll, food, wand or artefact, then press 1–6 (or click a slot on the pack's hotbar row) to bind it. Pressing the same number on the same item unbinds it, and right-clicking a slot clears it. In play, the number key uses the item:

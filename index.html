@@ -54,6 +54,33 @@
         </div>
         <div id="inv-prompt" class="off"></div>
         <div class="inv-cols">
+          <div id="inv-doll-col">
+            <div id="inv-doll">
+              <svg class="doll-fig" viewBox="0 0 240 300" aria-hidden="true">
+                <defs>
+                  <radialGradient id="doll-glow" cx="50%" cy="45%" r="55%">
+                    <stop offset="0" stop-color="#d8b870" stop-opacity="0.13" />
+                    <stop offset="1" stop-color="#d8b870" stop-opacity="0" />
+                  </radialGradient>
+                </defs>
+                <ellipse cx="120" cy="150" rx="112" ry="150" fill="url(#doll-glow)" />
+                <g fill="#221d16" stroke="#6a5a38" stroke-width="1.5" stroke-linejoin="round">
+                  <path d="M106 164 L100 228 L96 290 L110 290 L114 230 L119 170 Z" />
+                  <path d="M134 164 L140 228 L144 290 L130 290 L126 230 L121 170 Z" />
+                  <path d="M86 76 L66 126 L56 176 L68 178 L78 132 L94 96 Z" />
+                  <path d="M154 76 L174 126 L184 176 L172 178 L162 132 L146 96 Z" />
+                  <path id="doll-torso" d="M84 72 Q120 64 156 72 L150 148 L134 168 L106 168 L90 148 Z" />
+                  <rect x="113" y="56" width="14" height="12" />
+                  <circle cx="120" cy="42" r="17" />
+                </g>
+                <!-- the torch you always carry -->
+                <line x1="178" y1="176" x2="189" y2="140" stroke="#5a3a1c" stroke-width="4" stroke-linecap="round" />
+                <path d="M189 116 Q198 130 191 141 Q182 137 185 128 Q187 123 189 116 Z" fill="#ff9a30" />
+                <path d="M189 126 Q193 133 190 139 Q186 136 188 131 Z" fill="#fff0a0" />
+              </svg>
+            </div>
+            <div id="inv-stats"></div>
+          </div>
           <ul id="inv-list"></ul>
           <div id="inv-detail">
             <h3 id="inv-name"></h3>
@@ -65,7 +92,6 @@
           <div class="inv-hot-head"><span>Hotbar</span><span id="inv-hot-note"></span></div>
           <div id="inv-hot-slots"></div>
         </div>
-        <div id="inv-equip"></div>
         <div class="hint">Click or ↑↓ to select · double-click or Enter to use · T throw · D drop · I / Esc close</div>
       </div>
     </div>

@@ -351,6 +351,29 @@ export function zapWand(game, item) {
 
 // --- Equipment ---
 
+/**
+ * Which paper-doll slot equipping `item` would fill: 'weapon' | 'armor' | 'ring0' | 'ring1' | 'art0' | 'art1',
+ * or null if it can't go anywhere (both rings cursed). Equipped cursed items always have curseKnown set,
+ * so this never reveals a hidden curse.
+ */
+export function equipSlotFor(p, item) {
+  const e = p.equip;
+  switch (item.kind) {
+    case 'weapon': return 'weapon';
+    case 'armor': return 'armor';
+    case 'ring': {
+      let s = e.rings.indexOf(null);
+      if (s < 0) s = !e.rings[0].cursed ? 0 : !e.rings[1].cursed ? 1 : -1;
+      return s < 0 ? null : `ring${s}`;
+    }
+    case 'artefact': {
+      const s = e.artefacts.indexOf(null);
+      return `art${s < 0 ? 0 : s}`;
+    }
+  }
+  return null;
+}
+
 export function equipItem(game, item) {
   const p = game.player, k = game.knowledge, e = p.equip;
   const name = () => k.name(item);
@@ -383,17 +406,16 @@ export function equipItem(game, item) {
       bind();
       break;
     case 'ring': {
-      let slot = e.rings.indexOf(null);
-      if (slot < 0) slot = !e.rings[0].cursed ? 0 : !e.rings[1].cursed ? 1 : -1;
-      if (slot < 0) return cursedMsg(e.rings[0]);
+      const key = equipSlotFor(p, item);
+      if (!key) return cursedMsg(e.rings[0]);
+      const slot = +key.slice(4);
       e.rings[slot] = item;
       game.log(`You slip the ${name()} onto your finger.`);
       bind();
       break;
     }
     case 'artefact': {
-      let slot = e.artefacts.indexOf(null);
-      if (slot < 0) slot = 0;
+      const slot = +equipSlotFor(p, item).slice(3);
       e.artefacts[slot] = item;
       p.artefactCD[slot] = 0;
       const a = ARTEFACTS[item.type];

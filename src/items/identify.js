@@ -154,7 +154,7 @@ export class Knowledge {
         : `A slender ${this.appearance.wand[item.type].name} wand humming with unknown power.` +
           (this.tried.wand.has(item.type) ? ' (tried)' : '');
       case 'ring': return known ? RINGS[item.type].desc
-        : `A ring set with a ${this.appearance.ring[item.type].name}. Wear it long enough and you will learn its nature.`;
+        : `A ring set with ${/^[aeiou]/.test(this.appearance.ring[item.type].name) ? 'an' : 'a'} ${this.appearance.ring[item.type].name}. Wear it long enough and you will learn its nature.`;
       case 'food': return FOOD[item.type].desc;
       case 'artefact': return ARTEFACTS[item.type].desc;
       case 'amulet': return 'The Amulet of Yendor. It thrums with the heartbeat of the dungeon itself. Invoke it to escape now, or carry it back to the surface for true glory.';
