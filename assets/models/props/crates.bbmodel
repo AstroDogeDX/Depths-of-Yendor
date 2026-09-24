@@ -1,0 +1,130 @@
+{
+	"meta": {
+		"format_version": "5.0",
+		"model_format": "free",
+		"box_uv": false
+	},
+	"name": "crates",
+	"model_identifier": "",
+	"visible_box": [1, 1, 0],
+	"resolution": {
+		"width": 128,
+		"height": 256
+	},
+	"elements": [
+		{
+			"name": "crate_big",
+			"box_uv": false,
+			"render_order": "default",
+			"locked": false,
+			"allow_mirror_modeling": true,
+			"from": [-25, 0, -25],
+			"to": [25, 50, 25],
+			"autouv": 0,
+			"color": 0,
+			"origin": [0, 25, 0],
+			"rotation": [0, 0, 0],
+			"faces": {
+				"east": {
+					"uv": [1, 1, 51, 51],
+					"texture": 0
+				},
+				"west": {
+					"uv": [53, 1, 103, 51],
+					"texture": 0
+				},
+				"up": {
+					"uv": [1, 53, 51, 103],
+					"texture": 0
+				},
+				"down": {
+					"uv": [53, 53, 103, 103],
+					"texture": 0
+				},
+				"south": {
+					"uv": [1, 105, 51, 155],
+					"texture": 0
+				},
+				"north": {
+					"uv": [53, 105, 103, 155],
+					"texture": 0
+				}
+			},
+			"type": "cube",
+			"uuid": "cc5be668-f594-4ef2-afd5-f08190147ea6"
+		},
+		{
+			"name": "crate_small",
+			"box_uv": false,
+			"render_order": "default",
+			"locked": false,
+			"allow_mirror_modeling": true,
+			"from": [-17, 50, -17],
+			"to": [17, 84, 17],
+			"autouv": 0,
+			"color": 0,
+			"origin": [0, 67, 0],
+			"rotation": [0, 22, 0],
+			"faces": {
+				"east": {
+					"uv": [1, 157, 35, 191],
+					"texture": 0
+				},
+				"west": {
+					"uv": [37, 157, 71, 191],
+					"texture": 0
+				},
+				"up": {
+					"uv": [73, 157, 107, 191],
+					"texture": 0
+				},
+				"down": {
+					"uv": [1, 193, 35, 227],
+					"texture": 0
+				},
+				"south": {
+					"uv": [37, 193, 71, 227],
+					"texture": 0
+				},
+				"north": {
+					"uv": [73, 193, 107, 227],
+					"texture": 0
+				}
+			},
+			"type": "cube",
+			"uuid": "f44e62cc-c2d3-4b9a-a4e5-efb1c409b88f"
+		}
+	],
+	"groups": [],
+	"outliner": ["cc5be668-f594-4ef2-afd5-f08190147ea6", "f44e62cc-c2d3-4b9a-a4e5-efb1c409b88f"],
+	"textures": [
+		{
+			"path": "",
+			"name": "crates.png",
+			"folder": "",
+			"namespace": "",
+			"id": "0",
+			"group": "",
+			"width": 128,
+			"height": 256,
+			"uv_width": 128,
+			"uv_height": 256,
+			"particle": false,
+			"use_as_default": false,
+			"layers_enabled": false,
+			"sync_to_project": "",
+			"render_mode": "default",
+			"render_sides": "auto",
+			"pbr_channel": "color",
+			"frame_time": 1,
+			"frame_order_type": "loop",
+			"frame_order": "",
+			"frame_interpolate": false,
+			"visible": true,
+			"internal": true,
+			"saved": true,
+			"uuid": "b0068a85-dc69-4eb8-a4f9-93b58940a67f",
+			"source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAAEACAYAAAB7+X6nAAAKE0lEQVR42u2du44sNRCGN4cACQTBIUCAiE5AQkJAzEPw/q8BmmBQY7rtKtfF5e6vJGvO7tnpcbu/8aVc/uvj91++/ZsSUz5//5X5Gh/R9q7kbGU9btKzwbX1sd5/9L2kAECpWwAAAHIB+PPXT6by1x8//e/1Xc7+31pGDZh9P9b72h6A7BINwOr7SQfgSLi0XH0zrn72LCMAIj4z8n7LATDqBleXFQBYoBm135Y9AADE3Q8AAAAAAACrAFYBAAAAjwWgda4cf5YA0Hu/p1MKABIeevsqmQNUf+i3BUD7zZv5WTMERNcHAJgD3AOA0UZH5TGzIgDS9nzUMlDSGJJdNykA2bt6DAH0AADgOdu/+mZqVwHVhzd6AHoAAAAAAAAAAAAAAACAfAB++/Hr/xQAiC1tewMAAAAAAAAAAAAAABAUSlAoAAAAAABANgAzu2czr7sAoIkfsLbHdj2AZSvVo9E0UcHRW8MesOMKxhUMAAAAAAAAAAAAAACwjx9g1VIwahm4aqlb2g+QoflzR0eQVFOo9Mmgat/8LACs96dtv9t4Ai1x/6sAsNyf1+uWk8CZh+d1GCNiEmiB0vt+WAWwCgAAAEgEgIJaOOWpAPzwzRf/vl6Vq/9vrzO6xtnf9d4/+v3oPtrfz3yO5P6k7Tj6jDQArJXWPvwRANrPtbx/9j6jr58KQPU0ME/PMZQyBFSEoP38UX2O35qZ+5nNNWT9u959MgmkAAAAEBZu2gvgZFARALxDqwEg0BX8PhP4euVgyMMOhhwf/nF3bCa44Q7xAI9PGEEPAACPBCDreFx5reAV4VSaYUOjFOo9jEUMcywDlasH4gEKAeB1oPJJfoAtIoKyxkAigj7dYwjIhAYACp4LyJSOB4DgHqB1W579vHLplOkHyHBylesBjp7Bo3Tc8WdtT+DReFqFkNXZwrfxA7SVajcrzor3N0Gzbl/hCfSGqvTZQCkAqwSjKmkEzc5pys8B2g2i9rW6KzjTL2H1i3AyCD/AXqeDAYCzgekZNgGgQA/glUDZIrYAAIGTwJXJFjUeQQBgEmj2A0QuAbfTCmYVsHaOAwABPYBkeImc02gijwAgoAeIfujMARgCzBPdWwBQQVXLY2/DMyBUGk+xZVBoRV293v1cHceS7m5mKKbeJirY+5tiiQrWPHyv3c2t4wF21tYdnQuQ7G6uzIVUJh7A85vvGQlkjQcYPfyzOcDsamFmCcoqYIEncHV0M0mjEgDw0DJ+5NnAu/gBIpd2nqrqABDsB8hSMacHuMEcYMXqp+zJIM/4gMgcO1HH3bMmgrc6G7gi1+7dBC+QiSvSA2QlzAKAQAB2VD0DACMAV4dYqqbCYxVgFFasALR0DgQANwVg6x6Aglo45WkAaHL5jP7+7CZGaV7O/v4qF5Am3Yo0l48kV9FsOhtJDqJeO4YDIMn9M/r9bGKm0ee0EGgaXZvDKDLX0GyupWU5gyjrcwUtzxm0a0N65fKpAAGTQAoAAMBmjiBJJI1n0EX0ySDt/XA0jKNhaAVbdP8qJIyIrC+7gZMROF4AROcwAgByBgEAAAAAABAQwiqAZSAA7J0xZEdNnR0A6LVnOaXQig99RwCkR+VLDQFWibUMiDIBiG4PJoHMAQDAeprWctYRAAbn6SN39XbvAWb0BVAKZQjYP2PI6u6zGgCzuojMAegBAAAAAAAAAAAAAAAAAMDrePiVEDQAAAAAAAAAAAAAAAAAEBRKUCgAAAAAAMD9tIJXZf7YPmdQhEp4hGq4dw8QdT/kC8AVzDIQAAAAAAAAAAAAAO7nCVy1lIryA6xaCuIICswdnJkF/LEAeCdl9MwePnP9TCfQdgBYMmR6vWZ5Ai1x/7dXCLHctPVwScQk0CvXMKsAVgEAAACbAUBBLZzyxJxBvTQu0nQvmrQtvc/p5RCypF/RXk/z/72/l+Y8Orv3cAA0N+XZKJoEUB65d7R5hCJyA83kPAoHgNw8da63JIdQpdw5mpw/GQ9LUp/Z+rbvk1wnpEdgovXwSSGNCgBLHSfVHDmzJ41+/u5Lkbv46G5+ldc1lu4NAIANgBaG47+lewSv378BavcgAKBgfUYQXD3U0S7juxzfBwDF6vN6OBoIjkPEaBf1bHgAgGL1OXuox+5/9E0fDQ+jk08AUKA+Zw91ZuyX/H06ANkxfpGHO2eCNKRASr7h0rOSvbnCkh4gMyYwI6p3RY8kmQCe1e84V1gyBHjEwGXE9EUlbdAAKYVM4iNor/fuSbacA2gg2nEO0H7DNfI22kDSLeYAlmhaTQ9QQXBi9FA1MEjmTKwCNqrPjAjVaHgAgA3rc+b0kSTOOoMBADavTw8GyfCwLQDSlHE7AjD7UCWHatLDxOkB5uszKzw5gmEpANkHQ6vJvM36AWYngL3jaLdxBa/wBGbpDp65dWd6hSsYbgPALkKPlvqc7evPDg9l9gK0GxtWT1dGfXpubUk8wEzY1+xcYeseQCL+kL0baJ2T9Hb9ImDYBoCZxpbIvVcbAkbdtmRXUjM8bNkDSCG4CwBXEzlpu/RguPUkcMdl4OysXhKkcjY8AMCmAGjmCqXiAbSz6ywAMuojBcDqAezVd3lMIK5gXYSSxxZwDwYAKAjA2TfV4gHswcDhUAoAUIIB6GnoXGnXaKVbJNpC0jLSJpJoFUmu2/7eIjFz9Xmj+2rfH6IRFPHwNe/rQah5f++6o3pJHsLMQ9cIbI10hUIAqKyVI5VVWSVzs0JzaDuNIM31j5o8o4ft9fCv3n/sFbw0fqztxCSQAgAAsGAvwOr+tMQD4JhauBfgEdc+ygwCAAUB8HJrSna9AKAYANZoVuk5/ff7AGBTAKQxcaPhBAA2AmAm9m00gQSADQCQhEK3Ez3pqmE3jaDVGkppAFwpV1415uxhiB01glZqKIUDMNKu9ToB84ZsR42glRpKy4JCvU68tD3LE+cAFg2lZZ5Aj2NOEiXM6hpBqzWU0qOCLadeJefgWQUU9AR6BDpKlTAAoOAy0Cp2oBFGAoDNXcEauZMzv8JTAZjVUCoBgMdEkO3gDXuAWXnUpyiEZOgVpAMw89AlJ17uohGUraGUBkAb1OEZD/DUHsCjPukRQd4q2DPxAJU0glZrKC3PF6DJjNE7956hD1Bdt3BGQ2n5KmCUCeOsB2lXDRpP4F2GAC8NpbQe4Co7lqZ7laRNeeIcwKKhlNoD9HLiSXLeSPLjMQnUKaikxAO0XfcZBKOxXZohEwAKAjAqVw99NHFst5Q1DV5FI2i1htIyAI4PXOLkkWbJxhVczBU8eugzMYK9bwQAFAOAwulgytMBGGnaXMmbXGnqSK8rkam50vDRaP3MaASNZGUk9b9qL2k9UgAYNYJWE0ej+TMj9CTV5Bk1rPZ+ZoWepAJZV7//wDAMwzAMwzAMwzAMwzAMwzAMwzAMwzAMwzAMwzAMwzAMwzAMwzAMwzDs0fYPAOARY3DQriQAAAAASUVORK5CYII="
+		}
+	]
+}

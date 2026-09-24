@@ -443,8 +443,9 @@ export class UI {
     this.invSel = Math.max(0, Math.min(this.invSel, inv.length - 1));
     $('inv-count').textContent = `${inv.length} / ${INVENTORY_SIZE}   ·   ${p.gold} gold`;
     // The prompt's space is always reserved so the list never shifts when it appears.
-    $('inv-prompt').textContent = this.selectMode ? this.selectMode.prompt : '';
-    $('inv-prompt').classList.toggle('off', !this.selectMode);
+    const shop = g.level.shopkeeper && g.level.playerInShop ? 'The shopkeeper is buying: pick an item and choose Sell.' : '';
+    $('inv-prompt').textContent = this.selectMode ? this.selectMode.prompt : shop;
+    $('inv-prompt').classList.toggle('off', !this.selectMode && !shop);
 
     inv.forEach((it, i) => {
       const li = document.createElement('li');

@@ -220,8 +220,7 @@ export class Monster {
     }
     if (this.status.feared > 0) {
       const wp = level.step(level.flow, this.x, this.z, true);
-      if (wp) this.moveTo(wp.x, wp.z, speed, dt, level, game);
-      return !!wp;
+      return !!wp && this.moveTo(wp.x, wp.z, speed, dt, level, game);
     }
     if (this.state === 'sleep') return false;
     if (this.state === 'wander') return this.doWander(dt, level, game, speed * 0.55);
@@ -242,9 +241,9 @@ export class Monster {
         if (dist < r.keepAway) {
           const wp = level.step(level.flow, this.x, this.z, true);
           if (wp) {
-            this.moveTo(wp.x, wp.z, speed * 0.8, dt, level, game, false);
+            const moved = this.moveTo(wp.x, wp.z, speed * 0.8, dt, level, game, false);
             this.face(dx, dz, dt);
-            return true;
+            return moved;
           }
         } else if (dist < r.maxRange * 0.8) {
           this.face(dx, dz, dt);
@@ -258,14 +257,9 @@ export class Monster {
       if (this.cooldown <= 0) this.startAttack(false);
       return false;
     }
-    if (this.canSee) {
-      this.moveTo(p.x, p.z, speed, dt, level, game);
-      return true;
-    }
+    if (this.canSee) return this.moveTo(p.x, p.z, speed, dt, level, game);
     const wp = level.step(level.flow, this.x, this.z);
-    if (!wp) return false;
-    this.moveTo(wp.x, wp.z, speed, dt, level, game);
-    return true;
+    return !!wp && this.moveTo(wp.x, wp.z, speed, dt, level, game);
   }
 
   doWander(dt, level, game, speed) {
@@ -289,14 +283,15 @@ export class Monster {
       this.wander = null;
       return false;
     }
-    this.moveTo(wp.x, wp.z, speed, dt, level, game);
-    return true;
+    return this.moveTo(wp.x, wp.z, speed, dt, level, game);
   }
 
+  /** Steps toward (tx, tz). Returns false if the way is barred: the shop door, to all but its pursuers. */
   moveTo(tx, tz, speed, dt, level, game, turn = true) {
     let dx = tx - this.x, dz = tz - this.z;
     const d = Math.hypot(dx, dz);
-    if (d < 0.02) return;
+    if (d < 0.02) return true;
+    const fromX = this.x, fromZ = this.z;
     dx /= d;
     dz /= d;
     // Monsters open unlocked doors in their way; locked ones are already walls to their pathfinding.
@@ -320,6 +315,12 @@ export class Monster {
       this.z = p.z + (pz / pd) * min;
     }
     if (turn) this.face(dx, dz, dt);
+    if (level.inShop(this.x, this.z) && !level.inShop(fromX, fromZ) && !level.shopPursuers.has(this)) {
+      this.x = fromX;
+      this.z = fromZ;
+      return false;
+    }
+    return true;
   }
 
   face(dx, dz, dt, rate = 8) {
@@ -407,6 +408,7 @@ export class Monster {
       game.level.collide(this, this.radius);
     }
     this.notice(game); // no-op if it already knows where you are
+    if (game.level.playerInShop) game.level.shopPursuers.add(this); // provoked from the shop: it may come in
     // Heavy blows stagger a monster out of its windup.
     if (this.attack.phase === 'windup' && !this.boss && amount >= this.maxHp * 0.3) {
       this.attack.phase = 'none';

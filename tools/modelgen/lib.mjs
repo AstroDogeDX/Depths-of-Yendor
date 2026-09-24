@@ -62,6 +62,8 @@ export function octRingZ(z, hx, hy, yc, ch = 0.3) {
 export const rectRingZ = (z, hx, hy, yc) => [[hx, yc + hy, z], [hx, yc - hy, z], [-hx, yc - hy, z], [-hx, yc + hy, z]];
 
 const CAPS = { 3: [[0, 1, 2]], 4: [[0, 1, 2, 3]], 5: [[0, 1, 2, 3], [0, 3, 4]], 6: [[0, 1, 2, 3], [0, 3, 4, 5]], 8: [[0, 1, 2, 3], [4, 5, 6, 7], [0, 3, 4, 7]] };
+// Any other convex ring is capped with a fan of quads from its first point.
+const fan = (n) => Array.from({ length: Math.floor((n - 1) / 2) }, (_, k) => (2 * k + 3 < n ? [0, 2 * k + 1, 2 * k + 2, 2 * k + 3] : [0, 2 * k + 1, 2 * k + 2]));
 const V = (a) => new THREE.Vector3(...a);
 const same = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) < 1e-6;
 const centroid = (pts) => pts.reduce((c, p) => c.add(V(p)), new THREE.Vector3()).divideScalar(pts.length);
@@ -95,7 +97,7 @@ export function loft(rings, { capStart = true, capEnd = true, caps = null, mat =
   const cap = (ring, away, tag) => {
     const uniq = dedupe(ring);
     if (uniq.length < 3) return;
-    for (const idx of caps || CAPS[n]) polys.push({ pts: orient(idx.map((q) => ring[q]), away), mat: typeof mat === 'function' ? mat(tag, -1) : mat, cap: tag });
+    for (const idx of caps || CAPS[n] || fan(n)) polys.push({ pts: orient(idx.map((q) => ring[q]), away), mat: typeof mat === 'function' ? mat(tag, -1) : mat, cap: tag });
   };
   if (capStart) cap(rings[0], centers[0].clone().sub(centers[1]), 'start');
   if (capEnd) cap(rings[rings.length - 1], centers[rings.length - 1].clone().sub(centers[rings.length - 2]), 'end');

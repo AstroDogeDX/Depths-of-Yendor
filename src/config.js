@@ -75,3 +75,6 @@ export function themeForDepth(depth) {
   if (depth >= 4) return THEMES[1];
   return THEMES[0];
 }
+
+/** A shop opens off the entrance room on the first floor of every theme after the first. */
+export const isShopDepth = (depth) => depth > 1 && themeForDepth(depth) !== themeForDepth(depth - 1);

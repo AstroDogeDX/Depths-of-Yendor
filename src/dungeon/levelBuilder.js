@@ -6,10 +6,15 @@ import { RNG } from '../rng.js';
 import { glowSprite } from '../fx/glow.js';
 import { Flame } from '../fx/flame.js';
 import { buildBBModel } from '../items/bbmodel.js';
+import { placeProp } from './props.js';
 import sconceModel from '../../assets/models/sconce.bbmodel';
 
 const SCONCE_LIGHTS = 6; // constant per level so shaders never need recompiling between floors
+// Sconce fire: its glow and light colour, and the light's strength. Blue light looks dimmer, so it's stronger.
+const FIRE = { color: 0xff9040, light: 9 };
+const BLUE_FIRE = { color: 0x4090ff, light: 14 };
 let sconceTemplate = null; // built once; every sconce is a clone sharing its geometry and materials
+let blueSconceTemplate = null; // the same, its embers burning blue
 
 class GeoBuilder {
   constructor() {
@@ -110,6 +115,15 @@ export function buildLevelMeshes(data) {
     obstacles.push({ x: (p.x + 0.5) * TILE, z: (p.y + 0.5) * TILE, r: 0.55 });
   }
 
+  // The shop's furniture. Items for sale rest in the slots of the counter and display tables, in order.
+  const shopSlots = [];
+  for (const p of data.shop?.props ?? []) {
+    const prop = placeProp(p);
+    group.add(prop.mesh);
+    if (prop.obstacle) obstacles.push(prop.obstacle);
+    shopSlots.push(...prop.slots);
+  }
+
   const { flames, lights } = buildSconces(data, group, rng, isWall);
 
   const frameMat = new THREE.MeshLambertMaterial({ map: tex.wall, color: 0x8a8070 });
@@ -123,7 +137,7 @@ export function buildLevelMeshes(data) {
     group.add(built.group);
     return built;
   });
-  return { group, flames, lights, obstacles, doors };
+  return { group, flames, lights, obstacles, doors, shopSlots };
 }
 
 export const DOOR_HEIGHT = 2.35;
@@ -256,6 +270,7 @@ function buildPedestal(p, stoneMat) {
 function buildSconces(data, group, rng, isWall) {
   const spots = [];
   for (const r of data.rooms) {
+    if (r.id === data.shop?.room) continue; // the shop brings its own
     const cands = [];
     for (let x = r.x; x < r.x + r.w; x++) {
       if (isWall(x, r.y - 1)) cands.push({ x: (x + 0.5) * TILE, z: r.y * TILE + 0.1, ry: 0 });
@@ -270,16 +285,20 @@ function buildSconces(data, group, rng, isWall) {
     for (let i = 0; i < n; i++) spots.push(cands[i]);
   }
   rng.shuffle(spots);
+  // The shop's sconces burn blue. They go first, so they're sure of a light.
+  if (data.shop) spots.unshift(...data.shop.sconces.map((s) => ({ ...s, blue: true })));
 
   // The sconce is a Blockbench model whose origin sits on the wall; its empty "flame" group marks the fire.
   sconceTemplate ??= buildBBModel(sconceModel, MODEL_PX);
+  blueSconceTemplate ??= blueEmbers(sconceTemplate.clone());
   const fire = new THREE.Vector3().fromArray(sconceTemplate.userData.anchors.flame);
   const flames = [];
   for (const s of spots) {
-    const sg = sconceTemplate.clone();
-    const flame = new Flame({ width: 0.3, height: 0.46, pixel: 0.025, seed: rng.next() });
+    const sg = (s.blue ? blueSconceTemplate : sconceTemplate).clone();
+    const flame = new Flame({ width: 0.3, height: 0.46, pixel: 0.025, seed: rng.next(), blue: s.blue });
     flame.position.copy(fire);
-    const halo = glowSprite(0xff9040, 0.9, 0.55);
+    const fireLook = s.blue ? BLUE_FIRE : FIRE;
+    const halo = glowSprite(fireLook.color, 0.9, 0.55);
     halo.position.set(fire.x, fire.y + 0.16, fire.z + 0.02);
     sg.add(flame, halo);
     // Spots are 0.1 m out from the wall face; step back onto it.
@@ -287,7 +306,7 @@ function buildSconces(data, group, rng, isWall) {
     sg.rotation.y = s.ry;
     group.add(sg);
     const out = new THREE.Vector3(Math.sin(s.ry), 0, Math.cos(s.ry)); // away from the wall
-    flames.push({ flame, halo, phase: rng.next() * 10, pos: new THREE.Vector3(s.x, 2.0, s.z).addScaledVector(out, 0.6) });
+    flames.push({ flame, halo, fire: fireLook, phase: rng.next() * 10, pos: new THREE.Vector3(s.x, 2.0, s.z).addScaledVector(out, 0.6) });
   }
 
   const lights = [];
@@ -295,8 +314,9 @@ function buildSconces(data, group, rng, isWall) {
     const l = new THREE.PointLight(0xff9040, 0, 11, 1.8);
     const f = flames[i];
     if (f) {
+      l.color.setHex(f.fire.color);
       l.position.copy(f.pos); // already nudged off the wall so it lights the room, not just the bricks
-      l.userData.base = 9;
+      l.userData.base = f.fire.light;
       f.light = l;
     } else {
       l.position.set(0, -50, 0);
@@ -307,4 +327,17 @@ function buildSconces(data, group, rng, isWall) {
     lights.push(l);
   }
   return { flames, lights };
+}
+
+/** Swaps red and blue in a sconce's glowing materials, so its embers match a blue flame. */
+function blueEmbers(sconce) {
+  sconce.traverse((o) => {
+    if (!o.isMesh || !o.material.isMeshBasicMaterial) return;
+    o.material = o.material.clone();
+    o.material.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n\tdiffuseColor.rgb = diffuseColor.bgr;');
+    };
+    o.material.customProgramCacheKey = () => 'bgr';
+  });
+  return sconce;
 }

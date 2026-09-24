@@ -77,6 +77,14 @@ export class Sfx {
     this.noise({ dur: 0.1, vol: 0.2, freq: 300, q: 0.5 });
   }
   kill() { this.tone({ f: 320, f2: 70, dur: 0.4, type: 'square', vol: 0.12 }); }
+  /** Coins clinking in a purse: `shakes` jingles a beat apart, at `vol` (the shopkeeper's are quiet). */
+  coins(vol = 1, shakes = 1) {
+    for (let i = 0; i < shakes * 3; i++) {
+      const delay = Math.floor(i / 3) * 0.24 + (i % 3) * 0.035 + Math.random() * 0.02;
+      this.tone({ f: 2400 + Math.random() * 1800, dur: 0.06, type: 'triangle', vol: 0.07 * vol, delay });
+      this.noise({ dur: 0.035, vol: 0.06 * vol, freq: 6500, type: 'highpass', q: 0.7, delay });
+    }
+  }
   pickup() {
     this.tone({ f: 660, dur: 0.08, type: 'triangle', vol: 0.14 });
     this.tone({ f: 990, dur: 0.12, type: 'triangle', vol: 0.14, delay: 0.07 });

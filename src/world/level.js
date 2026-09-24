@@ -4,12 +4,14 @@ import { T } from '../dungeon/tiles.js';
 import { buildLevelMeshes } from '../dungeon/levelBuilder.js';
 import { getTrapTexture } from '../dungeon/textures.js';
 import { buildItemModel } from '../items/models.js';
+import { shopPrice, stackable } from '../items/generate.js';
 import { Monster } from '../monsters/monster.js';
 import { spawnTable } from '../monsters/defs.js';
 import { updateProjectiles } from '../fx/projectiles.js';
 import { updateParticles } from '../fx/particles.js';
 import { rand } from '../rng.js';
 import { glowSprite } from '../fx/glow.js';
+import { Shopkeeper } from './shopkeeper.js';
 
 const N8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
@@ -36,11 +38,17 @@ export class Level {
     this.doorByTile = new Map(this.doors.map((d) => [d.y * this.w + d.x, d]));
     // Tiles inside locked rooms: never a teleport destination or a wanderer's spawn point.
     this.lockedMask = new Uint8Array(this.w * this.h);
+    // Tiles inside the shop: no monster spawns, wanders or is teleported there, and only one chasing the
+    // player follows them in (see Monster.moveTo).
+    this.shopMask = new Uint8Array(this.w * this.h);
     for (const r of data.rooms) {
-      if (!r.locked) continue;
-      for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) this.lockedMask[y * this.w + x] = 1;
+      const mask = r.locked ? this.lockedMask : r.type === 'shop' ? this.shopMask : null;
+      if (!mask) continue;
+      for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) mask[y * this.w + x] = 1;
     }
-    this.wanderRooms = data.rooms.filter((r) => !r.locked);
+    this.wanderRooms = data.rooms.filter((r) => !r.locked && r.type !== 'shop');
+    this.playerInShop = false;
+    this.shopPursuers = new Set(); // monsters allowed through the shop door: see Level.update
 
     this.explored = new Uint8Array(this.w * this.h);
     this.visible = new Uint8Array(this.w * this.h);
@@ -68,6 +76,18 @@ export class Level {
     if (data.shrine) this.addItem(data.shrine.item, (data.shrine.x + 0.5) * TILE, (data.shrine.y + 0.5) * TILE, { onPedestal: true });
     if (data.amulet) {
       this.addItem(game.makeAmulet(), (data.amulet.x + 0.5) * TILE, (data.amulet.y + 0.5) * TILE, { onPedestal: true });
+    }
+
+    // Where the shop's wares rest: the counter and display tables hold its stock, and things the player sells
+    // go in any free spot, filling the rug last.
+    this.shopSpots = built.shopSlots;
+    this.resales = 0;
+    this.shopkeeper = null;
+    if (data.shop) {
+      data.shop.stock.forEach(({ item, price }, i) => this.shelve(item, price, i));
+      this.shopkeeper = new Shopkeeper(data.shop.keeper);
+      this.group.add(this.shopkeeper.mesh);
+      this.obstacles.push({ x: this.shopkeeper.x, z: this.shopkeeper.z, r: 0.35 });
     }
   }
 
@@ -119,7 +139,10 @@ export class Level {
     return true;
   }
 
-  /** Push a circle {x, z} out of solid tiles and obstacles. Returns true if it touched anything. */
+  /**
+   * Push a circle {x, z} out of solid tiles and obstacles: circles { x, z, r } and boxes { x, z, hw, hd }.
+   * Returns true if it touched anything.
+   */
   collide(e, r) {
     let hit = false;
     for (let pass = 0; pass < 2; pass++) {
@@ -127,26 +150,15 @@ export class Level {
       const minTy = Math.floor((e.z - r) / TILE), maxTy = Math.floor((e.z + r) / TILE);
       for (let ty = minTy; ty <= maxTy; ty++) {
         for (let tx = minTx; tx <= maxTx; tx++) {
-          if (!this.isSolid(tx, ty)) continue;
-          const bx0 = tx * TILE, bx1 = bx0 + TILE, bz0 = ty * TILE, bz1 = bz0 + TILE;
-          const cx = Math.max(bx0, Math.min(e.x, bx1)), cz = Math.max(bz0, Math.min(e.z, bz1));
-          const dx = e.x - cx, dz = e.z - cz;
-          const d2 = dx * dx + dz * dz;
-          if (d2 >= r * r) continue;
-          hit = true;
-          if (d2 > 1e-8) {
-            const d = Math.sqrt(d2), push = (r - d) / d;
-            e.x += dx * push;
-            e.z += dz * push;
-          } else {
-            const l = e.x - bx0, rr = bx1 - e.x, t = e.z - bz0, b = bz1 - e.z;
-            const m = Math.min(l, rr, t, b);
-            if (m === l) e.x = bx0 - r; else if (m === rr) e.x = bx1 + r; else if (m === t) e.z = bz0 - r; else e.z = bz1 + r;
-          }
+          if (this.isSolid(tx, ty) && pushOutOfBox(e, r, tx * TILE, tx * TILE + TILE, ty * TILE, ty * TILE + TILE)) hit = true;
         }
       }
     }
     for (const o of this.obstacles) {
+      if (o.r === undefined) {
+        if (pushOutOfBox(e, r, o.x - o.hw, o.x + o.hw, o.z - o.hd, o.z + o.hd)) hit = true;
+        continue;
+      }
       const dx = e.x - o.x, dz = e.z - o.z, d = Math.hypot(dx, dz), min = r + o.r;
       if (d < min && d > 1e-6) {
         e.x = o.x + (dx / d) * min;
@@ -159,10 +171,17 @@ export class Level {
 
   isFloorTile(tx, ty) { return this.tile(tx, ty) === T.FLOOR; }
 
-  randomFloorPos({ awayFrom = null, minDist = 0, hidden = false } = {}) {
+  inShop(x, z) {
+    const tx = this.toTile(x), ty = this.toTile(z);
+    return tx >= 0 && ty >= 0 && tx < this.w && ty < this.h && this.shopMask[this.idx(tx, ty)] === 1;
+  }
+
+  /** A random open floor tile's centre. `monster`: somewhere a monster may be put, so not in the shop. */
+  randomFloorPos({ awayFrom = null, minDist = 0, hidden = false, monster = false } = {}) {
     for (let tries = 0; tries < 300; tries++) {
       const tx = rand.int(1, this.w - 2), ty = rand.int(1, this.h - 2);
       if (!this.isFloorTile(tx, ty) || this.lockedMask[this.idx(tx, ty)]) continue;
+      if (monster && this.shopMask[this.idx(tx, ty)]) continue;
       const x = this.center(tx), z = this.center(ty);
       if (awayFrom && Math.hypot(x - awayFrom.x, z - awayFrom.z) < minDist) continue;
       if (hidden && this.visible[this.idx(tx, ty)]) continue;
@@ -276,15 +295,46 @@ export class Level {
 
   // --- Contents ---
 
-  addItem(item, x, z, { onPedestal = false } = {}) {
+  /** Puts an item in the world, floating at y0. One with a `price` is for sale (see Game.buy). */
+  addItem(item, x, z, { onPedestal = false, y0 = onPedestal ? 1.4 : 0.22, price = 0 } = {}) {
     const mesh = buildItemModel(item, this.game.knowledge.color(item), { floor: true });
     if (item.kind === 'artefact' || item.kind === 'amulet' || item.kind === 'key') mesh.add(glowSprite(this.game.knowledge.color(item), 1.1, 0.7));
-    const y0 = onPedestal ? 1.4 : 0.22;
     mesh.position.set(x, y0, z);
     this.group.add(mesh);
-    const entry = { item, x, z, mesh, y0, phase: rand.next() * 6, onPedestal, seen: false };
+    const entry = { item, x, z, mesh, y0, phase: rand.next() * 6, onPedestal, price, seen: false };
     this.items.push(entry);
     return entry;
+  }
+
+  /** Sets an item out for sale on the shop's spot `spot`. */
+  shelve(item, price, spot) {
+    const [x, y, z] = this.shopSpots[spot];
+    const entry = this.addItem(item, x, z, { y0: y + 0.22, price });
+    entry.spot = spot;
+    return entry;
+  }
+
+  /**
+   * Puts something the player sold on display, so they can buy it back at the shop's price. Potions, scrolls
+   * and food join a pile of the same kind the player already sold; anything else takes the first free spot.
+   * When there's none, the thing that has been on sale longest of those the player sold makes way.
+   */
+  displaySold(item) {
+    const pile = stackable(item) && this.items.find((e) => e.resale && e.item.kind === item.kind && e.item.type === item.type);
+    if (pile) {
+      pile.item.qty += item.qty;
+      pile.resale = ++this.resales;
+      return;
+    }
+    const taken = new Set(this.items.map((e) => e.spot));
+    let spot = this.shopSpots.findIndex((_, i) => !taken.has(i));
+    if (spot < 0) {
+      const oldest = this.items.filter((e) => e.resale).sort((a, b) => a.resale - b.resale)[0];
+      if (!oldest) return;
+      spot = oldest.spot;
+      this.removeItem(oldest);
+    }
+    this.shelve(item, shopPrice(item, this.depth), spot).resale = ++this.resales;
   }
 
   removeItem(entry) {
@@ -375,6 +425,16 @@ export class Level {
 
     this.updateDoors(dt);
 
+    // Monsters hunting the player as they step into the shop may follow them in; any others must wait
+    // outside, unless the player picks a fight with them from in there (see Monster.takeDamage).
+    const inShop = this.inShop(p.x, p.z);
+    if (inShop !== this.playerInShop) {
+      this.playerInShop = inShop;
+      this.shopPursuers.clear();
+      if (inShop) for (const m of this.monsters) if (!m.dead && m.state === 'hunt' && m.seen) this.shopPursuers.add(m);
+    }
+    this.shopkeeper?.update(dt, game, this);
+
     this.visT -= dt;
     if (this.visT <= 0) {
       this.visT = 0.12;
@@ -429,7 +489,7 @@ export class Level {
   }
 
   spawnWanderer(hunting) {
-    const pos = this.randomFloorPos({ awayFrom: this.game.player, minDist: 16, hidden: true });
+    const pos = this.randomFloorPos({ awayFrom: this.game.player, minDist: 16, hidden: true, monster: true });
     if (!pos) return;
     const depth = hunting ? Math.min(MAX_DEPTH, this.depth + 3) : this.depth;
     const type = rand.weighted(spawnTable(Math.max(1, depth)));
@@ -456,4 +516,22 @@ export class Level {
       this.collide(a, a.radius);
     }
   }
+}
+
+/** Pushes a circle out of an axis-aligned box. Returns true if they overlapped. */
+function pushOutOfBox(e, r, x0, x1, z0, z1) {
+  const cx = Math.max(x0, Math.min(e.x, x1)), cz = Math.max(z0, Math.min(e.z, z1));
+  const dx = e.x - cx, dz = e.z - cz;
+  const d2 = dx * dx + dz * dz;
+  if (d2 >= r * r) return false;
+  if (d2 > 1e-8) {
+    const d = Math.sqrt(d2), push = (r - d) / d;
+    e.x += dx * push;
+    e.z += dz * push;
+  } else {
+    const l = e.x - x0, rr = x1 - e.x, t = e.z - z0, b = z1 - e.z;
+    const m = Math.min(l, rr, t, b);
+    if (m === l) e.x = x0 - r; else if (m === rr) e.x = x1 + r; else if (m === t) e.z = z0 - r; else e.z = z1 + r;
+  }
+  return true;
 }

@@ -207,6 +207,7 @@ export class Game {
 
     if (firstVisit && depth === MAX_DEPTH) this.log('The air hums with ancient power. The Amulet is near — and so is its keeper.', 'danger');
     else if (firstVisit && level.data.shrine) this.log('You sense an artefact of power somewhere on this floor.', 'info');
+    if (firstVisit && level.shopkeeper) this.log('Somewhere close by, coins clink in the dark.', 'info');
 
     if (p.hasAmulet() && arrive === 'up') {
       this.log('The dungeon howls as the Amulet passes through. Things are coming.', 'danger');
@@ -383,7 +384,12 @@ export class Game {
       if (score < bestScore) { bestScore = score; best = it; }
     }
     if (best) {
-      return { kind: 'item', entry: best, label: `Pick up ${this.knowledge.name(best.item, { article: true })}` };
+      if (!best.price) return { kind: 'item', entry: best, label: `Pick up ${this.knowledge.name(best.item, { article: true })}` };
+      // Piles in the shop sell one at a time.
+      const name = this.knowledge.name({ ...best.item, qty: 1 }, { article: true });
+      const left = best.item.qty > 1 ? ` (${best.item.qty} left)` : '';
+      const label = p.gold >= best.price ? `Buy ${name} for ${best.price} gold${left}` : `${name}: ${best.price} gold (you have ${p.gold})`;
+      return { kind: 'buy', entry: best, label: label[0].toUpperCase() + label.slice(1) };
     }
     const door = level.doorAt(level.toTile(p.x + fx * 1.4), level.toTile(p.z + fz * 1.4));
     if (door && !door.open) {
@@ -425,6 +431,7 @@ export class Game {
     const p = this.player;
     switch (it.kind) {
       case 'item': this.pickUp(it.entry); break;
+      case 'buy': this.buy(it.entry); break;
       case 'door': this.useDoor(it.door); break;
       case 'down': this.changeLevel(this.level.depth + 1, 'down'); break;
       case 'up': this.changeLevel(this.level.depth - 1, 'up'); break;
@@ -471,6 +478,27 @@ export class Game {
       this.shake(0.4);
       this.amuletDialog(true);
     }
+  }
+
+  /** Buys an item from the shop: gold for goods, no haggling, no refunds. */
+  buy(entry) {
+    const p = this.player, level = this.level;
+    if (!level.items.includes(entry)) return; // already sold
+    if (p.gold < entry.price) {
+      level.shopkeeper?.cantAfford(this);
+      return;
+    }
+    const one = entry.item.qty > 1 ? { ...entry.item, qty: 1 } : entry.item; // piles sell one at a time
+    if (!p.addItem(one)) {
+      this.log('Your pack is full.', 'warn');
+      return;
+    }
+    p.gold -= entry.price;
+    if (one === entry.item) level.removeItem(entry);
+    else entry.item.qty--;
+    this.audio.coins();
+    this.log(`You buy ${this.knowledge.name(one, { article: true })} for ${entry.price} gold.`, 'good');
+    level.shopkeeper?.sold(this, level);
   }
 
   amuletDialog(first = false) {

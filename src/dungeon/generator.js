@@ -1,5 +1,5 @@
 import { RNG } from '../rng.js';
-import { MAX_DEPTH, themeForDepth } from '../config.js';
+import { MAX_DEPTH, themeForDepth, isShopDepth } from '../config.js';
 import { spawnTable } from '../monsters/defs.js';
 import { randomItem, makeItem } from '../items/generate.js';
 import { T } from './tiles.js';
@@ -28,6 +28,8 @@ const SIDES = { N: [0, -1], S: [0, 1], W: [-1, 0], E: [1, 0] };
  *
  * opts.artefact       artefact type for this floor's shrine, if any
  * opts.extraBranches  extra branch specs, e.g. [{ type: 'standard', locked: true }]
+ *
+ * A branch spec may name its parent room's type, e.g. { type: 'shop', parent: 'entrance' }.
  */
 export function generateLevel(seed, depth, opts = {}) {
   const rng = new RNG(`${seed}:depth:${depth}`);
@@ -44,6 +46,8 @@ function planRooms(rng, depth, opts) {
   loop[0] = 'entrance';
   loop[Math.floor(n / 2)] = depth >= MAX_DEPTH ? 'vault' : 'exit';
   const branches = [];
+  // The shop goes first, so the room beside the entrance is still free for it.
+  if (isShopDepth(depth)) branches.push({ type: 'shop', required: true, parent: 'entrance' });
   if (opts.artefact) branches.push({ type: 'shrine', required: true });
   for (const b of opts.extraBranches ?? []) branches.push({ required: true, ...b });
   const optional = rng.int(1, 3) + (depth >= 6 ? 1 : 0);
@@ -214,7 +218,7 @@ function attemptLevel(rng, depth, opts) {
     const def = ROOM_TYPES[spec.type];
     let placed = false;
     for (let tries = 0; tries < 40 && !placed; tries++) {
-      const parents = rooms.filter((r) => ROOM_TYPES[r.type].branchable && !r.locked);
+      const parents = rooms.filter((r) => ROOM_TYPES[r.type].branchable && !r.locked && (!spec.parent || r.type === spec.parent));
       const loopParents = parents.filter((r) => r.onLoop);
       const parent = rng.pick(rng.chance(0.7) && loopParents.length ? loopParents : parents);
       const { w, h } = def.size(rng, depth);
@@ -245,7 +249,7 @@ function attemptLevel(rng, depth, opts) {
 
   const ctx = {
     rng, depth, artefact: opts.artefact,
-    up: null, down: null, amulet: null, shrine: null, monsters: [],
+    up: null, down: null, amulet: null, shrine: null, shop: null, monsters: [],
     get: (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? T.WALL : grid[idx(x, y)]),
     set: (x, y, v) => { if (x > 0 && y > 0 && x < W - 1 && y < H - 1) grid[idx(x, y)] = v; },
     roomTiles(room, pred) {
@@ -342,7 +346,7 @@ function attemptLevel(rng, depth, opts) {
   return {
     depth, w: W, h: H, grid, rooms, edges, doorways,
     doors: doorways.filter((d) => d.style === 'door'),
-    up: ctx.up, down: ctx.down, amulet: ctx.amulet, shrine: ctx.shrine,
+    up: ctx.up, down: ctx.down, amulet: ctx.amulet, shrine: ctx.shrine, shop: ctx.shop,
     monsters, items, traps, theme: themeForDepth(depth),
   };
 }

@@ -51,12 +51,7 @@ export function randomItem(rng, depth) {
       rollEnchant(rng, it, depth);
       return it;
     }
-    case 'wand': {
-      const type = rng.weighted(freqTable(WANDS));
-      const [a, b] = WANDS[type].charges;
-      const max = rng.int(a, b);
-      return makeItem('wand', type, { charges: max, maxCharges: max, rechargeT: 0 });
-    }
+    case 'wand': return randomWand(rng);
     case 'ring': {
       const type = rng.weighted(freqTable(RINGS));
       const it = makeItem('ring', type, { wornTime: 0 });
@@ -71,6 +66,52 @@ export function randomItem(rng, depth) {
     case 'food': return makeItem('food', rng.chance(0.7) ? 'ration' : 'apple');
   }
   return makeItem('food', 'ration');
+}
+
+// Shop prices by kind. They never depend on an unidentified item's type or enchantment, so a price can't
+// give away what something is. Weapons and armour, whose type is always known, are priced by tier.
+const PRICES = { food: 15, potion: 35, scroll: 30, wand: 110, ring: 130, artefact: 400 };
+const SELL_RATE = 0.4; // the shopkeeper buys at 40% of what it charges
+const markup = (depth) => 1 + Math.max(0, depth - 4) * 0.1; // deeper merchants charge (and pay) more
+
+function basePrice(item) {
+  if (item.kind === 'weapon') return 45 + WEAPONS[item.type].tier * 35;
+  if (item.kind === 'armor') return 45 + ARMORS[item.type].tier * 35;
+  return PRICES[item.kind];
+}
+
+/** What the shopkeeper pays for one of this item, or 0 if it won't buy it (the Amulet). */
+export function sellPrice(item, depth) {
+  const base = basePrice(item);
+  return base ? Math.max(1, Math.round(base * markup(depth) * SELL_RATE)) : 0;
+}
+
+/** What the shop on this floor charges for an item. */
+export function shopPrice(item, depth) {
+  return Math.round((basePrice(item) * markup(depth)) / 5) * 5;
+}
+
+/** Wares for a shop on this floor: [{ item, price }]. Never cursed. */
+export function shopStock(rng, depth) {
+  const gear = rng.chance(0.5)
+    ? makeItem('weapon', pickTiered(rng, WEAPONS, depth + 1), { hitsToId: 20, ench: rng.chance(0.3) ? 1 : 0 })
+    : makeItem('armor', pickTiered(rng, ARMORS, depth + 1), { hitsToId: 14, ench: rng.chance(0.3) ? 1 : 0 });
+  const trinket = rng.chance(0.5) ? randomWand(rng) : makeItem('ring', rng.weighted({ ...freqTable(RINGS), teleportation: 0 }), { wornTime: 0, ench: rng.int(1, 2) });
+  const wares = [
+    makeItem('food', 'ration'),
+    makeItem('potion', rng.chance(0.5) ? 'healing' : rng.weighted(freqTable(POTIONS))),
+    makeItem('scroll', rng.chance(0.4) ? 'identify' : rng.weighted(freqTable(SCROLLS))),
+    gear,
+    trinket,
+  ];
+  return wares.map((item) => ({ item, price: shopPrice(item, depth) }));
+}
+
+function randomWand(rng) {
+  const type = rng.weighted(freqTable(WANDS));
+  const [a, b] = WANDS[type].charges;
+  const max = rng.int(a, b);
+  return makeItem('wand', type, { charges: max, maxCharges: max, rechargeT: 0 });
 }
 
 export function stackable(item) {

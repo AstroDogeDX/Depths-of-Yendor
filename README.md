@@ -1,6 +1,6 @@
 # Depths of Yendor
 
-A first-person, real-time roguelike for the browser, in the spirit of **King's Field** (slow, deliberate first-person melee in dark stone corridors) crossed with **Rogue / Pixel Dungeon** (procedural floors, unidentified items, curses, permadeath). Built with three.js and plain ES modules. The dungeon, its textures and the sound are generated in code. The monsters, the weapons, the torch, the wall sconces and the items you find are Blockbench models (see [Blockbench models](#blockbench-models)).
+A first-person, real-time roguelike for the browser, in the spirit of **King's Field** (slow, deliberate first-person melee in dark stone corridors) crossed with **Rogue / Pixel Dungeon** (procedural floors, unidentified items, curses, permadeath). Built with three.js and plain ES modules. The dungeon, its textures and the sound are generated in code. The monsters, the shopkeeper, the weapons, the torch, the wall sconces, the shop's furniture and the items you find are Blockbench models (see [Blockbench models](#blockbench-models)).
 
 Descend ten floors and take the **Amulet of Yendor** from its Warden. Then choose: invoke the Amulet and escape at once, or carry it back up through every floor to the surface for double score while the dungeon throws everything it has at you.
 
@@ -61,6 +61,7 @@ Potion, scroll and food slots remember the *type*, so a slot whose stack runs ou
 - **10 floors in 4 themes:** Upper Catacombs, Sunken Halls, Ember Deep, Yendor's Vault. Seeded layouts with pillared halls, wall sconces, doors and hidden traps (spike, poison gas, teleport, alarm). See *Floors and doors* below.
 - **12 monsters:** rat, bat, ooze, goblin, goblin archer, skeleton, orc, wraith, fire imp, troll, stone golem, and the **Warden of Yendor**, who fires bolt volleys and raises the dead at half health.
 - **Items:** 7 weapons with different reach and speed (spears out-reach swords, hammers hit hard but recover slowly), 5 armours with strength requirements, 10 potions, 9 scrolls, 5 wands, 6 rings, food.
+- **A shop** on the first floor of each theme after the first (floors 4, 7 and 10). See *The shop* below.
 - **6 artefacts**, 4 per run in guarded shrines on floors 3, 5, 7 and 9: Chalice of Crimson Thirst (lifesteal), Eye of the Deep (see all monsters and traps), Horn of Thunder (stun blast), Cloak of Shadows (invisibility), Boots of the Wind (speed), Emberheart (burning strikes, fire immunity). You have two attunement slots.
 - A Rogue tombstone when you die. Seeds are shareable.
 
@@ -91,15 +92,27 @@ A doorway is either an open arch or a wooden door. Doors swing open when anyone 
 
 **Locked doors** are fully working but not placed yet. They can only go on a branch, never the loop. Each needs an iron key, which is always placed somewhere on that floor's loop so it can never be locked away. Keys don't take pack slots: they show as *Keys* on the stat line and are used up when you walk into (or use) the locked door. Monsters can't path through a locked door, and teleports never drop you inside a locked room.
 
+## The shop
+
+On the first floor of each new theme after the first (floors 4, 7 and 10), a door in the room you arrive in leads to a shop. A small hooded shopkeeper stands on a stool behind the counter, idly shaking a purse of coins, watching you and passing remarks. The shop is lit by blue-flamed sconces.
+
+- **Stock:** five items, three on the counter and one on each display table. There's always a ration, a potion and a scroll (often healing and identify), a piece of uncursed gear from a little deeper than the floor you're on, and a wand or an uncursed ring. Items keep their unidentified names. A price depends only on the kind of item (and, for weapons and armour, which one), never on what's hidden about it, so prices give nothing away. Prices rise a little on deeper floors (see `shopStock` and `sellPrice` in `items/generate.js`).
+- **Buying:** walk up to an item and press **E**. The prompt shows the price, or what you're short. Gold goes, the item goes into your pack, and there's no haggling or refunds.
+- **Selling:** open your pack while you're in the shop and every item gets a **Sell** button with its price: 40% of what the shop would charge for that kind of item, by the same rules, so selling something unidentified tells you nothing about it. Stacks sell one at a time, equipped items come off first (not if they're cursed), and the shopkeeper won't buy the Amulet.
+- **Buying back:** the shopkeeper sets what you sell out with its wares, at its usual price for that item. It goes on the first free spot on the counter or the display tables, then on the rug, which holds six. Potions, scrolls and food of the same kind pile up on one spot and sell back one at a time. When every spot is taken, the item you sold longest ago goes to make room.
+- **Monsters** never spawn, wander or get teleported into the shop. Only a monster that was chasing you when you went in may follow you in. Any other monster that comes looking waits at the door, unless you attack it from inside.
+
 **Adding a specialist room:** add a type to `dungeon/rooms.js` (size, door style, whether the normal population pass may use it, and a `furnish(ctx, room)` that places its contents), then put it in the plan in `dungeon/generator.js` as a branch, e.g. `{ type: 'treasury', locked: true }`.
 
 ## Blockbench models
 
-The monsters, the weapons you hold and find, the torch in your other hand, the sconces on the walls and the items lying on the floor are [Blockbench](https://www.blockbench.net) projects in `assets/models/`:
+The monsters, the shopkeeper, the weapons you hold and find, the torch in your other hand, the sconces on the walls, room furniture and the items lying on the floor are [Blockbench](https://www.blockbench.net) projects in `assets/models/`:
 
 - `monsters/` has one per monster type in `monsters/defs.js` (`rat`, `bat`, `slime`, `goblin`, `archer`, `skeleton`, `orc`, `wraith`, `imp`, `troll`, `golem`, `warden`).
 - `weapons/` has one per `model` name in `items/defs.js` (`dagger`, `sword`, `longsword`, `mace`, `spear`, `axe`, `hammer`).
 - `items/` has one per kind of item (`potion`, `scroll`, `wand`, `ring`, `gold`, `key`, `amulet`), plus one per armour (`armor_leather` … `armor_plate`), artefact (`chalice`, `eye`, `horn`, `cloak`, `boots`, `ember`) and food (`apple`, `ration`).
+- `props/` has room furniture, placed by room types in `dungeon/rooms.js`: the shop's `shop_counter`, `display_table`, `shelf`, `barrel`, `crates` and `rug`.
+- `npcs/` has characters who aren't monsters: the `shopkeeper`.
 - `torch.bbmodel` and `sconce.bbmodel`.
 
 The game reads the `.bbmodel` files directly, so there is no export step. Open one in Blockbench (desktop or web), edit it, save over the file, and the dev server reloads. (`vite.config.js` imports them as JSON, which keeps the bundle smaller than importing them as text.)
@@ -109,20 +122,21 @@ The game reads the `.bbmodel` files directly, so there is no export step. Open o
 - **Tinted parts:** the parts of an item that change colour from run to run (a potion's liquid, a wand's shaft, a ring's stone) are painted in greys on a texture whose name ends in `_tint`. The game multiplies that texture by the item's colour, so in Blockbench those parts look grey.
 - **Double-sided faces:** set a texture's render sides to *Double* for thin things you can see from both sides, like the cloak's open hem.
 - **See-through parts:** a texture whose name ends in `_translucent` is blended by its alpha instead of having low-alpha texels cut out, like the slime's gel and the wraith's robe.
-- **Anchors:** the game can find a group's pivot by the group's name. The torch and the sconce each have an empty `flame` group that marks where the fire burns, so moving that group in Blockbench moves the flame.
+- **Anchors:** the game can find a group's pivot by the group's name. The torch and the sconce each have an empty `flame` group that marks where the fire burns, so moving that group in Blockbench moves the flame. Props have empty groups named `slot_1`, `slot_2`… where items for sale rest (three on the counter, one on each display table, six on the rug).
 - **Scale:** one Blockbench pixel is 1/64 m, so a 16-pixel block is 25 cm. Build items life-size: in the world, the game draws anything whose longest side is under a quarter of a tile (`ITEM_MIN_SIZE` in `config.js`) bigger, so it can be seen from across a room.
-- **Orientation:** +Y is always up. For things you hold, the pivot (0, 0, 0) is where the hand grips and the tip or head points up. On weapons, the cutting edge or striking face points north (−Z), which the swing animation depends on. The sconce's pivot sits on the wall, and it stands out to the south (+Z). Floor items bob and spin about their pivot, which should be their middle.
+- **Orientation:** +Y is always up. For things you hold, the pivot (0, 0, 0) is where the hand grips and the tip or head points up. On weapons, the cutting edge or striking face points north (−Z), which the swing animation depends on. The sconce's pivot sits on the wall, and it stands out to the south (+Z). Props sit on the floor with their pivot in the middle and their front facing south (+Z); solid props block movement across their bounding box (the barrel is treated as round). Floor items bob and spin about their pivot, which should be their middle.
 - **Textures** must stay embedded in the project file, which is Blockbench's default. The game ignores texture file paths.
 - **New weapons:** give the `WEAPONS` entry a new `model` name and add `<name>.bbmodel` to the folder.
 
 **Monster rigs.** A monster's moving parts are groups, and the game animates them by turning and shifting each group about its pivot, so put a group's pivot on its joint. The code finds them by name (see `monsters/models.js`):
 
 - Bipeds (goblin, archer, skeleton, orc, imp, troll, golem, Warden): `body` (pivoting at the hips) holds `head` and `arm_left`/`arm_right` (at the shoulders), with `leg_left`/`leg_right` beside it. The weapon belongs in `arm_right`, pointing forward (+Z) from the hand. The imp adds `wing_left`/`wing_right`.
+- The shopkeeper (see `world/shopkeeper.js`) has `body` holding `head`, `arm_left` and `arm_right`, and a `purse` group in the right hand that swings as it's shaken. The stool isn't in a group, so it stays put.
 - The rat has `body`, `tail` and `leg_front_left`, `leg_front_right`, `leg_back_left` and `leg_back_right`. The bat has `body` holding `wing_left`/`wing_right`, the slime a single `blob` squashed about its base, and the wraith `body` holding `arm_left`/`arm_right`.
 
 Animations add to each group's pose in Blockbench, so a limb you rotate there stays rotated in the game. Monsters face south (+Z) with their origin between their feet. Each one gets its own copy of the lit materials so it can flash red when hurt.
 
-These models were first built in code by `tools/modelgen/`. It shapes low-poly meshes from lathes and lofts, unwraps their UVs automatically and paints pixel-art textures procedurally. `npm run models -- sword torch` rebuilds the named models, and `all` rebuilds every one. Rebuilding replaces the whole file, so any Blockbench edits to it are lost. The script skips a file with uncommitted changes unless you pass `--force`, and `--out <dir>` writes the results somewhere else so you can compare first. To add a model, write a builder like those in `items.mjs`, `monsters.mjs` or `sconce.mjs` and list it in `build.mjs`.
+These models were first built in code by `tools/modelgen/`. It shapes low-poly meshes from lathes and lofts, unwraps their UVs automatically and paints pixel-art textures procedurally. `npm run models -- sword torch` rebuilds the named models, and `all` rebuilds every one. Rebuilding replaces the whole file, so any Blockbench edits to it are lost. The script skips a file with uncommitted changes unless you pass `--force`, and `--out <dir>` writes the results somewhere else so you can compare first. To add a model, write a builder like those in `items.mjs`, `monsters.mjs`, `props.mjs` or `sconce.mjs` and list it in `build.mjs`.
 
 ## Code map
 
@@ -135,23 +149,25 @@ src/
   hotbar.js            hotbar bindings and what each slot does when pressed
   input.js / audio.js  pointer-lock input; WebAudio synth sfx + ambient drone
   dungeon/generator.js pure data: plans the loop and branches, lays out rooms, routes corridors, populates (seeded)
-  dungeon/rooms.js     room types (entrance, exit, standard, vault, shrine): sizes, door style, furnishing
+  dungeon/rooms.js     room types (entrance, exit, standard, vault, shrine, shop): sizes, door style, furnishing
   dungeon/tiles.js     tile types
   dungeon/levelBuilder.js  merged wall/floor/ceiling geometry with baked corner AO, stairwells, sconces, doors
+  dungeon/props.js     places Blockbench furniture: meshes, obstacles and item slots
   dungeon/textures.js  procedural canvas textures per theme
   world/level.js       runtime level: collision, line of sight, doors, BFS flow field, fog of war, spawning
+  world/shopkeeper.js  the shop's merchant: idle animation and remarks
   monsters/defs.js     bestiary stats + depth spawn tables
   monsters/monster.js  AI state machine (sleep → wander → hunt, fear, ranged kiting), attacks, statuses
   monsters/models.js   loads the rigged Blockbench monsters and animates their bones
   items/defs.js        item catalog and unidentified appearances
   items/identify.js    per-run appearance shuffle, naming, descriptions
-  items/generate.js    random items by depth, enchant/curse rolls
+  items/generate.js    random items by depth, enchant/curse rolls, shop stock and prices
   items/use.js         potions, scrolls, wands, equip/curses, throwing, artefact powers
   items/models.js      loads the weapon and item models, tinting each item in its colour
   items/bbmodel.js     loads Blockbench .bbmodel projects (cubes, meshes, groups, textures) into three.js
   fx/                  viewmodel (hands), pixel-art flames, projectiles, particles, glow sprites
   ui/ui.js             HUD, minimap, message log, floating text, pack, dialogs, end screens
-assets/models/         Blockbench models: monsters/, weapons/, items/, the hand torch and the wall sconce
+assets/models/         Blockbench models: monsters/, npcs/, weapons/, items/, props/, the hand torch and the wall sconce
 tools/modelgen/        builds those models from code (npm run models)
 ```
 
@@ -161,7 +177,7 @@ Balance numbers live in `monsters/defs.js`, `items/defs.js` and `config.js`. `wi
 
 - Save on exit (serialise the level map and player to localStorage) for proper roguelike permadeath-with-resume
 - Specialist side rooms behind locked doors (treasuries, libraries, armouries), secret doors
-- Shops (Pixel Dungeon style) to give gold a use
+- More furniture for other room types
 - More level shapes: caves via cellular automata, flooded rooms, chasms that drop you a floor
 - Mimics, splitting oozes, invisible stalkers, thieves who steal and teleport away
 - A shield/block action, and alchemy or crafting for spare potions

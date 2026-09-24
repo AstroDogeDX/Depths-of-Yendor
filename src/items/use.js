@@ -5,6 +5,7 @@ import { rand } from '../rng.js';
 import { spawnProjectile } from '../fx/projectiles.js';
 import { burst, ring, transient, lightningMesh } from '../fx/particles.js';
 import { spawnTable } from '../monsters/defs.js';
+import { sellPrice } from './generate.js';
 
 // --- Inventory actions shown in the pack screen ---
 
@@ -27,6 +28,9 @@ export function itemActions(game, item) {
       break;
     case 'amulet': acts.push({ label: 'Invoke', fn: () => game.amuletDialog() }); break;
   }
+  // Drop stays last: the pack's D key uses the last action.
+  const price = game.level.shopkeeper && game.level.playerInShop ? sellPrice(item, game.level.depth) : 0;
+  if (price) acts.push({ label: `Sell${item.qty > 1 ? ' one' : ''} (${price} gold)`, fn: () => sellItem(game, item) });
   acts.push({ label: 'Drop', fn: () => dropItem(game, item) });
   return acts;
 }
@@ -334,7 +338,7 @@ export function zapWand(game, item) {
       break;
     case 'teleother':
       bolt(0x8040e0, 12, (m) => {
-        const pos = level.randomFloorPos({ awayFrom: p, minDist: 18 });
+        const pos = level.randomFloorPos({ awayFrom: p, minDist: 18, monster: true });
         if (pos && !m.boss) {
           burst(level, m.x, 0.8, m.z, 0x8040e0, 14, 3, 0.6);
           m.x = pos.x; m.z = pos.z;
@@ -374,24 +378,28 @@ export function equipSlotFor(p, item) {
   return null;
 }
 
+/** An item's name without the "(cursed)" tag, for messages that say it's cursed themselves. */
+const plainName = (game, item) => game.knowledge.name({ ...item, curseKnown: false });
+
+function cursedStuck(game, item) {
+  item.curseKnown = true;
+  game.log(`You can't remove your ${plainName(game, item)} — it is cursed!`, 'danger');
+  return false;
+}
+
 export function equipItem(game, item) {
   const p = game.player, k = game.knowledge, e = p.equip;
   const name = () => k.name(item);
-  const cursedMsg = (cur) => {
-    cur.curseKnown = true;
-    game.log(`You can't remove your ${k.name(cur)} — it is cursed!`, 'danger');
-    return false;
-  };
   const bind = () => {
     if (item.cursed) {
       item.curseKnown = true;
-      game.log(`You wince as the ${name()} binds itself to you. It is cursed!`, 'danger');
+      game.log(`You wince as the ${plainName(game, item)} binds itself to you. It is cursed!`, 'danger');
       game.audio.curse();
     }
   };
   switch (item.kind) {
     case 'weapon':
-      if (e.weapon?.cursed) return cursedMsg(e.weapon);
+      if (e.weapon?.cursed) return cursedStuck(game, e.weapon);
       e.weapon = item;
       game.viewmodel.setWeapon(WEAPONS[item.type].model);
       game.log(`You wield the ${name()}.`);
@@ -399,7 +407,7 @@ export function equipItem(game, item) {
       bind();
       break;
     case 'armor':
-      if (e.armor?.cursed) return cursedMsg(e.armor);
+      if (e.armor?.cursed) return cursedStuck(game, e.armor);
       e.armor = item;
       game.log(`You strap on the ${name()}.`);
       if (p.str < ARMORS[item.type].str) game.log('Its weight slows you down.', 'warn');
@@ -407,7 +415,7 @@ export function equipItem(game, item) {
       break;
     case 'ring': {
       const key = equipSlotFor(p, item);
-      if (!key) return cursedMsg(e.rings[0]);
+      if (!key) return cursedStuck(game, e.rings[0]);
       const slot = +key.slice(4);
       e.rings[slot] = item;
       game.log(`You slip the ${name()} onto your finger.`);
@@ -430,11 +438,7 @@ export function equipItem(game, item) {
 
 export function unequipItem(game, item, silent = false) {
   const p = game.player, k = game.knowledge, e = p.equip;
-  if (item.cursed && item.kind !== 'artefact') {
-    item.curseKnown = true;
-    game.log(`You can't remove your ${k.name(item)} — it is cursed!`, 'danger');
-    return false;
-  }
+  if (item.cursed && item.kind !== 'artefact') return cursedStuck(game, item);
   if (e.weapon === item) { e.weapon = null; game.viewmodel.setWeapon(null); }
   if (e.armor === item) e.armor = null;
   e.rings = e.rings.map((r) => (r === item ? null : r));
@@ -453,6 +457,21 @@ export function dropItem(game, item) {
   game.level.collide(pos, 0.2);
   game.level.addItem(item, pos.x, pos.z);
   game.log(`You drop ${game.knowledge.name(item, { article: true })}.`);
+  return false;
+}
+
+/** Sells one of an item (one from a stack) to the shopkeeper. */
+export function sellItem(game, item) {
+  const p = game.player, level = game.level;
+  if (p.isEquipped(item) && !unequipItem(game, item, true)) return false;
+  const one = p.takeOne(item);
+  if (p.lastWand === one) p.lastWand = null;
+  const price = sellPrice(one, level.depth);
+  p.gold += price;
+  game.audio.coins();
+  game.log(`You sell ${game.knowledge.name(one, { article: true })} for ${price} gold.`, 'good');
+  level.displaySold(one);
+  level.shopkeeper.boughtFromPlayer(game);
   return false;
 }
 
