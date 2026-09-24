@@ -1,4 +1,5 @@
 import { WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS } from './defs.js';
+import { danger } from '../config.js';
 
 let nextUid = 1;
 
@@ -18,17 +19,17 @@ export function makeItem(kind, type, extra = {}) {
 const freqTable = (defs) => Object.fromEntries(Object.entries(defs).map(([k, v]) => [k, v.freq]));
 
 function rollEnchant(rng, item, depth) {
-  const r = rng.next();
+  const r = rng.next(), d = danger(depth);
   if (r < 0.16) {
     item.cursed = true;
     item.ench = -rng.int(1, 3);
-  } else if (r < 0.16 + 0.18 + depth * 0.015) {
-    item.ench = rng.int(1, depth > 6 ? 3 : 2);
+  } else if (r < 0.16 + 0.18 + d * 0.015) {
+    item.ench = rng.int(1, d > 6 ? 3 : 2);
   }
 }
 
 function pickTiered(rng, defs, depth) {
-  const maxTier = Math.min(5, 1 + Math.floor((depth + 1) / 2));
+  const maxTier = Math.min(5, 1 + Math.floor((danger(depth) + 1) / 2));
   const table = {};
   for (const [k, d] of Object.entries(defs)) {
     if (d.tier <= maxTier) table[k] = 1 + (d.tier === maxTier ? 1.5 : 0) + d.tier * 0.4;
@@ -59,7 +60,7 @@ export function randomItem(rng, depth) {
         it.cursed = true;
         it.ench = -rng.int(1, 3);
       } else {
-        it.ench = rng.int(1, depth > 5 ? 3 : 2);
+        it.ench = rng.int(1, danger(depth) > 5 ? 3 : 2);
       }
       return it;
     }
@@ -72,7 +73,7 @@ export function randomItem(rng, depth) {
 // give away what something is. Weapons and armour, whose type is always known, are priced by tier.
 const PRICES = { food: 15, potion: 35, scroll: 30, wand: 110, ring: 130, artefact: 400 };
 const SELL_RATE = 0.4; // the shopkeeper buys at 40% of what it charges
-const markup = (depth) => 1 + Math.max(0, depth - 4) * 0.1; // deeper merchants charge (and pay) more
+const markup = (depth) => 1 + Math.max(0, danger(depth) - 3) * 0.1; // deeper merchants charge (and pay) more
 
 function basePrice(item) {
   if (item.kind === 'weapon') return 45 + WEAPONS[item.type].tier * 35;
@@ -94,8 +95,8 @@ export function shopPrice(item, depth) {
 /** Wares for a shop on this floor: [{ item, price }]. Never cursed. */
 export function shopStock(rng, depth) {
   const gear = rng.chance(0.5)
-    ? makeItem('weapon', pickTiered(rng, WEAPONS, depth + 1), { hitsToId: 20, ench: rng.chance(0.3) ? 1 : 0 })
-    : makeItem('armor', pickTiered(rng, ARMORS, depth + 1), { hitsToId: 14, ench: rng.chance(0.3) ? 1 : 0 });
+    ? makeItem('weapon', pickTiered(rng, WEAPONS, depth + 3), { hitsToId: 20, ench: rng.chance(0.3) ? 1 : 0 })
+    : makeItem('armor', pickTiered(rng, ARMORS, depth + 3), { hitsToId: 14, ench: rng.chance(0.3) ? 1 : 0 });
   const trinket = rng.chance(0.5) ? randomWand(rng) : makeItem('ring', rng.weighted({ ...freqTable(RINGS), teleportation: 0 }), { wornTime: 0, ench: rng.int(1, 2) });
   const wares = [
     makeItem('food', 'ration'),

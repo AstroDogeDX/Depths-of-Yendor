@@ -1,6 +1,6 @@
 import {
   PLAYER_RADIUS, PLAYER_SPEED, TURN_SPEED, MOUSE_SENS, HUNGER_MAX, HUNGER_HUNGRY, HUNGER_WEAK, INVENTORY_SIZE, HOTBAR_SIZE,
-  STAMINA_BASE, STAMINA_PER_LEVEL, STAMINA_DRAIN, STAMINA_REGEN, STAMINA_REGEN_DELAY, STAMINA_RECOVER, MODE_SPEED, NOISE,
+  STAMINA_BASE, STAMINA_PER_LEVEL, STAMINA_DRAIN, STAMINA_REGEN, STAMINA_REGEN_DELAY, STAMINA_RECOVER, MODE_SPEED, NOISE, danger,
 } from './config.js';
 import { WEAPONS, ARMORS, ARTEFACTS } from './items/defs.js';
 import { stackable } from './items/generate.js';
@@ -92,7 +92,9 @@ export class Player {
   }
 
   evasion() { return this.level * 0.008; }
-  xpToNext() { return 8 + this.level * 6; }
+  // There are about 2.7 floors to each step of `danger`, each with its usual share of monsters, so levels take
+  // that much more experience: your level keeps pace with how dangerous the floors get.
+  xpToNext() { return 21 + this.level * 16; }
 
   heal(n) { this.hp = Math.min(this.maxHp, this.hp + n); }
 
@@ -287,7 +289,7 @@ export class Player {
       this.dotT += dt;
       if (this.dotT >= 1) {
         this.dotT -= 1;
-        if (s.poison > 0) game.hurtPlayer(1 + Math.floor(game.level.depth / 4), { source: 'poison', ignoreArmor: true, dot: true });
+        if (s.poison > 0) game.hurtPlayer(1 + Math.floor(danger(game.level.depth) / 4), { source: 'poison', ignoreArmor: true, dot: true });
         if (s.burning > 0 && !game.over) game.hurtPlayer(rand.int(1, 3), { source: 'flames', ignoreArmor: true, dot: true, fire: true });
       }
     }

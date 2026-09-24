@@ -1,7 +1,7 @@
 import { MONSTERS } from './defs.js';
 import { buildMonsterModel } from './models.js';
 import { rand } from '../rng.js';
-import { PLAYER_RADIUS, EYE_H, TILE } from '../config.js';
+import { PLAYER_RADIUS, EYE_H, TILE, danger } from '../config.js';
 import { spawnProjectile } from '../fx/projectiles.js';
 import { burst } from '../fx/particles.js';
 
@@ -20,11 +20,12 @@ export class Monster {
     this.def = def;
     this.name = def.name;
     const depth = opts.depthOverride ?? levelDepth;
-    const over = def.boss ? 0 : Math.max(0, depth - def.depth[0]);
+    // Tougher the more dangerous the floor is than the first one it appears on (see `danger` in config.js).
+    this.danger = danger(depth);
+    const over = def.boss ? 0 : Math.max(0, this.danger - danger(def.depth[0]));
     this.maxHp = Math.round(def.hp * (1 + over * 0.08));
     this.hp = this.maxHp;
     this.dmgMult = 1 + over * 0.05;
-    this.depthLevel = depth;
     this.x = x;
     this.z = z;
     this.radius = def.radius;
@@ -131,7 +132,7 @@ export class Monster {
       if (this.dotAcc >= 1) {
         this.dotAcc -= 1;
         let d = 0;
-        if (s.poison > 0) d += 1 + Math.floor(this.depthLevel / 3);
+        if (s.poison > 0) d += 1 + Math.floor(this.danger / 3);
         if (s.burning > 0 && !this.def.fireImmune) d += rand.int(2, 4);
         if (d > 0) this.takeDamage(game, d, { dot: true });
       }

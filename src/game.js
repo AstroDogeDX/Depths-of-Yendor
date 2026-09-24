@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TILE, EYE_H, MAX_DEPTH, ARTEFACT_DEPTHS, RENDER_HEIGHTS, HOTBAR_SIZE, CROUCH_DROP } from './config.js';
+import { TILE, EYE_H, MAX_DEPTH, ARTEFACT_DEPTHS, RENDER_HEIGHTS, HOTBAR_SIZE, CROUCH_DROP, danger } from './config.js';
 import { RNG, rand } from './rng.js';
 import { generateLevel } from './dungeon/generator.js';
 import { Level } from './world/level.js';
@@ -617,7 +617,7 @@ export class Game {
     p.gainXp(Math.round(m.def.xp * (1 + (m.maxHp / m.def.hp - 1) * 0.5)), this);
     const level = this.level;
     if (m.guardian || rand.chance(0.12)) level.addItem(randomItem(rand, level.depth), m.x, m.z);
-    if (rand.chance(0.15)) level.addItem(makeItem('gold', 'gold', { qty: rand.int(4, 12) + level.depth * 3 }), m.x + 0.3, m.z + 0.2);
+    if (rand.chance(0.15)) level.addItem(makeItem('gold', 'gold', { qty: rand.int(4, 12) + Math.round(danger(level.depth) * 3) }), m.x + 0.3, m.z + 0.2);
   }
 
   triggerTrap(trap) {

@@ -7,12 +7,6 @@ export const MODEL_PX = 1 / 64;
 // Items lying in the world whose longest side is under this are drawn bigger, so they read from across a room.
 export const ITEM_MIN_SIZE = TILE / 4;
 
-// The Amulet of Yendor waits at the bottom of this many floors.
-export const MAX_DEPTH = 10;
-
-// Depths where an artefact shrine is generated.
-export const ARTEFACT_DEPTHS = [3, 5, 7, 9];
-
 // Internal render height; the canvas is upscaled with nearest-neighbour for a chunky PS1 look.
 // Cycle with the P key.
 export const RENDER_HEIGHTS = [270, 360, 540, 0]; // 0 = native
@@ -42,39 +36,70 @@ export const HUNGER_WEAK = 80;
 
 export const VIEW_RADIUS_TILES = 9;
 
+// --- The dungeon: five themes of five floors. Each theme's last floor is its boss floor. ---
+
+export const FLOORS_PER_THEME = 5;
+
+// Placeholder looks for now: each theme gets its own visual style in a later pass. The comments say what
+// each one is meant to become.
 export const THEMES = [
   {
-    name: 'Upper Catacombs',
+    // Dank and wet.
+    name: 'Sewers',
+    wall: ['#4f5448', '#43483d', '#373b32'], mortar: '#1c1f18', moss: '#4a6a2a',
+    floor: ['#3a3d33', '#30332b'], ceiling: '#1d201a',
+    fog: 0x080a06, fogNear: 2, fogFar: 20, ambient: 0x48523e, drone: 55,
+  },
+  {
+    // Old jail cells, cages and chains.
+    name: 'Catacombs',
     wall: ['#6b645a', '#5a544b', '#4a453e'], mortar: '#2c2925', moss: '#3f5a2e',
     floor: ['#4d4842', '#3e3a35'], ceiling: '#2a2723',
-    fog: 0x0b0a09, fogNear: 2, fogFar: 22, ambient: 0x4a4038, drone: 55,
+    fog: 0x0b0a09, fogNear: 2, fogFar: 22, ambient: 0x4a4038, drone: 51,
   },
   {
-    name: 'Sunken Halls',
-    wall: ['#4f5a63', '#424b53', '#353d44'], mortar: '#1c2226', moss: '#2c4a48',
-    floor: ['#3b4248', '#30363b'], ceiling: '#1d2226',
-    fog: 0x070a0c, fogNear: 2, fogFar: 20, ambient: 0x46545e, drone: 49,
+    // Natural, rough-hewn rock.
+    name: 'Caves',
+    wall: ['#5e4e3e', '#4f4133', '#3f3429'], mortar: '#1c1510', moss: '#5a5a30',
+    floor: ['#433a30', '#372f27'], ceiling: '#211a14',
+    fog: 0x0a0806, fogNear: 2, fogFar: 20, ambient: 0x52463a, drone: 47,
   },
   {
-    name: 'Ember Deep',
+    // An ancient civilisation's halls, fallen apart.
+    name: 'Dwarven Ruins',
+    wall: ['#6a6254', '#5a5347', '#4a443a'], mortar: '#221e18', moss: '#4f6e5a',
+    floor: ['#4a4438', '#3d382f'], ceiling: '#24201a',
+    fog: 0x0a0907, fogNear: 2, fogFar: 21, ambient: 0x544a3c, drone: 44,
+  },
+  {
+    // Hellish, demonic and hot. The last floor is the Amulet's vault, guarded by the Warden of Yendor.
+    name: 'Underworld',
     wall: ['#6a3e30', '#5a3327', '#47281f'], mortar: '#1f110c', moss: '#7a3a12',
     floor: ['#3f2a22', '#33221b'], ceiling: '#1e130f',
-    fog: 0x0e0503, fogNear: 2, fogFar: 19, ambient: 0x5e3c30, drone: 44,
-  },
-  {
-    name: "Yendor's Vault",
-    wall: ['#3a3048', '#2f273c', '#241e2f'], mortar: '#0e0b13', moss: '#6b5a1e',
-    floor: ['#2a2433', '#221d2a'], ceiling: '#130f18',
-    fog: 0x06040a, fogNear: 2, fogFar: 18, ambient: 0x4a3c5c, drone: 41,
+    fog: 0x0e0503, fogNear: 2, fogFar: 19, ambient: 0x5e3c30, drone: 41,
   },
 ];
 
-export function themeForDepth(depth) {
-  if (depth >= MAX_DEPTH) return THEMES[3];
-  if (depth >= 7) return THEMES[2];
-  if (depth >= 4) return THEMES[1];
-  return THEMES[0];
-}
+// The Amulet of Yendor waits on the last floor.
+export const MAX_DEPTH = THEMES.length * FLOORS_PER_THEME;
+
+export const themeForDepth = (depth) => THEMES[Math.min(THEMES.length - 1, Math.floor((depth - 1) / FLOORS_PER_THEME))];
+
+/**
+ * Each theme's last floor is its boss floor: 5, 10, 15, 20 and 25. For now they're built like any other
+ * floor, except that the last holds the Amulet's vault and the Warden, its final boss.
+ */
+export const isBossDepth = (depth) => depth % FLOORS_PER_THEME === 0;
 
 /** A shop opens off the entrance room on the first floor of every theme after the first. */
 export const isShopDepth = (depth) => depth > 1 && themeForDepth(depth) !== themeForDepth(depth - 1);
+
+// An artefact shrine on the third floor of each theme.
+export const ARTEFACT_DEPTHS = THEMES.map((_, i) => i * FLOORS_PER_THEME + 3);
+
+/**
+ * How dangerous a floor is: 1 on the first floor, rising evenly to 10 on the last. The balance formulas
+ * (how many monsters there are and how tough, loot quality, gold, shop prices) are written against this
+ * rather than the floor number, so the difficulty curve spans the whole dungeon however many floors it has.
+ */
+export const danger = (depth) => 1 + ((depth - 1) * 9) / (MAX_DEPTH - 1);

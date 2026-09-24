@@ -1,5 +1,5 @@
 import { RNG } from '../rng.js';
-import { MAX_DEPTH, themeForDepth, isShopDepth } from '../config.js';
+import { MAX_DEPTH, themeForDepth, isShopDepth, danger } from '../config.js';
 import { spawnTable } from '../monsters/defs.js';
 import { randomItem, makeItem } from '../items/generate.js';
 import { T } from './tiles.js';
@@ -41,16 +41,18 @@ export function generateLevel(seed, depth, opts = {}) {
 }
 
 function planRooms(rng, depth, opts) {
-  const n = rng.int(5, 6) + (depth >= 4 ? 1 : 0) + (depth >= 8 ? 1 : 0);
+  const d = danger(depth);
+  const n = rng.int(5, 6) + (d >= 4 ? 1 : 0) + (d >= 8 ? 1 : 0);
   const loop = new Array(n).fill('standard');
   loop[0] = 'entrance';
+  // Boss floors (isBossDepth) are built like the rest for now; the last one holds the Amulet's vault.
   loop[Math.floor(n / 2)] = depth >= MAX_DEPTH ? 'vault' : 'exit';
   const branches = [];
   // The shop goes first, so the room beside the entrance is still free for it.
   if (isShopDepth(depth)) branches.push({ type: 'shop', required: true, parent: 'entrance' });
   if (opts.artefact) branches.push({ type: 'shrine', required: true });
   for (const b of opts.extraBranches ?? []) branches.push({ required: true, ...b });
-  const optional = rng.int(1, 3) + (depth >= 6 ? 1 : 0);
+  const optional = rng.int(1, 3) + (d >= 6 ? 1 : 0);
   for (let i = 0; i < optional; i++) branches.push({ type: 'standard' });
   return { loop, branches };
 }
@@ -297,14 +299,15 @@ function attemptLevel(rng, depth, opts) {
 
   const monsters = ctx.monsters;
   const table = spawnTable(depth);
-  const monsterCount = 4 + Math.floor(depth * 1.3) + rng.int(0, 2);
+  const d = danger(depth);
+  const monsterCount = 4 + Math.floor(d * 1.3) + rng.int(0, 2);
   for (let i = 0; i < monsterCount && monsterRooms.length; i++) {
     const t = freeTileIn(rng.pick(monsterRooms), 7);
     if (t) monsters.push({ type: rng.weighted(table), x: t.x, y: t.y });
   }
 
   const items = [];
-  const itemCount = rng.int(4, 6) + (depth > 5 ? 1 : 0);
+  const itemCount = rng.int(4, 6) + (d > 5 ? 1 : 0);
   for (let i = 0; i < itemCount; i++) {
     const t = freeTileIn(rng.pick(itemRooms));
     if (t) items.push({ item: randomItem(rng, depth), ...t });
@@ -316,7 +319,7 @@ function attemptLevel(rng, depth, opts) {
   const goldCount = rng.int(2, 4);
   for (let i = 0; i < goldCount; i++) {
     const t = freeTileIn(rng.pick(itemRooms));
-    if (t) items.push({ item: makeItem('gold', 'gold', { qty: rng.int(8, 20) + depth * rng.int(3, 8) }), ...t });
+    if (t) items.push({ item: makeItem('gold', 'gold', { qty: rng.int(8, 20) + Math.round(d * rng.int(3, 8)) }), ...t });
   }
   // Every locked room's key lies somewhere on the loop, which is always reachable without keys.
   const loopRooms = rooms.filter((r) => r.onLoop && r.type !== 'vault');

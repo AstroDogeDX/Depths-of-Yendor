@@ -69,7 +69,7 @@ export const ROOM_TYPES = {
       const spots = ctx.roomTiles(room, (x, y) => ctx.get(x, y) === T.FLOOR && Math.abs(x - p.x) + Math.abs(y - p.y) === 1);
       if (spots.length) {
         const s = ctx.rng.pick(spots);
-        const table = spawnTable(Math.min(MAX_DEPTH, ctx.depth + 2));
+        const table = spawnTable(Math.min(MAX_DEPTH, ctx.depth + 5));
         ctx.addMonster({ type: ctx.rng.weighted(table), x: s.x, y: s.y, asleep: true, guardian: true });
       }
     },

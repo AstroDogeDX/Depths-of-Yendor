@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TILE, VIEW_RADIUS_TILES, MAX_DEPTH, PLAYER_RADIUS } from '../config.js';
+import { TILE, VIEW_RADIUS_TILES, MAX_DEPTH, PLAYER_RADIUS, danger } from '../config.js';
 import { T } from '../dungeon/tiles.js';
 import { buildLevelMeshes } from '../dungeon/levelBuilder.js';
 import { getTrapTexture } from '../dungeon/textures.js';
@@ -484,14 +484,14 @@ export class Level {
       const amulet = p.hasAmulet();
       this.spawnT = amulet ? rand.range(18, 28) : rand.range(60, 90);
       const alive = this.monsters.filter((m) => !m.dead).length;
-      if (alive < 8 + this.depth * 1.5 + (amulet ? 6 : 0)) this.spawnWanderer(amulet);
+      if (alive < 8 + danger(this.depth) * 1.5 + (amulet ? 6 : 0)) this.spawnWanderer(amulet);
     }
   }
 
   spawnWanderer(hunting) {
     const pos = this.randomFloorPos({ awayFrom: this.game.player, minDist: 16, hidden: true, monster: true });
     if (!pos) return;
-    const depth = hunting ? Math.min(MAX_DEPTH, this.depth + 3) : this.depth;
+    const depth = hunting ? Math.min(MAX_DEPTH, this.depth + 8) : this.depth;
     const type = rand.weighted(spawnTable(Math.max(1, depth)));
     const m = this.addMonster(type, pos.x, pos.z, { asleep: false, depthOverride: depth });
     if (hunting) m.state = 'hunt';

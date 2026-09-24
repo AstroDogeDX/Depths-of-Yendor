@@ -58,11 +58,11 @@ Potion, scroll and food slots remember the *type*, so a slot whose stack runs ou
 
 ## What's in it
 
-- **10 floors in 4 themes:** Upper Catacombs, Sunken Halls, Ember Deep, Yendor's Vault. Seeded layouts with pillared halls, wall sconces, doors and hidden traps (spike, poison gas, teleport, alarm). See *Floors and doors* below.
+- **25 floors in 5 themes** of five floors each: Sewers, Catacombs, Caves, Dwarven Ruins and the Underworld. Seeded layouts with pillared halls, wall sconces, doors and hidden traps (spike, poison gas, teleport, alarm). See *The dungeon* and *Floors and doors* below.
 - **12 monsters:** rat, bat, ooze, goblin, goblin archer, skeleton, orc, wraith, fire imp, troll, stone golem, and the **Warden of Yendor**, who fires bolt volleys and raises the dead at half health.
 - **Items:** 7 weapons with different reach and speed (spears out-reach swords, hammers hit hard but recover slowly), 5 armours with strength requirements, 10 potions, 9 scrolls, 5 wands, 6 rings, food.
-- **A shop** on the first floor of each theme after the first (floors 4, 7 and 10). See *The shop* below.
-- **6 artefacts**, 4 per run in guarded shrines on floors 3, 5, 7 and 9: Chalice of Crimson Thirst (lifesteal), Eye of the Deep (see all monsters and traps), Horn of Thunder (stun blast), Cloak of Shadows (invisibility), Boots of the Wind (speed), Emberheart (burning strikes, fire immunity). You have two attunement slots.
+- **A shop** on the first floor of each theme after the first (floors 6, 11, 16 and 21). See *The shop* below.
+- **6 artefacts**, 5 per run in guarded shrines on the third floor of each theme (3, 8, 13, 18 and 23): Chalice of Crimson Thirst (lifesteal), Eye of the Deep (see all monsters and traps), Horn of Thunder (stun blast), Cloak of Shadows (invisibility), Boots of the Wind (speed), Emberheart (burning strikes, fire immunity). You have two attunement slots.
 - A Rogue tombstone when you die. Seeds are shareable.
 
 ## Stamina, sprinting and sneaking
@@ -80,6 +80,20 @@ Stamina is a separate bar from the attack meter and is never spent on swings. It
 - Other Ctrl shortcuts are suppressed during play.
 - **C** is an alternative sneak key with no conflicts at all.
 
+## The dungeon
+
+| Floors | Theme | Meant to be | Boss floor |
+|---|---|---|---|
+| 1–5 | Sewers | dank and wet | 5 |
+| 6–10 | Catacombs | old jail cells, cages and chains | 10 |
+| 11–15 | Caves | natural, rough-hewn rock | 15 |
+| 16–20 | Dwarven Ruins | an ancient civilisation's halls, fallen apart | 20 |
+| 21–25 | Underworld | hellish, demonic and hot | 25: the Warden of Yendor and the Amulet |
+
+Each theme has four ordinary floors and a boss floor (`isBossDepth` in `config.js`). For now the boss floors are built like any other, except floor 25, which holds the Amulet's vault and its keeper, the Warden. The themes' colours are placeholders until each gets its own look.
+
+**Difficulty** follows `danger(depth)` in `config.js`, which rises evenly from 1 on floor 1 to 10 on floor 25. How many monsters a floor has, how tough they are, loot quality, gold and shop prices all work from it, so the curve spans the whole dungeon and would stretch again if floors were added. Monsters' first and last floors (`depth` in `monsters/defs.js`) are real floor numbers. Experience per level is scaled to match, so your level keeps pace with the danger rather than with the floor count.
+
 ## Floors and doors
 
 Floors are generated the Pixel Dungeon way, graph first:
@@ -94,7 +108,7 @@ A doorway is either an open arch or a wooden door. Doors swing open when anyone 
 
 ## The shop
 
-On the first floor of each new theme after the first (floors 4, 7 and 10), a door in the room you arrive in leads to a shop. A small hooded shopkeeper stands on a stool behind the counter, idly shaking a purse of coins, watching you and passing remarks. The shop is lit by blue-flamed sconces.
+On the first floor of each new theme after the first (floors 6, 11, 16 and 21), a door in the room you arrive in leads to a shop. A small hooded shopkeeper stands on a stool behind the counter, idly shaking a purse of coins, watching you and passing remarks. The shop is lit by blue-flamed sconces.
 
 - **Stock:** five items, three on the counter and one on each display table. There's always a ration, a potion and a scroll (often healing and identify), a piece of uncursed gear from a little deeper than the floor you're on, and a wand or an uncursed ring. Items keep their unidentified names. A price depends only on the kind of item (and, for weapons and armour, which one), never on what's hidden about it, so prices give nothing away. Prices rise a little on deeper floors (see `shopStock` and `sellPrice` in `items/generate.js`).
 - **Buying:** walk up to an item and press **E**. The prompt shows the price, or what you're short. Gold goes, the item goes into your pack, and there's no haggling or refunds.
@@ -142,7 +156,7 @@ These models were first built in code by `tools/modelgen/`. It shapes low-poly m
 
 ```
 src/
-  config.js            world scale, depth count, themes, tuning constants
+  config.js            world scale, themes and floors, boss/shop/shrine floors, the danger curve, tuning constants
   game.js              run lifecycle, level transitions, rendering, interaction, traps, endings
   player.js            movement, attack meter, stats, statuses, hunger/regen, inventory
   combat.js            player melee resolution
@@ -156,7 +170,7 @@ src/
   dungeon/textures.js  procedural canvas textures per theme
   world/level.js       runtime level: collision, line of sight, doors, BFS flow field, fog of war, spawning
   world/shopkeeper.js  the shop's merchant: idle animation and remarks
-  monsters/defs.js     bestiary stats + depth spawn tables
+  monsters/defs.js     bestiary stats, the floors each monster appears on, spawn tables
   monsters/monster.js  AI state machine (sleep → wander → hunt, fear, ranged kiting), attacks, statuses
   monsters/models.js   loads the rigged Blockbench monsters and animates their bones
   items/defs.js        item catalog and unidentified appearances
