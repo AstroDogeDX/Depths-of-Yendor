@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { THEMES, FLOORS_PER_THEME, TILE, EYE_H } from '../config.js';
 import { generateLevel } from '../dungeon/generator.js';
-import { buildLevelMeshes, disposeGroup } from '../dungeon/levelBuilder.js';
+import { buildLevelMeshes, disposeGroup, flowWater } from '../dungeon/levelBuilder.js';
 import { T } from '../dungeon/tiles.js';
+import { Drips } from '../fx/drips.js';
 
 // Behind the title screen: a slow walk through a floor of each theme in turn, from the stairs you arrive by
 // to the stairs down, and down them into the next theme. Only the level's architecture is built: no monsters
@@ -61,6 +62,7 @@ export class TitleScene {
     if (!points) return;
 
     this.built = buildLevelMeshes(data);
+    this.drips = new Drips(this.built.group, this.built.drips);
     for (const d of this.built.doors) d.pivot.rotation.y = (d.swing * Math.PI) / 2; // every door stands open
     this.scene.add(this.built.group);
     this.scene.fog.color.setHex(theme.fog);
@@ -110,6 +112,8 @@ export class TitleScene {
     const left = this.length - this.dist;
     this.fade = Math.max(1 - this.t / FADE_IN, left < this.descent ? 1 - left / this.descent : 0);
 
+    flowWater(this.built.water, this.t);
+    this.drips.update(dt, this.camera.position);
     for (const f of this.built.flames) {
       const k = 0.85 + Math.sin(this.t * 17 + f.phase) * 0.08 + Math.sin(this.t * 5.3 + f.phase * 2) * 0.07;
       f.flame.update(this.t, k);
@@ -135,7 +139,7 @@ function planWalk(data) {
   const { w, h, grid, up, down } = data;
   if (!down) return null;
   const at = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? T.WALL : grid[y * w + x]);
-  const open = (x, y) => at(x, y) === T.FLOOR || at(x, y) === T.DOOR;
+  const open = (x, y) => at(x, y) === T.FLOOR || at(x, y) === T.DOOR || at(x, y) === T.BRIDGE;
   const [ux, uy] = DIRS[up.dir], [ddx, ddy] = DIRS[down.dir];
   const start = (up.y + uy) * w + up.x + ux, goal = (down.y + ddy) * w + down.x + ddx;
 

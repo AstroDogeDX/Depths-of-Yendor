@@ -40,12 +40,13 @@ export const VIEW_RADIUS_TILES = 9;
 
 export const FLOORS_PER_THEME = 5;
 
-// Placeholder looks for now: each theme gets its own visual style in a later pass. The comments say what
-// each one is meant to become.
+// Each theme's colours. `style` names its own textures (dungeon/textures.js) and decorations
+// (dungeon/decor.js); themes without one use plain stone and brick in their colours, as placeholders until
+// they get their own. `channels` runs water channels through some rooms (dungeon/channels.js).
 export const THEMES = [
   {
     // Dank and wet.
-    name: 'Sewers',
+    name: 'Sewers', style: 'sewers', channels: true,
     wall: ['#4f5448', '#43483d', '#373b32'], mortar: '#1c1f18', moss: '#4a6a2a',
     floor: ['#3a3d33', '#30332b'], ceiling: '#1d201a',
     fog: 0x080a06, fogNear: 2, fogFar: 20, ambient: 0x48523e, drone: 55,

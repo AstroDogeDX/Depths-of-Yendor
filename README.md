@@ -91,7 +91,9 @@ Stamina is a separate bar from the attack meter and is never spent on swings. It
 | 16–20 | Dwarven Ruins | an ancient civilisation's halls, fallen apart | 20 |
 | 21–25 | Underworld | hellish, demonic and hot | 25: the Warden of Yendor and the Amulet |
 
-Each theme has four ordinary floors and a boss floor (`isBossDepth` in `config.js`). For now the boss floors are built like any other, except floor 25, which holds the Amulet's vault and its keeper, the Warden. The themes' colours are placeholders until each gets its own look.
+Each theme has four ordinary floors and a boss floor (`isBossDepth` in `config.js`). For now the boss floors are built like any other, except floor 25, which holds the Amulet's vault and its keeper, the Warden. The Sewers have their own look (below). The other themes' colours are placeholders until each gets its own.
+
+**The Sewers** have slimy brick walls with a damp band and a tide mark along their foot, wet cobbled floors and a brick vault overhead (`dungeon/sewerTextures.js`). Two or three rooms on each Sewers floor have a **water channel** running straight across them from wall to wall. The murky water flows in through a barred grate in one wall and out through another, and one or two plank bridges cross it. Nothing can walk through water: players, walking monsters and dropped items all stay on the banks, and walking monsters path round by the bridges. Flying monsters (bats, wraiths) go straight over it, and anything they drop over the water lands on the nearest bank. You can still see and shoot across. A channel never blocks a doorway, and one that would cut off any part of the floor is never dug (`dungeon/channels.js`). You can hear the water running as you get near. Water drips from the drain pipes, and from the vault into puddles and channels, each drop landing with a spreading ring and a quiet plip (`fx/drips.js`). The rooms are dressed with drain pipes, pipes with valve wheels, rubble, barrels, floor drains and puddles (`dungeon/decor.js`). They keep clear of doorways and stairs, and sconces keep off walls that already have something on them.
 
 **Difficulty** follows `danger(depth)` in `config.js`, which rises evenly from 1 on floor 1 to 10 on floor 25. How many monsters a floor has, how tough they are, loot quality, gold and shop prices all work from it, so the curve spans the whole dungeon and would stretch again if floors were added. Monsters' first and last floors (`depth` in `monsters/defs.js`) are real floor numbers. Experience per level is scaled to match, so your level keeps pace with the danger rather than with the floor count.
 
@@ -102,6 +104,8 @@ Floors are generated the Pixel Dungeon way, graph first:
 - **The loop.** A ring of rooms with the entrance stairs on one side and the exit (or, on the last floor, the Amulet's vault) opposite. There are always two independent routes between them, so both stair rooms always have at least two ways in and out.
 - **Branches.** Rooms that hang off the loop, or off other branches, as dead ends. The artefact shrine is one: a side room behind a door.
 - **Sealed rooms.** Every connection is a doorway on each room's wall plus an A*-routed corridor. Corridors can never cut through a room, so a room can only be entered through its own doorways.
+
+Some themes add features to their rooms, like the Sewers' water channels (see *The dungeon*).
 
 A doorway is either an open arch or a wooden door. Doors swing open when anyone walks into them (or on **E**), and swing shut once the doorway has been clear for a couple of seconds. A closed door blocks sight, arrows and bolts, so slipping through one is a way to break a chase. Monsters path through doors and open them.
 
@@ -126,7 +130,7 @@ The monsters, the shopkeeper, the weapons you hold and find, the torch in your o
 - `monsters/` has one per monster type in `monsters/defs.js` (`rat`, `bat`, `slime`, `goblin`, `archer`, `skeleton`, `orc`, `wraith`, `imp`, `troll`, `golem`, `warden`).
 - `weapons/` has one per `model` name in `items/defs.js` (`dagger`, `sword`, `longsword`, `mace`, `spear`, `axe`, `hammer`).
 - `items/` has one per kind of item (`potion`, `scroll`, `wand`, `ring`, `gold`, `key`, `amulet`), plus one per armour (`armor_leather` … `armor_plate`), artefact (`chalice`, `eye`, `horn`, `cloak`, `boots`, `ember`) and food (`apple`, `ration`).
-- `props/` has room furniture, placed by room types in `dungeon/rooms.js`: the shop's `shop_counter`, `display_table`, `shelf`, `barrel`, `crates` and `rug`.
+- `props/` has room furniture and decorations: the shop's `shop_counter`, `display_table`, `shelf`, `barrel`, `crates` and `rug` (placed by `dungeon/rooms.js`), and the Sewers' `bridge`, `channel_grate`, `drain_pipe`, `pipe_valve`, `rubble` and `floor_drain` (placed by `dungeon/decor.js` and the channels). Wall pieces like the pipes and grates have their pivot on the wall face at floor level and stand out from it along +Z.
 - `npcs/` has characters who aren't monsters: the `shopkeeper`.
 - `torch.bbmodel` and `sconce.bbmodel`.
 
@@ -151,7 +155,7 @@ The game reads the `.bbmodel` files directly, so there is no export step. Open o
 
 Animations add to each group's pose in Blockbench, so a limb you rotate there stays rotated in the game. Monsters face south (+Z) with their origin between their feet. Each one gets its own copy of the lit materials so it can flash red when hurt.
 
-These models were first built in code by `tools/modelgen/`. It shapes low-poly meshes from lathes and lofts, unwraps their UVs automatically and paints pixel-art textures procedurally. `npm run models -- sword torch` rebuilds the named models, and `all` rebuilds every one. Rebuilding replaces the whole file, so any Blockbench edits to it are lost. The script skips a file with uncommitted changes unless you pass `--force`, and `--out <dir>` writes the results somewhere else so you can compare first. To add a model, write a builder like those in `items.mjs`, `monsters.mjs`, `props.mjs` or `sconce.mjs` and list it in `build.mjs`.
+These models were first built in code by `tools/modelgen/`. It shapes low-poly meshes from lathes and lofts, unwraps their UVs automatically and paints pixel-art textures procedurally. `npm run models -- sword torch` rebuilds the named models, and `all` rebuilds every one. Rebuilding replaces the whole file, so any Blockbench edits to it are lost. The script skips a file with uncommitted changes unless you pass `--force`, and `--out <dir>` writes the results somewhere else so you can compare first. To add a model, write a builder like those in `items.mjs`, `monsters.mjs`, `props.mjs`, `sewers.mjs` or `sconce.mjs` and list it in `build.mjs`.
 
 ## Code map
 
@@ -168,7 +172,10 @@ src/
   dungeon/tiles.js     tile types
   dungeon/levelBuilder.js  merged wall/floor/ceiling geometry with baked corner AO, stairwells, sconces, doors
   dungeon/props.js     places Blockbench furniture: meshes, obstacles and item slots
+  dungeon/decor.js     decorations by theme style, set about the rooms clear of doorways
+  dungeon/channels.js  the Sewers' water channels and their bridges
   dungeon/textures.js  procedural canvas textures per theme
+  dungeon/sewerTextures.js  the Sewers' own textures: brickwork, cobbles, vault, channel sides, water, puddles
   world/level.js       runtime level: collision, line of sight, doors, BFS flow field, fog of war, spawning
   world/shopkeeper.js  the shop's merchant: idle animation and remarks
   monsters/defs.js     bestiary stats, the floors each monster appears on, spawn tables
@@ -180,7 +187,7 @@ src/
   items/use.js         potions, scrolls, wands, equip/curses, throwing, artefact powers
   items/models.js      loads the weapon and item models, tinting each item in its colour
   items/bbmodel.js     loads Blockbench .bbmodel projects (cubes, meshes, groups, textures) into three.js
-  fx/                  viewmodel (hands), pixel-art flames, projectiles, particles, glow sprites
+  fx/                  viewmodel (hands), pixel-art flames, projectiles, particles, drips, glow sprites
   ui/ui.js             HUD, minimap, message log, floating text, pack, dialogs, title and end screens
   ui/logo.js           the pixel-art title logo, drawn from hand-made glyphs, with its moving glint
   ui/titleScene.js     the walk through a floor of each theme behind the title screen

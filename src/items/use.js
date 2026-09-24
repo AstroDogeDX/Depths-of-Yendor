@@ -231,7 +231,7 @@ export function readScroll(game, item) {
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2 + rand.range(0, 1);
         const m = level.addMonster(rand.weighted(table), p.x + Math.cos(a) * 2.2, p.z + Math.sin(a) * 2.2, { asleep: false });
-        level.collide(m, m.radius);
+        level.collide(m, m.radius, m.flies);
         m.state = 'hunt';
         burst(level, m.x, 0.5, m.z, 0x8040c0, 10, 3, 0.5);
       }
@@ -453,7 +453,7 @@ export function dropItem(game, item) {
   p.inventory.splice(p.inventory.indexOf(item), 1);
   if (p.lastWand === item) p.lastWand = null;
   const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
-  const pos = { x: p.x + fx * 0.7, z: p.z + fz * 0.7 };
+  const pos = game.level.landSpot(p.x + fx * 0.7, p.z + fz * 0.7);
   game.level.collide(pos, 0.2);
   game.level.addItem(item, pos.x, pos.z);
   game.log(`You drop ${game.knowledge.name(item, { article: true })}.`);
@@ -503,7 +503,7 @@ export function activateArtefact(game, slot) {
       if (!m.boss) {
         m.x += (dx / (d || 1)) * 1.8;
         m.z += (dz / (d || 1)) * 1.8;
-        level.collide(m, m.radius);
+        level.collide(m, m.radius, m.flies);
       }
     }
     game.log('You sound the Horn of Thunder. The very stones shudder!', 'good');

@@ -85,6 +85,11 @@ export class Sfx {
       this.noise({ dur: 0.035, vol: 0.06 * vol, freq: 6500, type: 'highpass', q: 0.7, delay });
     }
   }
+  /** A drop of water landing, `vol` 0..1 by how near it is. */
+  drip(vol = 1) {
+    const f = 1100 + Math.random() * 900;
+    this.tone({ f, f2: f * 0.5, dur: 0.06, type: 'sine', vol: 0.06 * vol });
+  }
   pickup() {
     this.tone({ f: 660, dur: 0.08, type: 'triangle', vol: 0.14 });
     this.tone({ f: 990, dur: 0.12, type: 'triangle', vol: 0.14, delay: 0.07 });
@@ -161,6 +166,7 @@ export class Sfx {
   }
 
   stopDrone() {
+    this.water(0);
     if (!this.drone || !this.ctx) return;
     const { out, oscs } = this.drone;
     const t = this.ctx.currentTime;
@@ -169,5 +175,37 @@ export class Sfx {
     out.gain.exponentialRampToValueAtTime(0.0001, t + 1);
     oscs.forEach((o) => o.stop(t + 1.1));
     this.drone = null;
+  }
+
+  /** Running water, as loud as `level` (0..1): the sewers' channels, louder as you near them. */
+  water(level) {
+    if (!this.ctx) return;
+    if (!this.waterOut) {
+      if (level <= 0) return;
+      const c = this.ctx;
+      const src = c.createBufferSource();
+      src.buffer = this.noiseBuf;
+      src.loop = true;
+      const low = c.createBiquadFilter();
+      low.type = 'lowpass';
+      low.frequency.value = 1400;
+      const band = c.createBiquadFilter();
+      band.type = 'bandpass';
+      band.frequency.value = 650;
+      band.Q.value = 1.3;
+      // Two slow wobbles in the band make it gurgle rather than hiss.
+      for (const [rate, depth] of [[2.3, 240], [0.41, 160]]) {
+        const lfo = c.createOscillator(), amount = c.createGain();
+        lfo.frequency.value = rate;
+        amount.gain.value = depth;
+        lfo.connect(amount).connect(band.frequency);
+        lfo.start();
+      }
+      this.waterOut = c.createGain();
+      this.waterOut.gain.value = 0;
+      src.connect(low).connect(band).connect(this.waterOut).connect(this.master);
+      src.start();
+    }
+    this.waterOut.gain.setTargetAtTime(level * 0.14, this.ctx.currentTime, 0.4);
   }
 }

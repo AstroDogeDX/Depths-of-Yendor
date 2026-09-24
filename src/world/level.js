@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { TILE, VIEW_RADIUS_TILES, MAX_DEPTH, PLAYER_RADIUS, danger } from '../config.js';
 import { T } from '../dungeon/tiles.js';
-import { buildLevelMeshes } from '../dungeon/levelBuilder.js';
+import { buildLevelMeshes, flowWater } from '../dungeon/levelBuilder.js';
 import { getTrapTexture } from '../dungeon/textures.js';
 import { buildItemModel } from '../items/models.js';
 import { shopPrice, stackable } from '../items/generate.js';
@@ -11,6 +11,7 @@ import { updateProjectiles } from '../fx/projectiles.js';
 import { updateParticles } from '../fx/particles.js';
 import { rand } from '../rng.js';
 import { glowSprite } from '../fx/glow.js';
+import { Drips } from '../fx/drips.js';
 import { Shopkeeper } from './shopkeeper.js';
 
 const N8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
@@ -32,6 +33,11 @@ export class Level {
     this.flames = built.flames;
     this.lights = built.lights;
     this.obstacles = built.obstacles;
+    this.water = built.water;
+    // Water tiles, for the sound of the channels.
+    this.waterTiles = (data.channels ?? []).flatMap((c) => c.tiles.map((t) => ({ x: this.center(t.x), z: this.center(t.y) })));
+    this.waterT = 0;
+    this.drips = built.drips.length ? new Drips(this.group, built.drips) : null;
 
     // Doors: open when something walks into them, swing shut once the doorway has been clear a while.
     this.doors = data.doors.map((d, i) => ({ ...d, open: false, amt: 0, clearT: 0, ...built.doors[i] }));
@@ -102,11 +108,11 @@ export class Level {
     return tx < 0 || ty < 0 || tx >= this.w || ty >= this.h ? undefined : this.doorByTile.get(ty * this.w + tx);
   }
 
-  /** Movement blockers: walls, the stair structures and closed doors. */
-  isSolid(tx, ty) {
+  /** Movement blockers: walls, the stair structures, closed doors, and water unless `flying`. */
+  isSolid(tx, ty, flying = false) {
     const t = this.tile(tx, ty);
     if (t === T.DOOR) return !this.doorAt(tx, ty).open;
-    return t === T.WALL || t === T.STAIRS_DOWN || t === T.STAIRS_UP;
+    return t === T.WALL || t === T.STAIRS_DOWN || t === T.STAIRS_UP || (t === T.WATER && !flying);
   }
 
   blocksSight(tx, ty) {
@@ -114,15 +120,28 @@ export class Level {
     return t === T.WALL || (t === T.DOOR && !this.doorAt(tx, ty).open);
   }
 
-  /** For pathfinding: closed doors are routes (monsters open them), locked ones are walls. */
-  blocksPath(tx, ty) {
+  /**
+   * For pathfinding: closed doors are routes (monsters open them), locked ones are walls, and water is gone
+   * round, except by things that fly.
+   */
+  blocksPath(tx, ty, flying = false) {
     const t = this.tile(tx, ty);
     if (t === T.DOOR) return this.doorAt(tx, ty).locked;
-    return t === T.WALL || t === T.STAIRS_DOWN || t === T.STAIRS_UP;
+    return t === T.WALL || t === T.STAIRS_DOWN || t === T.STAIRS_UP || (t === T.WATER && !flying);
   }
 
-  /** Grid line of sight between two world points (Amanatides–Woo traversal). */
+  /** Grid line of sight between two world points. */
   los(x0, z0, x1, z1) {
+    return this.traverse(x0, z0, x1, z1, (tx, tz) => this.blocksSight(tx, tz));
+  }
+
+  /** Whether something can go straight from one point to another: nothing on the line it can't walk (or fly) over. */
+  clearPath(x0, z0, x1, z1, flying = false) {
+    return this.traverse(x0, z0, x1, z1, (tx, tz) => this.blocksPath(tx, tz, flying));
+  }
+
+  /** Walks the grid tiles on the line between two world points (Amanatides–Woo); false if one is `blocked`. */
+  traverse(x0, z0, x1, z1, blocked) {
     let tx = Math.floor(x0 / TILE), tz = Math.floor(z0 / TILE);
     const ex = Math.floor(x1 / TILE), ez = Math.floor(z1 / TILE);
     const dx = x1 - x0, dz = z1 - z0;
@@ -134,23 +153,23 @@ export class Level {
     let n = Math.abs(ex - tx) + Math.abs(ez - tz);
     while (n-- > 0) {
       if (tMX < tMZ) { tMX += tDX; tx += stepX; } else { tMZ += tDZ; tz += stepZ; }
-      if (this.blocksSight(tx, tz)) return false;
+      if (blocked(tx, tz)) return false;
     }
     return true;
   }
 
   /**
    * Push a circle {x, z} out of solid tiles and obstacles: circles { x, z, r } and boxes { x, z, hw, hd }.
-   * Returns true if it touched anything.
+   * Something `flying` passes over water. Returns true if it touched anything.
    */
-  collide(e, r) {
+  collide(e, r, flying = false) {
     let hit = false;
     for (let pass = 0; pass < 2; pass++) {
       const minTx = Math.floor((e.x - r) / TILE), maxTx = Math.floor((e.x + r) / TILE);
       const minTy = Math.floor((e.z - r) / TILE), maxTy = Math.floor((e.z + r) / TILE);
       for (let ty = minTy; ty <= maxTy; ty++) {
         for (let tx = minTx; tx <= maxTx; tx++) {
-          if (this.isSolid(tx, ty) && pushOutOfBox(e, r, tx * TILE, tx * TILE + TILE, ty * TILE, ty * TILE + TILE)) hit = true;
+          if (this.isSolid(tx, ty, flying) && pushOutOfBox(e, r, tx * TILE, tx * TILE + TILE, ty * TILE, ty * TILE + TILE)) hit = true;
         }
       }
     }
@@ -171,6 +190,23 @@ export class Level {
 
   isFloorTile(tx, ty) { return this.tile(tx, ty) === T.FLOOR; }
 
+  /**
+   * Where something dropped at (x, z) comes to rest: there, or if that's over water, the nearest point of the
+   * nearest dry tile.
+   */
+  landSpot(x, z) {
+    const tx = this.toTile(x), ty = this.toTile(z);
+    if (this.tile(tx, ty) !== T.WATER) return { x, z };
+    let best = null, bestD = Infinity;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      if (this.isSolid(tx + dx, ty + dy)) continue;
+      const x0 = (tx + dx) * TILE + 0.3, x1 = (tx + dx + 1) * TILE - 0.3, z0 = (ty + dy) * TILE + 0.3, z1 = (ty + dy + 1) * TILE - 0.3;
+      const px = Math.max(x0, Math.min(x, x1)), pz = Math.max(z0, Math.min(z, z1)), d = Math.hypot(px - x, pz - z);
+      if (d < bestD) { bestD = d; best = { x: px, z: pz }; }
+    }
+    return best ?? { x, z };
+  }
+
   inShop(x, z) {
     const tx = this.toTile(x), ty = this.toTile(z);
     return tx >= 0 && ty >= 0 && tx < this.w && ty < this.h && this.shopMask[this.idx(tx, ty)] === 1;
@@ -190,12 +226,27 @@ export class Level {
     return null;
   }
 
-  // --- Pathing: one BFS rooted at the player serves every hunting monster ---
+  // --- Pathing: one BFS rooted at the player serves every hunting monster (and one more for fliers, where
+  // there's water for them to cross) ---
 
   computeFlow(px, pz) {
-    const tx = this.toTile(px), ty = this.toTile(pz);
-    const start = this.idx(tx, ty);
-    const dist = this.flow ?? new Int16Array(this.w * this.h);
+    const start = this.idx(this.toTile(px), this.toTile(pz));
+    this.flow = this.distances(start, false, this.flow);
+    this.flowFly = this.waterTiles.length ? this.distances(start, true, this.flowFly) : this.flow;
+    this.flowTile = start;
+  }
+
+  /** The distance field toward the player that a monster follows, depending on whether it flies. */
+  flowFor(flying) { return flying ? this.flowFly : this.flow; }
+
+  /** BFS distance field toward an arbitrary tile (used for wandering). */
+  fieldTo(tx, ty, flying = false) {
+    return this.distances(this.idx(tx, ty), flying);
+  }
+
+  /** Steps from tile index `start` to every tile reachable on foot, or by air if `flying`, into `dist` (reused if given). */
+  distances(start, flying, dist) {
+    dist ??= new Int16Array(this.w * this.h);
     dist.fill(-1);
     const q = new Int32Array(this.w * this.h);
     let head = 0, tail = 0;
@@ -206,32 +257,8 @@ export class Level {
       const cx = c % this.w, cy = (c / this.w) | 0;
       for (const [dx, dy] of N8) {
         const nx = cx + dx, ny = cy + dy;
-        if (this.blocksPath(nx, ny)) continue;
-        if (dx && dy && (this.blocksPath(cx + dx, cy) || this.blocksPath(cx, cy + dy))) continue;
-        const n = this.idx(nx, ny);
-        if (dist[n] >= 0) continue;
-        dist[n] = dist[c] + 1;
-        q[tail++] = n;
-      }
-    }
-    this.flow = dist;
-    this.flowTile = start;
-  }
-
-  /** BFS distance field toward an arbitrary tile (used for wandering). */
-  fieldTo(tx, ty) {
-    const dist = new Int16Array(this.w * this.h).fill(-1);
-    const q = new Int32Array(this.w * this.h);
-    let head = 0, tail = 0;
-    dist[this.idx(tx, ty)] = 0;
-    q[tail++] = this.idx(tx, ty);
-    while (head < tail) {
-      const c = q[head++];
-      const cx = c % this.w, cy = (c / this.w) | 0;
-      for (const [dx, dy] of N8) {
-        const nx = cx + dx, ny = cy + dy;
-        if (this.blocksPath(nx, ny)) continue;
-        if (dx && dy && (this.blocksPath(cx + dx, cy) || this.blocksPath(cx, cy + dy))) continue;
+        if (this.blocksPath(nx, ny, flying)) continue;
+        if (dx && dy && (this.blocksPath(cx + dx, cy, flying) || this.blocksPath(cx, cy + dy, flying))) continue;
         const n = this.idx(nx, ny);
         if (dist[n] >= 0) continue;
         dist[n] = dist[c] + 1;
@@ -242,15 +269,15 @@ export class Level {
   }
 
   /** Next waypoint (world coords) descending (or ascending, if flee) a distance field from (x, z). */
-  step(field, x, z, flee = false) {
+  step(field, x, z, flee = false, flying = false) {
     const tx = this.toTile(x), ty = this.toTile(z);
     const here = field[this.idx(tx, ty)];
     if (here < 0) return null;
     let best = null, bestD = here;
     for (const [dx, dy] of N8) {
       const nx = tx + dx, ny = ty + dy;
-      if (this.blocksPath(nx, ny)) continue;
-      if (dx && dy && (this.blocksPath(tx + dx, ty) || this.blocksPath(tx, ty + dy))) continue;
+      if (this.blocksPath(nx, ny, flying)) continue;
+      if (dx && dy && (this.blocksPath(tx + dx, ty, flying) || this.blocksPath(tx, ty + dy, flying))) continue;
       const d = field[this.idx(nx, ny)];
       if (d < 0) continue;
       if (flee ? d > bestD : d < bestD) { bestD = d; best = { x: this.center(nx), z: this.center(ny) }; }
@@ -418,6 +445,14 @@ export class Level {
       f.halo.material.opacity = 0.35 + (k - 0.85) * 1.6;
       if (f.light) f.light.intensity = f.light.userData.base * k;
     }
+    flowWater(this.water, t);
+    this.drips?.update(dt, p, game.audio);
+    if (this.waterTiles.length && (this.waterT -= dt) <= 0) {
+      this.waterT = 0.25;
+      let d = Infinity;
+      for (const w of this.waterTiles) d = Math.min(d, Math.hypot(w.x - p.x, w.z - p.z));
+      game.audio.water(Math.max(0, 1 - d / 16) ** 2);
+    }
     for (const it of this.items) {
       it.mesh.position.y = it.y0 + Math.sin(t * 2 + it.phase) * 0.05;
       it.mesh.rotation.y += dt * (it.onPedestal ? 1.2 : 0.6);
@@ -513,7 +548,7 @@ export class Level {
           b.x += dx * push; b.z += dz * push;
         }
       }
-      this.collide(a, a.radius);
+      this.collide(a, a.radius, a.flies);
     }
   }
 }

@@ -330,6 +330,8 @@ export class UI {
         else if (t === T.STAIRS_DOWN) c = '#5aa0ff';
         else if (t === T.STAIRS_UP) c = '#ffd27a';
         else if (t === T.PEDESTAL) c = '#d0a040';
+        else if (t === T.WATER) c = lvl.visible[i] ? '#2f5f66' : '#1f3c40';
+        else if (t === T.BRIDGE) c = lvl.visible[i] ? '#7a5a36' : '#4e3a24';
         else if (t === T.DOOR) {
           const d = lvl.doorAt(tx, ty);
           c = d.locked ? '#e8c040' : d.open ? '#6a4a2a' : '#b0703a';

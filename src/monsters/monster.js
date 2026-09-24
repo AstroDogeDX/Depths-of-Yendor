@@ -29,6 +29,7 @@ export class Monster {
     this.x = x;
     this.z = z;
     this.radius = def.radius;
+    this.flies = !!def.flying; // passes over water
     this.yaw = rand.range(-Math.PI, Math.PI);
     this.boss = !!opts.boss;
     this.guardian = !!opts.guardian;
@@ -146,7 +147,7 @@ export class Monster {
       for (let i = 0; i < 3; i++) {
         const a = (i / 3) * Math.PI * 2;
         const m = level.addMonster(i === 0 ? 'wraith' : 'skeleton', this.x + Math.cos(a) * 1.6, this.z + Math.sin(a) * 1.6, { asleep: false });
-        level.collide(m, m.radius);
+        level.collide(m, m.radius, m.flies);
         m.state = 'hunt';
         burst(level, m.x, 0.5, m.z, 0x8060ff, 12, 3, 0.6);
       }
@@ -180,8 +181,9 @@ export class Monster {
    * player-rooted flow field, so sound carries along corridors and round corners but not through walls.
    */
   hearing(p, level) {
-    if (p.noise <= 0 || !level.flow) return 0;
-    const steps = level.flow[level.idx(level.toTile(this.x), level.toTile(this.z))];
+    const flow = level.flowFor(this.flies);
+    if (p.noise <= 0 || !flow) return 0;
+    const steps = flow[level.idx(level.toTile(this.x), level.toTile(this.z))];
     if (steps < 0) return 0;
     const d = steps * TILE;
     return d < p.noise ? 1 - d / p.noise : 0;
@@ -220,7 +222,7 @@ export class Monster {
       }
     }
     if (this.status.feared > 0) {
-      const wp = level.step(level.flow, this.x, this.z, true);
+      const wp = level.step(level.flowFor(this.flies), this.x, this.z, true, this.flies);
       return !!wp && this.moveTo(wp.x, wp.z, speed, dt, level, game);
     }
     if (this.state === 'sleep') return false;
@@ -240,7 +242,7 @@ export class Monster {
       }
       if (r.keepAway > 0 && this.canSee) {
         if (dist < r.keepAway) {
-          const wp = level.step(level.flow, this.x, this.z, true);
+          const wp = level.step(level.flowFor(this.flies), this.x, this.z, true, this.flies);
           if (wp) {
             const moved = this.moveTo(wp.x, wp.z, speed * 0.8, dt, level, game, false);
             this.face(dx, dz, dt);
@@ -258,8 +260,9 @@ export class Monster {
       if (this.cooldown <= 0) this.startAttack(false);
       return false;
     }
-    if (this.canSee) return this.moveTo(p.x, p.z, speed, dt, level, game);
-    const wp = level.step(level.flow, this.x, this.z);
+    // Straight at you if it can see you and nothing's in the way (you might be across water); else by the path.
+    if (this.canSee && level.clearPath(this.x, this.z, p.x, p.z, this.flies)) return this.moveTo(p.x, p.z, speed, dt, level, game);
+    const wp = level.step(level.flowFor(this.flies), this.x, this.z, false, this.flies);
     return !!wp && this.moveTo(wp.x, wp.z, speed, dt, level, game);
   }
 
@@ -272,14 +275,14 @@ export class Monster {
       const room = rand.pick(level.wanderRooms);
       const tx = rand.int(room.x, room.x + room.w - 1), ty = rand.int(room.y, room.y + room.h - 1);
       if (!level.isFloorTile(tx, ty)) return false;
-      this.wander = { tx, ty, field: level.fieldTo(tx, ty), t: 25 };
+      this.wander = { tx, ty, field: level.fieldTo(tx, ty, this.flies), t: 25 };
     }
     if (level.toTile(this.x) === this.wander.tx && level.toTile(this.z) === this.wander.ty) {
       this.wander = null;
       this.idleT = rand.range(1.5, 5);
       return false;
     }
-    const wp = level.step(this.wander.field, this.x, this.z);
+    const wp = level.step(this.wander.field, this.x, this.z, false, this.flies);
     if (!wp) {
       this.wander = null;
       return false;
@@ -308,7 +311,7 @@ export class Monster {
     const step = jitter ? speed * dt : Math.min(d, speed * dt);
     this.x += dx * step;
     this.z += dz * step;
-    level.collide(this, this.radius);
+    level.collide(this, this.radius, this.flies);
     const p = game.player;
     const px = this.x - p.x, pz = this.z - p.z, pd = Math.hypot(px, pz), min = this.radius + PLAYER_RADIUS;
     if (pd < min && pd > 1e-5) {
@@ -406,7 +409,7 @@ export class Monster {
     if (opts.knockback && !this.boss && this.type !== 'golem' && this.type !== 'troll') {
       this.x += opts.knockback.x * 0.35;
       this.z += opts.knockback.z * 0.35;
-      game.level.collide(this, this.radius);
+      game.level.collide(this, this.radius, this.flies);
     }
     this.notice(game); // no-op if it already knows where you are
     if (game.level.playerInShop) game.level.shopPursuers.add(this); // provoked from the shop: it may come in

@@ -4,6 +4,8 @@ import { spawnTable } from '../monsters/defs.js';
 import { randomItem, makeItem } from '../items/generate.js';
 import { T } from './tiles.js';
 import { ROOM_TYPES } from './rooms.js';
+import { digChannels } from './channels.js';
+import { decorate } from './decor.js';
 
 export { T };
 
@@ -12,6 +14,7 @@ const H = 52;
 const GAP = 3;  // min tiles between room interiors: each room's wall plus one corridor lane
 const EDGE = 3; // min distance from a room interior to the map border
 const SIDES = { N: [0, -1], S: [0, 1], W: [-1, 0], E: [1, 0] };
+const STEPS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, as stairs' `dir`
 
 /**
  * Pixel Dungeon-style layout, built graph-first:
@@ -278,12 +281,19 @@ function attemptLevel(rng, depth, opts) {
   };
   for (const r of rooms) ROOM_TYPES[r.type].furnish(ctx, r);
 
-  // --- 5: populate ---
+  // --- 5: theme features: water channels, then decorations ---
 
-  const entrance = rooms[0];
+  const theme = themeForDepth(depth);
+  const [sx, sy] = STEPS[ctx.up.dir];
+  const channels = theme.channels ? digChannels({ rng, grid, w: W, rooms, start: idx(ctx.up.x + sx, ctx.up.y + sy) }) : [];
   const occupied = new Set([idx(ctx.up.x, ctx.up.y)]);
   if (ctx.down) occupied.add(idx(ctx.down.x, ctx.down.y));
   for (const m of ctx.monsters) occupied.add(idx(m.x, m.y));
+  const decor = decorate({ style: theme.style, rng, grid, w: W, rooms, channels, occupied });
+
+  // --- 6: populate ---
+
+  const entrance = rooms[0];
   const freeTileIn = (room, minStartDist = 0) => {
     for (let tries = 0; tries < 30; tries++) {
       const x = rng.int(room.x, room.x + room.w - 1), y = rng.int(room.y, room.y + room.h - 1);
@@ -350,7 +360,8 @@ function attemptLevel(rng, depth, opts) {
     depth, w: W, h: H, grid, rooms, edges, doorways,
     doors: doorways.filter((d) => d.style === 'door'),
     up: ctx.up, down: ctx.down, amulet: ctx.amulet, shrine: ctx.shrine, shop: ctx.shop,
-    monsters, items, traps, theme: themeForDepth(depth),
+    channels, decor: decor.props, wallUsed: decor.wallUsed,
+    monsters, items, traps, theme,
   };
 }
 

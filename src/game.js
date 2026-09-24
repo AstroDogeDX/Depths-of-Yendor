@@ -209,7 +209,7 @@ export class Game {
     level.flowT = 0;
     level.updateVisibility(p.x, p.z);
 
-    if (this.state === 'play') this.audio.setDrone(th.drone);
+    if (this.state === 'play') this.audio.setDrone(th.drone); // (which also quiets the last floor's water)
     this.ui.onLevelChanged();
 
     if (firstVisit && depth === MAX_DEPTH) this.log('The air hums with ancient power. The Amulet is near — and so is its keeper.', 'danger');
@@ -627,8 +627,10 @@ export class Game {
     this.log(m.boss ? `The ${m.name} crashes to the floor and is still.` : `You kill the ${m.name}.`, m.boss ? 'good' : '');
     p.gainXp(Math.round(m.def.xp * (1 + (m.maxHp / m.def.hp - 1) * 0.5)), this);
     const level = this.level;
-    if (m.guardian || rand.chance(0.12)) level.addItem(randomItem(rand, level.depth), m.x, m.z);
-    if (rand.chance(0.15)) level.addItem(makeItem('gold', 'gold', { qty: rand.int(4, 12) + Math.round(danger(level.depth) * 3) }), m.x + 0.3, m.z + 0.2);
+    // Whatever it carried falls where it died, or onto the bank if it flew over water.
+    const at = level.landSpot(m.x, m.z);
+    if (m.guardian || rand.chance(0.12)) level.addItem(randomItem(rand, level.depth), at.x, at.z);
+    if (rand.chance(0.15)) level.addItem(makeItem('gold', 'gold', { qty: rand.int(4, 12) + Math.round(danger(level.depth) * 3) }), at.x + 0.3, at.z + 0.2);
   }
 
   triggerTrap(trap) {

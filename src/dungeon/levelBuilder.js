@@ -7,7 +7,13 @@ import { glowSprite } from '../fx/glow.js';
 import { Flame } from '../fx/flame.js';
 import { buildBBModel } from '../items/bbmodel.js';
 import { placeProp } from './props.js';
+import { faceKey, wallFace } from './decor.js';
 import sconceModel from '../../assets/models/sconce.bbmodel';
+
+// Water channels: the floor drops to the water's surface this far below it.
+const WATER_Y = -0.5;
+const FLOW_SPEED = 0.35; // tiles a second
+const PUDDLE_GEO = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
 
 const SCONCE_LIGHTS = 6; // constant per level so shaders never need recompiling between floors
 // Sconce fire: its glow and light colour, and the light's strength. Blue light looks dimmer, so it's stronger.
@@ -55,8 +61,9 @@ export function buildLevelMeshes(data) {
   const get = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? T.WALL : grid[y * w + x]);
   const isWall = (x, y) => get(x, y) === T.WALL;
 
-  const floor = new GeoBuilder(), ceil = new GeoBuilder(), walls = new GeoBuilder();
+  const floor = new GeoBuilder(), ceil = new GeoBuilder(), walls = new GeoBuilder(), banks = new GeoBuilder();
   const vh = WALL_H / TILE;
+  const sunk = (t) => t === T.WATER || t === T.BRIDGE; // a channel: the floor drops away to the water
 
   // Corner ambient occlusion: darken grid corners that touch walls.
   const cornerAO = (gx, gy) => {
@@ -76,7 +83,7 @@ export function buildLevelMeshes(data) {
       const tint = 0.9 + rng.next() * 0.12;
       const ao = [cornerAO(x, y), cornerAO(x + 1, y), cornerAO(x + 1, y + 1), cornerAO(x, y + 1)].map((v) => v * tint);
 
-      if (t !== T.STAIRS_DOWN) {
+      if (t !== T.STAIRS_DOWN && !sunk(t)) {
         floor.quad([[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1]], [0, 1, 0],
           [[0, 0], [1, 0], [1, 1], [0, 1]], ao);
       }
@@ -87,11 +94,16 @@ export function buildLevelMeshes(data) {
 
       const b = 0.62 * tint, tp = 1.0 * tint;
       const wc = [b, b, tp, tp];
-      const wuv = [[0, 0], [1, 0], [1, vh], [0, vh]];
-      if (isWall(x, y - 1)) walls.quad([[x0, 0, z0], [x1, 0, z0], [x1, WALL_H, z0], [x0, WALL_H, z0]], [0, 0, 1], wuv, wc);
-      if (isWall(x, y + 1)) walls.quad([[x1, 0, z1], [x0, 0, z1], [x0, WALL_H, z1], [x1, WALL_H, z1]], [0, 0, -1], wuv, wc);
-      if (isWall(x - 1, y)) walls.quad([[x0, 0, z1], [x0, 0, z0], [x0, WALL_H, z0], [x0, WALL_H, z1]], [1, 0, 0], wuv, wc);
-      if (isWall(x + 1, y)) walls.quad([[x1, 0, z0], [x1, 0, z1], [x1, WALL_H, z1], [x1, WALL_H, z0]], [-1, 0, 0], wuv, wc);
+      const wuv = tex.wallFullHeight ? [[0, 0], [1, 0], [1, 1], [0, 1]] : [[0, 0], [1, 0], [1, vh], [0, vh]];
+      const side = (ya, yb, uv, c, builder, open) => {
+        if (open(x, y - 1)) builder.quad([[x0, ya, z0], [x1, ya, z0], [x1, yb, z0], [x0, yb, z0]], [0, 0, 1], uv, c);
+        if (open(x, y + 1)) builder.quad([[x1, ya, z1], [x0, ya, z1], [x0, yb, z1], [x1, yb, z1]], [0, 0, -1], uv, c);
+        if (open(x - 1, y)) builder.quad([[x0, ya, z1], [x0, ya, z0], [x0, yb, z0], [x0, yb, z1]], [1, 0, 0], uv, c);
+        if (open(x + 1, y)) builder.quad([[x1, ya, z0], [x1, ya, z1], [x1, yb, z1], [x1, yb, z0]], [-1, 0, 0], uv, c);
+      };
+      side(0, WALL_H, wuv, wc, walls, isWall);
+      // A channel's sides run from the floor down to the water, under the walls at its ends and along its banks.
+      if (sunk(t)) side(WATER_Y, 0, [[0, 0], [1, 0], [1, 1], [0, 1]], [0.5 * tint, 0.5 * tint, 0.85 * tint, 0.85 * tint], banks, (nx, ny) => !sunk(get(nx, ny)));
     }
   }
 
@@ -100,6 +112,7 @@ export function buildLevelMeshes(data) {
   group.add(new THREE.Mesh(floor.build(), mat(tex.floor)));
   group.add(new THREE.Mesh(ceil.build(), mat(tex.ceiling)));
   group.add(new THREE.Mesh(walls.build(), mat(tex.wall)));
+  if (data.channels?.length) group.add(new THREE.Mesh(banks.build(), mat(tex.channel)));
 
   const stoneMat = new THREE.MeshLambertMaterial({ map: tex.floor, color: 0xb0a898 });
   const pitWallTex = tex.wall.clone();
@@ -124,6 +137,45 @@ export function buildLevelMeshes(data) {
     shopSlots.push(...prop.slots);
   }
 
+  const place = (p) => {
+    const prop = placeProp(p);
+    group.add(prop.mesh);
+    if (prop.obstacle) obstacles.push(prop.obstacle);
+  };
+  // Water channels: a surface of murky water flowing along each, bridges across, and a grate at each end where
+  // the water runs through the wall.
+  const water = [];
+  for (const c of data.channels ?? []) {
+    const g = new GeoBuilder();
+    for (const { x, y } of c.tiles) {
+      const x0 = x * TILE, x1 = x0 + TILE, z0 = y * TILE, z1 = z0 + TILE;
+      g.quad([[x0, WATER_Y, z0], [x1, WATER_Y, z0], [x1, WATER_Y, z1], [x0, WATER_Y, z1]], [0, 1, 0], [[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1]], [1, 1, 1, 1]);
+    }
+    const map = tex.water.clone();
+    map.needsUpdate = true;
+    group.add(new THREE.Mesh(g.build(), new THREE.MeshPhongMaterial({ map, vertexColors: true, shininess: 60, specular: 0x3c4a38 })));
+    water.push({ map, axis: c.axis, flow: c.flow });
+    for (const b of c.bridges) place({ type: 'bridge', x: b.x + 0.5, y: b.y + 0.5, yaw: c.axis === 'x' ? 0 : Math.PI / 2 });
+    for (const e of c.ends) place({ type: 'channel_grate', ...wallFace(e.x, e.y, e.side) });
+  }
+  // The theme's decorations (see decor.js). Puddles are drawn here; the rest are props.
+  const puddleMats = tex.puddles?.map((map) => new THREE.MeshPhongMaterial({
+    map, transparent: true, depthWrite: false, shininess: 80, specular: 0x506050,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+  }));
+  for (const p of data.decor ?? []) {
+    if (p.type !== 'puddle') {
+      place(p);
+      continue;
+    }
+    if (!puddleMats) continue;
+    const m = new THREE.Mesh(PUDDLE_GEO, puddleMats[Math.floor(p.yaw * 7) % puddleMats.length]);
+    m.position.set(p.x * TILE, 0.005, p.y * TILE);
+    m.rotation.y = p.yaw;
+    m.scale.set(p.size, 1, p.size * 0.75);
+    group.add(m);
+  }
+
   const { flames, lights } = buildSconces(data, group, rng, isWall);
 
   const frameMat = new THREE.MeshLambertMaterial({ map: tex.wall, color: 0x8a8070 });
@@ -137,7 +189,36 @@ export function buildLevelMeshes(data) {
     group.add(built.group);
     return built;
   });
-  return { group, flames, lights, obstacles, doors, shopSlots };
+  return { group, flames, lights, obstacles, doors, shopSlots, water, drips: dripSources(data, rng) };
+}
+
+/**
+ * Where water drips (see fx/drips.js): from every drain pipe's mouth, and from the vault over half the
+ * puddles and a tile or two of each channel. Each is { x, y, z, floor (where it lands), every: [min, max] s }.
+ */
+function dripSources(data, rng) {
+  const out = [];
+  for (const p of data.decor ?? []) {
+    if (p.type === 'drain_pipe') {
+      // Off the lip of the pipe's mouth, 0.44 m out from the wall, into its pool of slime.
+      const x = p.x * TILE + Math.sin(p.yaw) * 0.44, z = p.y * TILE + Math.cos(p.yaw) * 0.44;
+      out.push({ x, y: 0.28, z, floor: 0.01, every: [0.5, 1.6] });
+    } else if (p.type === 'puddle' && rng.chance(0.5)) {
+      out.push({ x: p.x * TILE, y: WALL_H - 0.05, z: p.y * TILE, floor: 0.01, every: [2.5, 6] });
+    }
+  }
+  for (const c of data.channels ?? []) {
+    for (let i = rng.int(1, 2); i > 0; i--) {
+      const t = rng.pick(c.tiles);
+      out.push({ x: (t.x + rng.range(0.25, 0.75)) * TILE, y: WALL_H - 0.05, z: (t.y + rng.range(0.25, 0.75)) * TILE, floor: WATER_Y, every: [1.5, 4] });
+    }
+  }
+  return out;
+}
+
+/** Scrolls each channel's water along its course (`water` from buildLevelMeshes). */
+export function flowWater(water, time) {
+  for (const w of water) w.map.offset[w.axis] = (-w.flow * time * FLOW_SPEED) % 1;
 }
 
 /** Frees a level's geometry and materials. Textures are shared between levels and kept. */
@@ -280,13 +361,15 @@ function buildSconces(data, group, rng, isWall) {
   for (const r of data.rooms) {
     if (r.id === data.shop?.room) continue; // the shop brings its own
     const cands = [];
+    // Not on a wall that already has something on it (see decor.js).
+    const free = (x, y, side) => !data.wallUsed?.has(faceKey(x, y, side));
     for (let x = r.x; x < r.x + r.w; x++) {
-      if (isWall(x, r.y - 1)) cands.push({ x: (x + 0.5) * TILE, z: r.y * TILE + 0.1, ry: 0 });
-      if (isWall(x, r.y + r.h)) cands.push({ x: (x + 0.5) * TILE, z: (r.y + r.h) * TILE - 0.1, ry: Math.PI });
+      if (isWall(x, r.y - 1) && free(x, r.y, 'N')) cands.push({ x: (x + 0.5) * TILE, z: r.y * TILE + 0.1, ry: 0 });
+      if (isWall(x, r.y + r.h) && free(x, r.y + r.h - 1, 'S')) cands.push({ x: (x + 0.5) * TILE, z: (r.y + r.h) * TILE - 0.1, ry: Math.PI });
     }
     for (let y = r.y; y < r.y + r.h; y++) {
-      if (isWall(r.x - 1, y)) cands.push({ x: r.x * TILE + 0.1, z: (y + 0.5) * TILE, ry: Math.PI / 2 });
-      if (isWall(r.x + r.w, y)) cands.push({ x: (r.x + r.w) * TILE - 0.1, z: (y + 0.5) * TILE, ry: -Math.PI / 2 });
+      if (isWall(r.x - 1, y) && free(r.x, y, 'W')) cands.push({ x: r.x * TILE + 0.1, z: (y + 0.5) * TILE, ry: Math.PI / 2 });
+      if (isWall(r.x + r.w, y) && free(r.x + r.w - 1, y, 'E')) cands.push({ x: (r.x + r.w) * TILE - 0.1, z: (y + 0.5) * TILE, ry: -Math.PI / 2 });
     }
     rng.shuffle(cands);
     const n = Math.min(cands.length, rng.int(1, 2));
