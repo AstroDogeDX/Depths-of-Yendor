@@ -4,7 +4,7 @@ export default {
   plugins: [{
     name: 'bbmodel',
     transform(code, id) {
-      if (id.endsWith('.bbmodel')) return { code: `export default ${JSON.stringify(JSON.parse(code))};`, map: null };
+      if (id.split('?')[0].endsWith('.bbmodel')) return { code: `export default ${JSON.stringify(JSON.parse(code))};`, map: null };
     },
   }],
 };

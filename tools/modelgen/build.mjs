@@ -19,6 +19,7 @@ import { monsters } from './monsters.mjs';
 import { props } from './props.mjs';
 import { npcs } from './npcs.mjs';
 import { sewers } from './sewers.mjs';
+import { catacombs } from './catacombs.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const MODELS = {
@@ -26,7 +27,7 @@ const MODELS = {
   torch: { file: 'torch.bbmodel', build: torch },
   sconce: { file: 'sconce.bbmodel', build: sconce },
   ...Object.fromEntries(Object.entries(monsters).map(([name, build]) => [name, { file: `monsters/${name}.bbmodel`, build }])),
-  ...Object.fromEntries(Object.entries({ ...props, ...sewers }).map(([name, build]) => [name, { file: `props/${name}.bbmodel`, build }])),
+  ...Object.fromEntries(Object.entries({ ...props, ...sewers, ...catacombs }).map(([name, build]) => [name, { file: `props/${name}.bbmodel`, build }])),
   ...Object.fromEntries(Object.entries(npcs).map(([name, build]) => [name, { file: `npcs/${name}.bbmodel`, build }])),
   ...Object.fromEntries(Object.entries({ ...items, ...armors, ...artefacts }).map(([name, build]) => [name, { file: `items/${name}.bbmodel`, build }])),
 };

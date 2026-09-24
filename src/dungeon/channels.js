@@ -1,20 +1,21 @@
 import { T } from './tiles.js';
 
-// Water channels for sewer floors: a channel runs straight across a room from wall to wall, the water flowing
-// in through a grate in one wall and out through another, crossed by one or two bridges.
+// Channels: a trench runs straight across a room from wall to wall, crossed by one or two bridges. What fills
+// it is the theme's (`channels.fill` in config.js): water in the Sewers, flowing in through a grate in one wall
+// and out through another; spikes and bones in the Catacombs.
 
 const WALKABLE = new Set([T.FLOOR, T.DOOR, T.BRIDGE]);
 
 /**
- * Digs up to three channels across standard rooms. A channel keeps clear of doorways and pillars, and one that
- * would cut any floor off from the rest is filled back in. `start` is a tile index everything must stay reachable
- * from (the tile in front of the entrance stairs).
+ * Digs `count` ([min, max]) channels across standard rooms, as many as there are rooms for. A channel keeps
+ * clear of doorways and pillars, and one that would cut any floor off from the rest is filled back in. `start` is
+ * a tile index everything must stay reachable from (the tile in front of the entrance stairs).
  *
  * Returns [{ axis, tiles, bridges, ends, flow }]: `axis` ('x' or 'y') is the way the channel runs, `tiles` its
- * water and bridge tiles in order, `ends` the first and last with the side of the room their wall is on ('N',
+ * channel and bridge tiles in order, `ends` the first and last with the side of the room their wall is on ('N',
  * 'E', 'S' or 'W'), and `flow` (1 or -1) which way along the axis the water runs.
  */
-export function digChannels({ rng, grid, w, rooms, start }) {
+export function digChannels({ rng, grid, w, rooms, start, count }) {
   const idx = (x, y) => y * w + x;
   const reachable = () => {
     const seen = new Uint8Array(grid.length);
@@ -33,7 +34,7 @@ export function digChannels({ rng, grid, w, rooms, start }) {
   };
 
   const channels = [];
-  const want = rng.int(2, 3);
+  const want = rng.int(...count);
   const candidates = rng.shuffle(rooms.filter((r) => r.type === 'standard' && !r.locked));
   for (const room of candidates) {
     if (channels.length >= want) break;
@@ -65,14 +66,14 @@ export function digChannels({ rng, grid, w, rooms, start }) {
         .filter((d) => (axis === 'x' ? d.side === 'N' || d.side === 'S' : d.side === 'E' || d.side === 'W'))
         .map((d) => (axis === 'x' ? d.x - room.x : d.y - room.y))
         .filter((i) => i >= 1 && i <= len - 2);
-      const count = len >= 7 ? 2 : 1;
+      const spans = len >= 7 ? 2 : 1;
       const bridges = [];
       for (const i of [...rng.shuffle(inLine), ...rng.shuffle(Array.from({ length: len - 2 }, (_, k) => k + 1))]) {
-        if (bridges.length < count && bridges.every((b) => Math.abs(b - i) >= 2)) bridges.push(i);
+        if (bridges.length < spans && bridges.every((b) => Math.abs(b - i) >= 2)) bridges.push(i);
       }
 
       const before = reachable();
-      tiles.forEach(([x, y], i) => { grid[idx(x, y)] = bridges.includes(i) ? T.BRIDGE : T.WATER; });
+      tiles.forEach(([x, y], i) => { grid[idx(x, y)] = bridges.includes(i) ? T.BRIDGE : T.CHANNEL; });
       if (reachable() === before - (len - bridges.length)) {
         const ends = axis === 'x' ? ['W', 'E'] : ['N', 'S'];
         return {

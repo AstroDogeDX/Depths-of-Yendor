@@ -42,21 +42,22 @@ export const FLOORS_PER_THEME = 5;
 
 // Each theme's colours. `style` names its own textures (dungeon/textures.js) and decorations
 // (dungeon/decor.js); themes without one use plain stone and brick in their colours, as placeholders until
-// they get their own. `channels` runs water channels through some rooms (dungeon/channels.js).
+// they get their own. `channels` runs trenches across some rooms (dungeon/channels.js): `fill` is what's in
+// them and `count` how many ([min, max]) a floor gets.
 export const THEMES = [
   {
     // Dank and wet.
-    name: 'Sewers', style: 'sewers', channels: true,
+    name: 'Sewers', style: 'sewers', channels: { fill: 'water', count: [2, 3] },
     wall: ['#4f5448', '#43483d', '#373b32'], mortar: '#1c1f18', moss: '#4a6a2a',
     floor: ['#3a3d33', '#30332b'], ceiling: '#1d201a',
     fog: 0x080a06, fogNear: 2, fogFar: 20, ambient: 0x48523e, drone: 55,
   },
   {
-    // Old jail cells, cages and chains.
-    name: 'Catacombs',
-    wall: ['#6b645a', '#5a544b', '#4a453e'], mortar: '#2c2925', moss: '#3f5a2e',
-    floor: ['#4d4842', '#3e3a35'], ceiling: '#2a2723',
-    fog: 0x0b0a09, fogNear: 2, fogFar: 22, ambient: 0x4a4038, drone: 51,
+    // A tomb and a jail in one: bones, cells, cages and chains.
+    name: 'Catacombs', style: 'catacombs', channels: { fill: 'spikes', count: [1, 2] },
+    wall: ['#5e5f5e', '#4e4f4e', '#3f403f'], mortar: '#1e1f20', moss: '#3f5a2e',
+    floor: ['#4a4b4b', '#3c3d3d'], ceiling: '#272829',
+    fog: 0x08090b, fogNear: 2, fogFar: 21, ambient: 0x3c4048, drone: 51,
   },
   {
     // Natural, rough-hewn rock.

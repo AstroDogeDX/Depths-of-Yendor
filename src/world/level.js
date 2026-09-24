@@ -34,8 +34,9 @@ export class Level {
     this.lights = built.lights;
     this.obstacles = built.obstacles;
     this.water = built.water;
-    // Water tiles, for the sound of the channels.
-    this.waterTiles = (data.channels ?? []).flatMap((c) => c.tiles.map((t) => ({ x: this.center(t.x), z: this.center(t.y) })));
+    // Water tiles, for the sound of running water.
+    const water = this.theme.channels?.fill === 'water' ? data.channels : [];
+    this.waterTiles = water.flatMap((c) => c.tiles.map((t) => ({ x: this.center(t.x), z: this.center(t.y) })));
     this.waterT = 0;
     this.drips = built.drips.length ? new Drips(this.group, built.drips) : null;
 
@@ -108,11 +109,11 @@ export class Level {
     return tx < 0 || ty < 0 || tx >= this.w || ty >= this.h ? undefined : this.doorByTile.get(ty * this.w + tx);
   }
 
-  /** Movement blockers: walls, the stair structures, closed doors, and water unless `flying`. */
+  /** Movement blockers: walls, the stair structures, closed doors, and channels unless `flying`. */
   isSolid(tx, ty, flying = false) {
     const t = this.tile(tx, ty);
     if (t === T.DOOR) return !this.doorAt(tx, ty).open;
-    return t === T.WALL || t === T.STAIRS_DOWN || t === T.STAIRS_UP || (t === T.WATER && !flying);
+    return t === T.WALL || t === T.STAIRS_DOWN || t === T.STAIRS_UP || (t === T.CHANNEL && !flying);
   }
 
   blocksSight(tx, ty) {
@@ -121,13 +122,13 @@ export class Level {
   }
 
   /**
-   * For pathfinding: closed doors are routes (monsters open them), locked ones are walls, and water is gone
+   * For pathfinding: closed doors are routes (monsters open them), locked ones are walls, and channels are gone
    * round, except by things that fly.
    */
   blocksPath(tx, ty, flying = false) {
     const t = this.tile(tx, ty);
     if (t === T.DOOR) return this.doorAt(tx, ty).locked;
-    return t === T.WALL || t === T.STAIRS_DOWN || t === T.STAIRS_UP || (t === T.WATER && !flying);
+    return t === T.WALL || t === T.STAIRS_DOWN || t === T.STAIRS_UP || (t === T.CHANNEL && !flying);
   }
 
   /** Grid line of sight between two world points. */
@@ -191,12 +192,12 @@ export class Level {
   isFloorTile(tx, ty) { return this.tile(tx, ty) === T.FLOOR; }
 
   /**
-   * Where something dropped at (x, z) comes to rest: there, or if that's over water, the nearest point of the
-   * nearest dry tile.
+   * Where something dropped at (x, z) comes to rest: there, or if that's over a channel, the nearest point of
+   * the nearest tile beside it.
    */
   landSpot(x, z) {
     const tx = this.toTile(x), ty = this.toTile(z);
-    if (this.tile(tx, ty) !== T.WATER) return { x, z };
+    if (this.tile(tx, ty) !== T.CHANNEL) return { x, z };
     let best = null, bestD = Infinity;
     for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
       if (this.isSolid(tx + dx, ty + dy)) continue;
@@ -227,12 +228,12 @@ export class Level {
   }
 
   // --- Pathing: one BFS rooted at the player serves every hunting monster (and one more for fliers, where
-  // there's water for them to cross) ---
+  // there are channels for them to cross) ---
 
   computeFlow(px, pz) {
     const start = this.idx(this.toTile(px), this.toTile(pz));
     this.flow = this.distances(start, false, this.flow);
-    this.flowFly = this.waterTiles.length ? this.distances(start, true, this.flowFly) : this.flow;
+    this.flowFly = this.data.channels.length ? this.distances(start, true, this.flowFly) : this.flow;
     this.flowTile = start;
   }
 

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TILE, WALL_H, MODEL_PX } from '../config.js';
+import { TILE, WALL_H, MODEL_PX, THEMES } from '../config.js';
 import { T } from './tiles.js';
 import { getTextures, getDoorTexture } from './textures.js';
 import { RNG } from '../rng.js';
@@ -7,13 +7,22 @@ import { glowSprite } from '../fx/glow.js';
 import { Flame } from '../fx/flame.js';
 import { buildBBModel } from '../items/bbmodel.js';
 import { placeProp } from './props.js';
-import { faceKey, wallFace } from './decor.js';
+import { faceKey, wallFace, decorProps } from './decor.js';
+import { SHOP_PROPS } from './rooms.js';
 import sconceModel from '../../assets/models/sconce.bbmodel';
 
-// Water channels: the floor drops to the water's surface this far below it.
-const WATER_Y = -0.5;
+// Channels by what fills them (the theme's `channels.fill`): how far below the floor their surface lies, the
+// prop that bridges them, and the props at their ends and along their beds.
+const FILLS = {
+  // Murky water flowing along it, running in and out through a grate in the wall at each end.
+  water: { depth: 0.5, bridge: 'bridge', end: 'channel_grate' },
+  // A deep pit, spikes and bones at the bottom, crossed on iron grating.
+  spikes: { depth: 1.5, bridge: 'grate_bridge', bed: 'spike_pit' },
+};
+const WATER_Y = -FILLS.water.depth;
 const FLOW_SPEED = 0.35; // tiles a second
 const PUDDLE_GEO = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+const CANDLE = { width: 0.07, height: 0.14, pixel: 0.012 }; // a candle's flame
 
 const SCONCE_LIGHTS = 6; // constant per level so shaders never need recompiling between floors
 // Sconce fire: its glow and light colour, and the light's strength. Blue light looks dimmer, so it's stronger.
@@ -54,6 +63,19 @@ class GeoBuilder {
 
 const DIR_ANGLE = [Math.PI, Math.PI / 2, 0, -Math.PI / 2]; // N, E, S, W: rotate local +z to face that way
 
+/**
+ * Every prop a floor of `theme` might use: its decorations', its channels' and, in every theme after the
+ * first, the shop's. They must be loaded (loadProps) before one of its floors is built.
+ */
+export function propsForTheme(theme) {
+  const fill = FILLS[theme.channels?.fill];
+  return [...new Set([
+    ...decorProps(theme.style),
+    ...(fill ? [fill.bridge, fill.end, fill.bed].filter(Boolean) : []),
+    ...(THEMES.indexOf(theme) > 0 ? SHOP_PROPS : []),
+  ])];
+}
+
 export function buildLevelMeshes(data) {
   const { w, h, grid, theme } = data;
   const tex = getTextures(theme);
@@ -63,7 +85,8 @@ export function buildLevelMeshes(data) {
 
   const floor = new GeoBuilder(), ceil = new GeoBuilder(), walls = new GeoBuilder(), banks = new GeoBuilder();
   const vh = WALL_H / TILE;
-  const sunk = (t) => t === T.WATER || t === T.BRIDGE; // a channel: the floor drops away to the water
+  const sunk = (t) => t === T.CHANNEL || t === T.BRIDGE; // a channel: the floor drops away
+  const fill = FILLS[theme.channels?.fill];
 
   // Corner ambient occlusion: darken grid corners that touch walls.
   const cornerAO = (gx, gy) => {
@@ -102,8 +125,8 @@ export function buildLevelMeshes(data) {
         if (open(x + 1, y)) builder.quad([[x1, ya, z0], [x1, ya, z1], [x1, yb, z1], [x1, yb, z0]], [-1, 0, 0], uv, c);
       };
       side(0, WALL_H, wuv, wc, walls, isWall);
-      // A channel's sides run from the floor down to the water, under the walls at its ends and along its banks.
-      if (sunk(t)) side(WATER_Y, 0, [[0, 0], [1, 0], [1, 1], [0, 1]], [0.5 * tint, 0.5 * tint, 0.85 * tint, 0.85 * tint], banks, (nx, ny) => !sunk(get(nx, ny)));
+      // A channel's sides run from the floor down to its surface, under the walls at its ends and along its banks.
+      if (sunk(t)) side(-fill.depth, 0, [[0, 0], [1, 0], [1, 1], [0, 1]], [0.5 * tint, 0.5 * tint, 0.85 * tint, 0.85 * tint], banks, (nx, ny) => !sunk(get(nx, ny)));
     }
   }
 
@@ -137,33 +160,44 @@ export function buildLevelMeshes(data) {
     shopSlots.push(...prop.slots);
   }
 
+  const candles = []; // where candle flames burn, from props' candle_N anchors
   const place = (p) => {
     const prop = placeProp(p);
     group.add(prop.mesh);
     if (prop.obstacle) obstacles.push(prop.obstacle);
+    candles.push(...prop.candles);
   };
-  // Water channels: a surface of murky water flowing along each, bridges across, and a grate at each end where
-  // the water runs through the wall.
+  // Channels: each one's surface (flowing water, or the floor of a pit), with bridges across and whatever its
+  // fill puts at its ends and along its bed.
   const water = [];
   for (const c of data.channels ?? []) {
-    const g = new GeoBuilder();
+    const g = new GeoBuilder(), y0 = -fill.depth;
     for (const { x, y } of c.tiles) {
       const x0 = x * TILE, x1 = x0 + TILE, z0 = y * TILE, z1 = z0 + TILE;
-      g.quad([[x0, WATER_Y, z0], [x1, WATER_Y, z0], [x1, WATER_Y, z1], [x0, WATER_Y, z1]], [0, 1, 0], [[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1]], [1, 1, 1, 1]);
+      g.quad([[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], [0, 1, 0], [[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1]], [1, 1, 1, 1]);
+      // Turned a quarter at a time by position, so the pit floors don't all match.
+      if (fill.bed) place({ type: fill.bed, x: x + 0.5, y: y + 0.5, yaw: ((x * 7 + y * 13) % 4) * (Math.PI / 2) });
     }
-    const map = tex.water.clone();
-    map.needsUpdate = true;
-    group.add(new THREE.Mesh(g.build(), new THREE.MeshPhongMaterial({ map, vertexColors: true, shininess: 60, specular: 0x3c4a38 })));
-    water.push({ map, axis: c.axis, flow: c.flow });
-    for (const b of c.bridges) place({ type: 'bridge', x: b.x + 0.5, y: b.y + 0.5, yaw: c.axis === 'x' ? 0 : Math.PI / 2 });
-    for (const e of c.ends) place({ type: 'channel_grate', ...wallFace(e.x, e.y, e.side) });
+    if (theme.channels.fill === 'water') {
+      const map = tex.water.clone();
+      map.needsUpdate = true;
+      group.add(new THREE.Mesh(g.build(), new THREE.MeshPhongMaterial({ map, vertexColors: true, shininess: 60, specular: 0x3c4a38 })));
+      water.push({ map, axis: c.axis, flow: c.flow });
+    } else group.add(new THREE.Mesh(g.build(), mat(tex.pitFloor)));
+    for (const b of c.bridges) place({ type: fill.bridge, x: b.x + 0.5, y: b.y + 0.5, yaw: c.axis === 'x' ? 0 : Math.PI / 2 });
+    if (fill.end) for (const e of c.ends) place({ type: fill.end, ...wallFace(e.x, e.y, e.side) });
   }
-  // The theme's decorations (see decor.js). Puddles are drawn here; the rest are props.
+  // The theme's decorations (see decor.js). Puddles and cobwebs are drawn here; the rest are props.
+  const webMat = tex.cobweb && new THREE.MeshLambertMaterial({ map: tex.cobweb, transparent: true, depthWrite: false, side: THREE.DoubleSide });
   const puddleMats = tex.puddles?.map((map) => new THREE.MeshPhongMaterial({
     map, transparent: true, depthWrite: false, shininess: 80, specular: 0x506050,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
   }));
   for (const p of data.decor ?? []) {
+    if (p.type === 'cobweb') {
+      if (webMat) group.add(cobweb(p, webMat));
+      continue;
+    }
     if (p.type !== 'puddle') {
       place(p);
       continue;
@@ -177,6 +211,15 @@ export function buildLevelMeshes(data) {
   }
 
   const { flames, lights } = buildSconces(data, group, rng, isWall);
+  // Candles: small flames of their own, flickering with the sconces', but giving no light.
+  for (const [x, y, z] of candles) {
+    const flame = new Flame({ ...CANDLE, seed: rng.next() });
+    flame.position.set(x, y, z);
+    const halo = glowSprite(0xffa050, 0.28, 0.5);
+    halo.position.set(x, y + 0.06, z);
+    group.add(flame, halo);
+    flames.push({ flame, halo, phase: rng.next() * 10 });
+  }
 
   const frameMat = new THREE.MeshLambertMaterial({ map: tex.wall, color: 0x8a8070 });
   const doorMats = {
@@ -207,13 +250,28 @@ function dripSources(data, rng) {
       out.push({ x: p.x * TILE, y: WALL_H - 0.05, z: p.y * TILE, floor: 0.01, every: [2.5, 6] });
     }
   }
-  for (const c of data.channels ?? []) {
+  for (const c of data.theme.channels?.fill === 'water' ? data.channels : []) {
     for (let i = rng.int(1, 2); i > 0; i--) {
       const t = rng.pick(c.tiles);
       out.push({ x: (t.x + rng.range(0.25, 0.75)) * TILE, y: WALL_H - 0.05, z: (t.y + rng.range(0.25, 0.75)) * TILE, floor: WATER_Y, every: [1.5, 4] });
     }
   }
   return out;
+}
+
+/**
+ * A cobweb strung across the upper corner of a room: a triangle from the ceiling along each wall down to a
+ * point in the corner. `p.x`, `p.y` is the corner (grid tiles) and `p.corner` [dx, dy] the way into the room.
+ */
+function cobweb(p, material) {
+  const [dx, dz] = p.corner, cx = p.x * TILE, cz = p.y * TILE, L = 0.95, top = WALL_H - 0.01;
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute([
+    cx + dx * L, top, cz + dz * 0.01, cx + dx * 0.01, top, cz + dz * L, cx + dx * 0.04, top - 0.9, cz + dz * 0.04,
+  ], 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 1, 1, 1, 0.5, 0], 2));
+  g.computeVertexNormals();
+  return new THREE.Mesh(g, material);
 }
 
 /** Scrolls each channel's water along its course (`water` from buildLevelMeshes). */

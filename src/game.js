@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TILE, EYE_H, MAX_DEPTH, ARTEFACT_DEPTHS, RENDER_HEIGHTS, HOTBAR_SIZE, CROUCH_DROP, danger } from './config.js';
+import { TILE, EYE_H, MAX_DEPTH, ARTEFACT_DEPTHS, RENDER_HEIGHTS, HOTBAR_SIZE, CROUCH_DROP, danger, themeForDepth } from './config.js';
 import { RNG, rand } from './rng.js';
 import { generateLevel } from './dungeon/generator.js';
 import { Level } from './world/level.js';
@@ -14,7 +14,8 @@ import { playerPopupPos } from './combat.js';
 import { Input, GAME_KEYS } from './input.js';
 import { Sfx } from './audio.js';
 import { useSlot } from './hotbar.js';
-import { disposeGroup } from './dungeon/levelBuilder.js';
+import { disposeGroup, propsForTheme } from './dungeon/levelBuilder.js';
+import { loadProps } from './dungeon/props.js';
 import { TitleScene } from './ui/titleScene.js';
 
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, matches stair `dir`
@@ -53,6 +54,7 @@ export class Game {
     this.interaction = null;
     this.target = null;
     this.level = null;
+    this.loading = false; // waiting for a floor's props to download (see enterLevel)
 
     this.input.onLockChange = (locked) => {
       if (this.state !== 'play') return;
@@ -119,13 +121,15 @@ export class Game {
     this.viewmodel.setWeapon(WEAPONS.shortsword.model);
 
     this.ui.reset();
-    this.enterLevel(1, 'start');
-    this.state = 'play';
+    // Sound, fullscreen and the mouse now, while the click that started the run still counts for them.
     this.audio.init();
-    this.audio.setDrone(this.level.theme.drone);
-    this.log(`Welcome, ${this.playerName}. Somewhere beneath you, beyond ${MAX_DEPTH} floors of darkness, lies the Amulet of Yendor.`, 'info');
-    this.log('Click to take control. WASD move, mouse looks, click to attack, E to interact, I for your pack.', 'info');
     this.resume();
+    this.enterLevel(1, 'start', () => {
+      this.state = 'play';
+      this.audio.setDrone(this.level.theme.drone);
+      this.log(`Welcome, ${this.playerName}. Somewhere beneath you, beyond ${MAX_DEPTH} floors of darkness, lies the Amulet of Yendor.`, 'info');
+      this.log('Click to take control. WASD move, mouse looks, click to attack, E to interact, I for your pack.', 'info');
+    });
   }
 
   /** Back to the title screen (from the end of a run), its walk starting in the next theme. */
@@ -178,7 +182,32 @@ export class Game {
     return this.levels.get(depth);
   }
 
-  enterLevel(depth, arrive) {
+  /**
+   * Goes to floor `depth`, arriving by the stairs `arrive` names, then calls `done`. The first floor of a theme
+   * whose props haven't downloaded yet waits for them in the dark (they're usually fetched on the floor before;
+   * see arrive()).
+   */
+  enterLevel(depth, arrive, done = () => {}) {
+    const pending = this.levels.has(depth) ? null : loadProps(propsForTheme(themeForDepth(depth)));
+    if (!pending) {
+      this.arrive(depth, arrive);
+      done();
+      return;
+    }
+    this.loading = true;
+    this.ui.blackout(true);
+    pending.then(() => {
+      this.loading = false;
+      this.ui.blackout(false);
+      this.arrive(depth, arrive);
+      done();
+    }, () => {
+      this.log('The way down is lost in the dark... (loading failed; trying again)', 'warn');
+      setTimeout(() => this.enterLevel(depth, arrive, done), 2000);
+    });
+  }
+
+  arrive(depth, arrive) {
     if (this.level) {
       for (const pr of this.level.projectiles) this.level.group.remove(pr.mesh);
       this.level.projectiles.length = 0;
@@ -221,13 +250,16 @@ export class Game {
       level.spawnT = Math.min(level.spawnT, 6);
       for (let i = 0; i < 2; i++) level.spawnWanderer(true);
     }
+    // Start fetching the next floor's props, so they're here by the time you go down.
+    loadProps(propsForTheme(themeForDepth(Math.min(MAX_DEPTH, depth + 1))))?.catch(() => {});
   }
 
   changeLevel(depth, arrive) {
     this.audio.stairs();
     this.ui.fadeTransition();
-    this.enterLevel(depth, arrive);
-    this.log(arrive === 'down' ? `You descend to depth ${depth}: ${this.level.theme.name}.` : `You climb to depth ${depth}.`);
+    this.enterLevel(depth, arrive, () => {
+      this.log(arrive === 'down' ? `You descend to depth ${depth}: ${this.level.theme.name}.` : `You climb to depth ${depth}.`);
+    });
   }
 
   // --- Main loop ---
@@ -238,8 +270,8 @@ export class Game {
     this.last = now;
     this.input.captureCtrl = this.state === 'play';
     if (this.state === 'play') {
-      this.handleKeys();
-      if (!this.paused && !this.menu && !this.over) this.update(dt);
+      if (!this.loading) this.handleKeys();
+      if (!this.paused && !this.menu && !this.over && !this.loading) this.update(dt);
       else this.updateCamera(0);
     }
     if (this.state === 'title') {

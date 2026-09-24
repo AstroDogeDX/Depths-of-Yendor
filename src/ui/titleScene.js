@@ -1,13 +1,15 @@
 import * as THREE from 'three';
 import { THEMES, FLOORS_PER_THEME, TILE, EYE_H } from '../config.js';
 import { generateLevel } from '../dungeon/generator.js';
-import { buildLevelMeshes, disposeGroup, flowWater } from '../dungeon/levelBuilder.js';
+import { buildLevelMeshes, disposeGroup, flowWater, propsForTheme } from '../dungeon/levelBuilder.js';
+import { loadProps } from '../dungeon/props.js';
 import { T } from '../dungeon/tiles.js';
 import { Drips } from '../fx/drips.js';
 
 // Behind the title screen: a slow walk through a floor of each theme in turn, from the stairs you arrive by
 // to the stairs down, and down them into the next theme. Only the level's architecture is built: no monsters
-// or items.
+// or items. Each theme's props are fetched during the walk before it, so the next walk is ready by the time the
+// last one ends; if one isn't, the screen stays black until it is.
 
 const SPEED = 1.7; // m/s: an unhurried walk
 const FADE_IN = 1.5; // seconds
@@ -27,6 +29,7 @@ export class TitleScene {
     this.ambient = new THREE.AmbientLight(0xffffff, 5);
     this.scene.add(this.camera, this.torch, this.ambient);
     this.themeIndex = -1;
+    this.token = 0; // bumped by stop(), so a walk still waiting for its props doesn't start after all
     this.built = null;
     this.curve = null;
     this.fade = 1; // 1 = black; the title screen lays this over the view
@@ -40,6 +43,7 @@ export class TitleScene {
 
   /** Frees the current floor while the game is being played. */
   stop() {
+    this.token++;
     if (this.built) {
       this.scene.remove(this.built.group);
       disposeGroup(this.built.group);
@@ -52,6 +56,19 @@ export class TitleScene {
     this.stop();
     this.themeIndex = (this.themeIndex + 1) % THEMES.length;
     const theme = THEMES[this.themeIndex];
+    const pending = loadProps(propsForTheme(theme));
+    if (!pending) {
+      this.walk(theme);
+      return;
+    }
+    const token = this.token;
+    pending.then(() => { if (token === this.token) this.walk(theme); },
+      () => setTimeout(() => { if (token === this.token) this.next(); }, 3000)); // couldn't load: try the next theme
+  }
+
+  walk(theme) {
+    // Fetch the next theme's props while this one plays.
+    loadProps(propsForTheme(THEMES[(this.themeIndex + 1) % THEMES.length]))?.catch(() => {});
     // One of the theme's ordinary floors: not its first (which has the shop) or its last (the boss's).
     const first = this.themeIndex * FLOORS_PER_THEME + 1;
     let data = null, points = null;

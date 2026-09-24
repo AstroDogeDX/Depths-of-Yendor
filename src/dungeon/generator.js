@@ -285,7 +285,7 @@ function attemptLevel(rng, depth, opts) {
 
   const theme = themeForDepth(depth);
   const [sx, sy] = STEPS[ctx.up.dir];
-  const channels = theme.channels ? digChannels({ rng, grid, w: W, rooms, start: idx(ctx.up.x + sx, ctx.up.y + sy) }) : [];
+  const channels = theme.channels ? digChannels({ rng, grid, w: W, rooms, start: idx(ctx.up.x + sx, ctx.up.y + sy), count: theme.channels.count }) : [];
   const occupied = new Set([idx(ctx.up.x, ctx.up.y)]);
   if (ctx.down) occupied.add(idx(ctx.down.x, ctx.down.y));
   for (const m of ctx.monsters) occupied.add(idx(m.x, m.y));

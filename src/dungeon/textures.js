@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RNG } from '../rng.js';
 import { sewerTextures } from './sewerTextures.js';
+import { catacombTextures } from './catacombTextures.js';
 
 const S = 64;
 const cache = new Map();
@@ -158,9 +159,10 @@ function trapTexture() {
 }
 
 // Themes with a `style` paint their own textures. Besides wall, floor and ceiling, a style may add `channel`
-// (a water channel's sides), `water` and `puddles`, and set `wallFullHeight` for a wall texture that spans the
-// wall's height once instead of repeating up it.
-const STYLES = { sewers: sewerTextures };
+// (a channel's sides, from its surface up to the floor), the surface itself (`water`, or a pit's `pitFloor`),
+// and decorations' (`puddles`, `cobweb`), and set `wallFullHeight` for a wall texture that spans the wall's
+// height once instead of repeating up it.
+const STYLES = { sewers: sewerTextures, catacombs: catacombTextures };
 
 export function getTextures(theme) {
   if (!cache.has(theme.name)) {

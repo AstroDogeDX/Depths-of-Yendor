@@ -87,6 +87,9 @@ export const ROOM_TYPES = {
   },
 };
 
+/** The props a shop is furnished with. */
+export const SHOP_PROPS = ['shop_counter', 'display_table', 'shelf', 'barrel', 'crates', 'rug'];
+
 /**
  * Lays the shop out relative to its door, in local coordinates: u runs along the back wall and v from the
  * back wall toward the door, both in tiles. Returns positions in (fractional) grid tiles; yaw 0 faces +z.

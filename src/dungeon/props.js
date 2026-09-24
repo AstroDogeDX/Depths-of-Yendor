@@ -2,28 +2,54 @@ import * as THREE from 'three';
 import { buildBBModel } from '../items/bbmodel.js';
 import { MODEL_PX, TILE } from '../config.js';
 
-// Room furniture: Blockbench projects in assets/models/props, set out by room types (see rooms.js). A prop's
-// origin sits on the floor at its middle with its front facing +z. Empty groups named slot_1, slot_2... mark
-// where items rest on it, such as a shop's wares.
-const FILES = import.meta.glob('../../assets/models/props/*.bbmodel', { import: 'default', eager: true });
+// Room furniture: Blockbench projects in assets/models/props, set out by room types (see rooms.js) and theme
+// decorations (decor.js). A prop's origin sits on the floor at its middle with its front facing +z. Empty
+// groups named slot_1, slot_2... mark where items rest on it, such as a shop's wares, and candle_1, candle_2...
+// where candle flames burn.
+//
+// Props load on demand, each its own small download, so the game starts without every theme's furniture:
+// loadProps() fetches what a floor needs before it's built (see propsForTheme in levelBuilder.js).
+const FILES = import.meta.glob('../../assets/models/props/*.bbmodel', { import: 'default' });
+const file = (type) => `../../assets/models/props/${type}.bbmodel`;
+const sources = new Map(); // type -> the parsed .bbmodel, once it has arrived
+const fetching = new Map(); // type -> its download in progress
 const templates = new Map();
+
+/**
+ * Fetches the models for `types`. Returns a promise that settles when they have all arrived, or null if they
+ * already had, so a caller can carry straight on.
+ */
+export function loadProps(types) {
+  const missing = types.filter((t) => !sources.has(t));
+  if (!missing.length) return null;
+  return Promise.all(missing.map((type) => {
+    if (!fetching.has(type)) {
+      if (!FILES[file(type)]) throw new Error(`No prop model assets/models/props/${type}.bbmodel`);
+      fetching.set(type, FILES[file(type)]().then(
+        (src) => { sources.set(type, src); fetching.delete(type); },
+        (err) => { fetching.delete(type); throw err; }, // so a later call tries again
+      ));
+    }
+    return fetching.get(type);
+  }));
+}
 
 function template(type) {
   if (!templates.has(type)) {
-    const src = FILES[`../../assets/models/props/${type}.bbmodel`];
-    if (!src) throw new Error(`No prop model assets/models/props/${type}.bbmodel`);
+    const src = sources.get(type);
+    if (!src) throw new Error(`Prop ${type} isn't loaded: fetch it with loadProps() first`);
     const model = buildBBModel(src, MODEL_PX);
     const { anchors } = model.userData;
-    const slots = Object.keys(anchors).filter((n) => /^slot_\d+$/.test(n))
-      .sort((a, b) => a.slice(5) - b.slice(5)).map((n) => anchors[n]);
-    templates.set(type, { model, bounds: new THREE.Box3().setFromObject(model), slots });
+    const numbered = (prefix) => Object.keys(anchors).filter((n) => new RegExp(`^${prefix}_\\d+$`).test(n))
+      .sort((a, b) => a.slice(prefix.length + 1) - b.slice(prefix.length + 1)).map((n) => anchors[n]);
+    templates.set(type, { model, bounds: new THREE.Box3().setFromObject(model), slots: numbered('slot'), candles: numbered('candle') });
   }
   return templates.get(type);
 }
 
 /**
  * Sets out a prop { type, x, y (grid tiles), yaw, solid, round }. Returns its mesh, the world positions of
- * its slots, and an obstacle over its footprint (a box, or a circle for round things) if it's solid.
+ * its slots and candles, and an obstacle over its footprint (a box, or a circle for round things) if it's solid.
  */
 export function placeProp(p) {
   const t = template(p.type);
@@ -40,5 +66,5 @@ export function placeProp(p) {
     obstacle = p.round ? { x: cx, z: cz, r: Math.max(hw, hd) }
       : { x: cx, z: cz, hw: Math.abs(c) * hw + Math.abs(s) * hd, hd: Math.abs(s) * hw + Math.abs(c) * hd };
   }
-  return { mesh, slots: t.slots.map(place), obstacle };
+  return { mesh, slots: t.slots.map(place), candles: t.candles.map(place), obstacle };
 }

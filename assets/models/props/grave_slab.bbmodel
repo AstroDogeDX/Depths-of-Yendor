@@ -1,0 +1,89 @@
+{
+	"meta": {
+		"format_version": "5.0",
+		"model_format": "free",
+		"box_uv": false
+	},
+	"name": "grave_slab",
+	"model_identifier": "",
+	"visible_box": [1, 1, 0],
+	"resolution": {
+		"width": 128,
+		"height": 128
+	},
+	"elements": [
+		{
+			"name": "slab",
+			"box_uv": false,
+			"render_order": "default",
+			"locked": false,
+			"allow_mirror_modeling": true,
+			"from": [-28, 0, -48],
+			"to": [28, 1.2, 48],
+			"autouv": 0,
+			"color": 0,
+			"origin": [0, 0.6, 0],
+			"rotation": [0, 0, 0],
+			"faces": {
+				"east": {
+					"uv": [1, 99, 97, 100.2],
+					"texture": 0
+				},
+				"west": {
+					"uv": [1, 103, 97, 104.2],
+					"texture": 0
+				},
+				"up": {
+					"uv": [1, 1, 57, 97],
+					"texture": 0
+				},
+				"down": {
+					"uv": [0, 0, 0, 0],
+					"texture": null
+				},
+				"south": {
+					"uv": [1, 107, 57, 108.2],
+					"texture": 0
+				},
+				"north": {
+					"uv": [59, 107, 115, 108.2],
+					"texture": 0
+				}
+			},
+			"type": "cube",
+			"uuid": "c8d4454a-e2c9-4380-a4e9-5a8364c3c4b7"
+		}
+	],
+	"groups": [],
+	"outliner": ["c8d4454a-e2c9-4380-a4e9-5a8364c3c4b7"],
+	"textures": [
+		{
+			"path": "",
+			"name": "grave_slab.png",
+			"folder": "",
+			"namespace": "",
+			"id": "0",
+			"group": "",
+			"width": 128,
+			"height": 128,
+			"uv_width": 128,
+			"uv_height": 128,
+			"particle": false,
+			"use_as_default": false,
+			"layers_enabled": false,
+			"sync_to_project": "",
+			"render_mode": "default",
+			"render_sides": "auto",
+			"pbr_channel": "color",
+			"frame_time": 1,
+			"frame_order_type": "loop",
+			"frame_order": "",
+			"frame_interpolate": false,
+			"visible": true,
+			"internal": true,
+			"saved": true,
+			"uuid": "6c073991-0c0f-4b1b-a878-8b50d99bd2af",
+			"source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAYAAADDPmHLAAADgklEQVR42u3dSYobQRCF4b6MwXhrMHjbC4PvfyCbXghEUVOOFZn5PUgEak2t+vUyInL6+Pvn898K7YP29fvXz+kv/tf/6EqfALBCc6VvAPDj+7epGgAyAIj2y31ZeGoDwCQA5DYAAAAAAADAcgC8YgYAcAAAzARAajYAgIAAnOXptSEAwE29f6lfX1pu3l0KwNH7vu7f3gJgQQfQBXRwgJZ9eI4DAIADAGAGAI4cILVvBwAHAMBMDgAADgCAyADU6ptbOcBRnQAAnR2gx6weDgAAAAAAAAAAgCwAAJUBeEXp6gAcgAMYDbzOt+9O2nhfopUDQOr7ASCAA+xBwAGMBTRxAACIAQAwMwClDmB5OAcAQAsAcn6ZdwCoNUMIABwAADUAqDlX72xOIAA4AAAAAAAAAODZ0cCjMm5JBfBsLKDG6wMguAMYCxjQAVpE5wAYxAFapmYACA4AB+AAw24OCYAKMUCUi2ssYGEH0AUEAKBVLNByDyJrA4NnARxgQAcAgBhgyM0iAdDIAXKd4Wgdf2pWcHesAgABxwJ0AQsC0LKyCAB1AAD0BGCvjr+9r+djxAAAOIQAAIt0ARxAHQAAI1UCU1/3qm7AAWQBAIgEQJQxBKuDOQAHiJAGbtcDtEgDz+YDcIAHAdhbD9ASgLMNr1zpCwCOVgaV7Bb2aj2yCbuFiwHEADm6OjewliOkng8oCxjIASJOH+MAjQHIrdABYOIYIHW6V25ZGAAdAdjGCLVTvLuvs1dPMBYwQCGoZx0AAIHTwKtZwU4OVQcAQCQArAxaGABrAzlAdwjEAGIAAMzgAFfp21E+v5cG3hllVAcIFgPUrANwgIEcoNXjnRkUKAZotWRcDDCQA5SO+vXKLgAQOAvoAQEAburuyaEj2D4A1AEAUNsBWu3n33qOIAAqOsBTYwOl9QgAVACg9R4/pQ4BgIFjAHWAAQF4cqInB5AFcIBWWcDeqV6jNwAkOsDMzZV+AIBIXYorfQHAdhy+9nh86fNLP58rHawLaL0uQBc1YAywMgTDAVCSv+/N6cu9nQXapRzganuX2pNQOMADDlB7+tgsexgf/V0MsGB7hyDEfICav+TU59Xq22s9v3STi9RuLbQDjHZ45CiBYQgHmDX1e9pJhgkm9cWLZxNP/9JHP6P4aecojiVUAOf6vAY3iIiIiIiIiIiIiIiIiIiIiIhW1n/3SO7w5zxlpQAAAABJRU5ErkJggg=="
+		}
+	]
+}

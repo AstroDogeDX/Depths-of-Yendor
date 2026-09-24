@@ -176,6 +176,14 @@ export class UI {
     el.style.opacity = 0;
   }
 
+  /** Holds the screen black while a floor loads, or fades back in from black when `on` is false. */
+  blackout(on) {
+    if (!on) return this.fadeTransition();
+    const el = $('fade');
+    el.style.transition = 'none';
+    el.style.opacity = 1;
+  }
+
   fadeTransition() {
     const el = $('fade');
     el.style.transition = 'none';
@@ -330,7 +338,7 @@ export class UI {
         else if (t === T.STAIRS_DOWN) c = '#5aa0ff';
         else if (t === T.STAIRS_UP) c = '#ffd27a';
         else if (t === T.PEDESTAL) c = '#d0a040';
-        else if (t === T.WATER) c = lvl.visible[i] ? '#2f5f66' : '#1f3c40';
+        else if (t === T.CHANNEL) c = lvl.theme.channels.fill === 'water' ? (lvl.visible[i] ? '#2f5f66' : '#1f3c40') : (lvl.visible[i] ? '#1c1916' : '#121010');
         else if (t === T.BRIDGE) c = lvl.visible[i] ? '#7a5a36' : '#4e3a24';
         else if (t === T.DOOR) {
           const d = lvl.doorAt(tx, ty);
