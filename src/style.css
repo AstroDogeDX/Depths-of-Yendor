@@ -229,6 +229,51 @@ button.alt { background: linear-gradient(#5a5040, #3a3228); color: var(--ink); }
 #bigmap { border: 2px solid var(--gold-dim); image-rendering: pixelated; }
 
 /* --- Title & end screens --- */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* The title screen lies over a walk through the dungeon (ui/titleScene.js), so it has no background of its own. */
+#title { background: none; }
+.title-shade {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse 60% 55% at 50% 45%, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0) 75%),
+    radial-gradient(ellipse at 50% 50%, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.9) 100%);
+}
+#title-fade { position: absolute; inset: 0; background: #000; pointer-events: none; }
+#title .title-inner { position: relative; }
+#logo {
+  display: block; margin: 0 auto 6px; image-rendering: pixelated;
+  filter: drop-shadow(0 0 18px rgba(255, 150, 50, 0.3)); animation: logo-glow 3.4s ease-in-out infinite;
+}
+@keyframes logo-glow { 50% { filter: drop-shadow(0 0 28px rgba(255, 150, 50, 0.45)); } }
+#title .sub { text-shadow: 0 1px 3px #000; line-height: 1.5; }
+#title .form { margin: 18px 0 14px; }
+.title-options { display: flex; gap: 22px; justify-content: center; align-items: center; flex-wrap: wrap; font-size: 14px; }
+.title-options .seed { display: inline-flex; align-items: center; gap: 8px; color: var(--gold-dim); }
+.title-options .seed input {
+  font-family: var(--serif); font-size: 14px; padding: 4px 8px; width: 110px;
+  background: rgba(22, 18, 12, 0.85); color: var(--ink); border: 1px solid var(--gold-dim);
+}
+button.link {
+  background: none; border: none; padding: 0; font-size: 14px; color: var(--gold);
+  text-decoration: underline dotted; text-underline-offset: 4px;
+}
+button.link:hover { background: none; color: #f4dca0; }
+#title-caption {
+  position: absolute; left: 24px; bottom: 20px; font-size: 15px; letter-spacing: 0.14em; font-variant: small-caps;
+  color: var(--gold); opacity: 0.75; text-shadow: 0 1px 3px #000; pointer-events: none;
+}
+.howto { width: min(860px, 94vw); max-height: 92vh; overflow-y: auto; text-align: left; }
+.howto h3 { margin: 16px 0 6px; color: var(--gold); font-weight: normal; letter-spacing: 0.04em; }
+.howto-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 4px 24px; }
+.howto-cols h3 { margin-top: 4px; }
+.howto p { margin: 0 0 6px; line-height: 1.5; font-size: 15px; }
+.howto b { color: var(--gold); font-weight: normal; font-family: var(--mono); }
+#howto-realms { margin: 0; padding-left: 22px; line-height: 1.7; font-size: 15px; }
+#howto-realms span { color: var(--gold-dim); }
+.howto .lore { margin-top: 12px; }
+#howto-close { display: block; margin: 16px auto 0; }
+
 .screen {
   position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; overflow-y: auto;
   background: radial-gradient(ellipse at 50% 35%, #2a1f14 0%, #0c0906 60%, #000 100%);
@@ -250,8 +295,6 @@ button.alt { background: linear-gradient(#5a5040, #3a3228); color: var(--ink); }
 .check span { opacity: 0.55; font-size: 13px; }
 .check input { accent-color: #b08c48; }
 #pause-fs { margin-top: 6px; font-size: 13px; opacity: 0.8; }
-.controls { font-size: 14px; line-height: 1.8; opacity: 0.85; margin-top: 18px; }
-.controls b { color: var(--gold); font-weight: normal; font-family: var(--mono); }
 .lore { font-size: 14px; opacity: 0.6; line-height: 1.6; margin-top: 22px; }
 
 #tomb { display: inline-block; text-align: left; font-family: var(--mono); font-size: 15px; line-height: 1.25; color: #c8c0b0; margin: 18px auto; }

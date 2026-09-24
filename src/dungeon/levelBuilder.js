@@ -140,6 +140,14 @@ export function buildLevelMeshes(data) {
   return { group, flames, lights, obstacles, doors, shopSlots };
 }
 
+/** Frees a level's geometry and materials. Textures are shared between levels and kept. */
+export function disposeGroup(group) {
+  group.traverse((o) => {
+    o.geometry?.dispose();
+    if (o.material) for (const m of [].concat(o.material)) m.dispose();
+  });
+}
+
 export const DOOR_HEIGHT = 2.35;
 
 /**

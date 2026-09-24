@@ -114,28 +114,55 @@
     </div>
 
     <div id="title" class="screen">
+      <div class="title-shade"></div>
+      <div id="title-fade"></div>
       <div class="title-inner">
-        <h1>Depths of Yendor</h1>
-        <p class="sub">Descend ten floors. Take the Amulet. Climb home — if you can.</p>
+        <h1 class="sr-only">Depths of Yendor</h1>
+        <canvas id="logo" aria-hidden="true"></canvas>
+        <p class="sub" id="title-sub"></p>
         <div class="form">
           <label>Name <input id="name-in" maxlength="16" value="Adventurer" autocomplete="off" /></label>
-          <label>Seed <input id="seed-in" maxlength="12" placeholder="random" autocomplete="off" /></label>
           <button id="start-btn">Descend</button>
         </div>
-        <label class="check"><input type="checkbox" id="fs-in" /> Play fullscreen <span>(recommended: stops Ctrl+W closing the tab while you sneak)</span></label>
-        <div class="controls">
-          <div><b>WASD</b> move · <b>Mouse</b> look · <b>← →</b> turn</div>
-          <div><b>Shift</b> sprint — fast, but loud &nbsp; <b>Ctrl / C</b> sneak — slow and near-silent, for striking sleepers unaware</div>
-          <div><b>Click / Space</b> attack — your swing meter refills between blows, and partial swings hit softer</div>
-          <div><b>E</b> pick up · use stairs &nbsp; <b>I</b> pack &nbsp; <b>M</b> map</div>
-          <div><b>1–6</b> hotbar (assign from your pack) &nbsp; <b>F / Right-click</b> zap wand &nbsp; <b>Q</b> drink known healing &nbsp; <b>R / T</b> artefact powers</div>
-          <div><b>P</b> change pixel resolution &nbsp; <b>Esc</b> pause</div>
+        <div class="title-options">
+          <label class="seed">Seed <input id="seed-in" maxlength="12" placeholder="random" autocomplete="off" /></label>
+          <label class="check" title="Recommended: in fullscreen, Ctrl+W sneaks forward instead of closing the tab"><input type="checkbox" id="fs-in" /> Fullscreen</label>
+          <button id="howto-btn" class="link">How to play</button>
         </div>
+      </div>
+      <div id="title-caption"></div>
+    </div>
+
+    <div id="howto" class="overlay" hidden>
+      <div class="panel howto">
+        <h2>How to play</h2>
+        <div class="howto-cols">
+          <section>
+            <h3>Moving</h3>
+            <p><b>WASD</b> move · <b>Mouse</b> look · <b>← →</b> turn</p>
+            <p><b>Shift</b> sprint: fast, but loud.</p>
+            <p><b>Ctrl</b> or <b>C</b> sneak: slow and near-silent, for striking sleepers unaware.</p>
+          </section>
+          <section>
+            <h3>Fighting</h3>
+            <p><b>Click</b> or <b>Space</b> attack. Your swing meter refills between blows, and a partial swing hits softer.</p>
+            <p><b>F</b> or <b>Right-click</b> zap a wand · <b>Q</b> drink known healing · <b>R</b> / <b>T</b> artefact powers</p>
+          </section>
+          <section>
+            <h3>Everything else</h3>
+            <p><b>E</b> pick up, open, buy, use stairs · <b>I</b> pack · <b>M</b> map</p>
+            <p><b>1–6</b> hotbar (assign from your pack) · <b>P</b> pixel size · <b>Esc</b> pause</p>
+          </section>
+        </div>
+        <h3>The descent</h3>
+        <ol id="howto-realms"></ol>
         <p class="lore">
           Potions, scrolls, wands and rings are unidentified: their colours, labels and woods are shuffled every run.
           Drink, read and wear at your own risk. Some equipment is cursed and will not come off.
-          Monsters sleep until they notice you — strike first and strike hard.
+          Monsters sleep until they notice you. Strike first, and strike hard.
         </p>
+        <p class="lore">Play fullscreen if you can: outside it, the browser keeps Ctrl+W (sneak forward) for closing the tab.</p>
+        <button id="howto-close">Close</button>
       </div>
     </div>
 

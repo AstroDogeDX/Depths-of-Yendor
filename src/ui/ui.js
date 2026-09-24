@@ -3,9 +3,10 @@ import { KIND_GLYPH, ARTEFACTS, WEAPONS, ARMORS } from '../items/defs.js';
 import { equipSlotFor } from '../items/use.js';
 import { T } from '../dungeon/tiles.js';
 import { TRAP_COLORS } from '../world/level.js';
-import { HUNGER_HUNGRY, HUNGER_WEAK, INVENTORY_SIZE, TILE, HOTBAR_SIZE, PLAYER_SPEED } from '../config.js';
+import { HUNGER_HUNGRY, HUNGER_WEAK, INVENTORY_SIZE, TILE, HOTBAR_SIZE, PLAYER_SPEED, MAX_DEPTH, THEMES, FLOORS_PER_THEME } from '../config.js';
 import { canHotbar, slotItem, slotHolds, slotAction, assignSlot, clearSlot } from '../hotbar.js';
 import { stackable } from '../items/generate.js';
+import { Logo } from './logo.js';
 
 const $ = (id) => document.getElementById(id);
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
@@ -45,8 +46,24 @@ export class UI {
 
   bind(game) {
     this.game = game;
+    this.logo = new Logo($('logo'));
+    // As wide as fits, but no more than about 40% of the screen's height.
+    const fitLogo = () => this.logo.fit(Math.min(760, window.innerWidth * 0.86, window.innerHeight * 0.42 * (this.logo.w / this.logo.h)));
+    fitLogo();
+    window.addEventListener('resize', fitLogo);
+    $('title-sub').textContent = `${MAX_DEPTH} floors down, the Amulet of Yendor waits. Take it, and climb home, if you can.`;
+    $('howto-realms').innerHTML = THEMES.map((t, i) => {
+      const first = i * FLOORS_PER_THEME + 1, last = first + FLOORS_PER_THEME - 1;
+      return `<li>${t.name} <span>· floors ${first}–${last}${last === MAX_DEPTH ? ': the Amulet, and the Warden who keeps it' : ''}</span></li>`;
+    }).join('');
+    $('howto-btn').addEventListener('click', () => { $('howto').hidden = false; });
+    $('howto-close').addEventListener('click', () => { $('howto').hidden = true; });
+    $('howto').addEventListener('click', (e) => { if (e.target === $('howto')) $('howto').hidden = true; });
+
     const start = () => {
       $('title').hidden = true;
+      $('howto').hidden = true;
+      this.fadeTransition();
       game.newRun({ seed: $('seed-in').value.trim().toUpperCase(), name: $('name-in').value.trim() });
     };
     $('start-btn').addEventListener('click', start);
@@ -61,12 +78,7 @@ export class UI {
       $('end').hidden = true;
       game.newRun({ seed: game.seed, name: game.playerName });
     });
-    $('menu-btn').addEventListener('click', () => {
-      $('end').hidden = true;
-      $('hud').hidden = true;
-      $('title').hidden = false;
-      game.state = 'title';
-    });
+    $('menu-btn').addEventListener('click', () => game.showTitle());
     // One fullscreen preference, shown on the title screen and the pause panel.
     for (const id of ['fs-in', 'fs-pause']) {
       const box = $(id);
@@ -189,8 +201,21 @@ export class UI {
 
   // --- Per-frame ---
 
+  showTitle() {
+    this.closeMenus();
+    $('end').hidden = true;
+    $('hud').hidden = true;
+    $('title').hidden = false;
+  }
+
   update(dt) {
     const g = this.game;
+    if (g.state === 'title') {
+      this.logo.update(dt);
+      $('title-fade').style.opacity = g.title.fade;
+      this.set('title-caption', g.title.caption);
+      return;
+    }
     if (g.state !== 'play' || !g.player || !g.level) return;
     const p = g.player, lvl = g.level, k = g.knowledge;
 
@@ -577,6 +602,10 @@ export class UI {
 
   onKey(e) {
     const g = this.game;
+    if (e.code === 'Escape' && !$('howto').hidden) {
+      $('howto').hidden = true;
+      return;
+    }
     if (!g || g.menu !== 'inventory') return;
     const n = g.player.inventory.length;
     const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);

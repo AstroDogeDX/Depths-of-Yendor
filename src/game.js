@@ -14,15 +14,10 @@ import { playerPopupPos } from './combat.js';
 import { Input, GAME_KEYS } from './input.js';
 import { Sfx } from './audio.js';
 import { useSlot } from './hotbar.js';
+import { disposeGroup } from './dungeon/levelBuilder.js';
+import { TitleScene } from './ui/titleScene.js';
 
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, matches stair `dir`
-
-function disposeGroup(group) {
-  group.traverse((o) => {
-    o.geometry?.dispose();
-    if (o.material) for (const m of [].concat(o.material)) m.dispose();
-  });
-}
 
 export class Game {
   constructor(canvas, ui) {
@@ -42,6 +37,7 @@ export class Game {
     this.scene.add(this.ambient);
 
     this.viewmodel = new ViewModel();
+    this.title = new TitleScene(this.renderer); // the walk through the dungeon behind the title screen
     this.input = new Input(canvas);
     this.audio = new Sfx();
     this.ui = ui;
@@ -86,6 +82,7 @@ export class Game {
     this.resize();
 
     ui.bind(this);
+    this.title.start();
     this.last = performance.now();
     requestAnimationFrame(this.loop);
   }
@@ -93,6 +90,7 @@ export class Game {
   // --- Run lifecycle ---
 
   newRun({ seed, name }) {
+    this.title.stop();
     this.seed = seed || Math.random().toString(36).slice(2, 8).toUpperCase();
     this.playerName = name || 'Adventurer';
     const rng = new RNG(`${this.seed}:run`);
@@ -128,6 +126,15 @@ export class Game {
     this.log(`Welcome, ${this.playerName}. Somewhere beneath you, beyond ${MAX_DEPTH} floors of darkness, lies the Amulet of Yendor.`, 'info');
     this.log('Click to take control. WASD move, mouse looks, click to attack, E to interact, I for your pack.', 'info');
     this.resume();
+  }
+
+  /** Back to the title screen (from the end of a run), its walk starting in the next theme. */
+  showTitle() {
+    this.state = 'title';
+    this.menu = null;
+    this.input.unlock();
+    this.title.start();
+    this.ui.showTitle();
   }
 
   resume() {
@@ -235,7 +242,10 @@ export class Game {
       if (!this.paused && !this.menu && !this.over) this.update(dt);
       else this.updateCamera(0);
     }
-    if (this.level) this.render();
+    if (this.state === 'title') {
+      this.title.update(dt);
+      this.title.render();
+    } else if (this.level) this.render();
     this.ui.update(dt);
     this.input.endFrame();
   };
@@ -357,6 +367,7 @@ export class Game {
     this.canvas.style.height = '100%';
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    this.title.resize(w / h);
     this.viewmodel.resize(w / h);
   }
 

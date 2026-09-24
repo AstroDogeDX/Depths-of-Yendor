@@ -63,6 +63,7 @@ Potion, scroll and food slots remember the *type*, so a slot whose stack runs ou
 - **Items:** 7 weapons with different reach and speed (spears out-reach swords, hammers hit hard but recover slowly), 5 armours with strength requirements, 10 potions, 9 scrolls, 5 wands, 6 rings, food.
 - **A shop** on the first floor of each theme after the first (floors 6, 11, 16 and 21). See *The shop* below.
 - **6 artefacts**, 5 per run in guarded shrines on the third floor of each theme (3, 8, 13, 18 and 23): Chalice of Crimson Thirst (lifesteal), Eye of the Deep (see all monsters and traps), Horn of Thunder (stun blast), Cloak of Shadows (invisibility), Boots of the Wind (speed), Emberheart (burning strikes, fire immunity). You have two attunement slots.
+- A title screen that walks you through a floor of each theme in turn, down the stairs from one to the next.
 - A Rogue tombstone when you die. Seeds are shareable.
 
 ## Stamina, sprinting and sneaking
@@ -180,7 +181,9 @@ src/
   items/models.js      loads the weapon and item models, tinting each item in its colour
   items/bbmodel.js     loads Blockbench .bbmodel projects (cubes, meshes, groups, textures) into three.js
   fx/                  viewmodel (hands), pixel-art flames, projectiles, particles, glow sprites
-  ui/ui.js             HUD, minimap, message log, floating text, pack, dialogs, end screens
+  ui/ui.js             HUD, minimap, message log, floating text, pack, dialogs, title and end screens
+  ui/logo.js           the pixel-art title logo, drawn from hand-made glyphs, with its moving glint
+  ui/titleScene.js     the walk through a floor of each theme behind the title screen
 assets/models/         Blockbench models: monsters/, npcs/, weapons/, items/, props/, the hand torch and the wall sconce
 tools/modelgen/        builds those models from code (npm run models)
 ```
