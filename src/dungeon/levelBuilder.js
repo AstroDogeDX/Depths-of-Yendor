@@ -6,7 +6,8 @@ import { RNG } from '../rng.js';
 import { glowSprite } from '../fx/glow.js';
 import { Flame } from '../fx/flame.js';
 import { buildBBModel } from '../items/bbmodel.js';
-import { placeProp } from './props.js';
+import { placeProp, propTemplate } from './props.js';
+import { roughRock } from './roughRock.js';
 import { faceKey, wallFace, decorProps } from './decor.js';
 import { SHOP_PROPS } from './rooms.js';
 import sconceModel from '../../assets/models/sconce.bbmodel';
@@ -18,6 +19,8 @@ const FILLS = {
   water: { depth: 0.5, bridge: 'bridge', end: 'channel_grate' },
   // A deep pit, spikes and bones at the bottom, crossed on iron grating.
   spikes: { depth: 1.5, bridge: 'grate_bridge', bed: 'spike_pit' },
+  // A chasm with no bottom to be seen, its sides fading into black, crossed on rickety rope bridges.
+  chasm: { depth: 8, bridge: 'rope_bridge', dark: 5 },
 };
 const WATER_Y = -FILLS.water.depth;
 const FLOW_SPEED = 0.35; // tiles a second
@@ -28,16 +31,35 @@ const SCONCE_LIGHTS = 6; // constant per level so shaders never need recompiling
 // Sconce fire: its glow and light colour, and the light's strength. Blue light looks dimmer, so it's stronger.
 const FIRE = { color: 0xff9040, light: 9 };
 const BLUE_FIRE = { color: 0x4090ff, light: 14 };
+const LAMP_FIRE = { color: 0xffb860, light: 9 }; // an oil flame behind glass, yellower
+// Wall lights: a theme's are named by `lights` in config.js (the sconce if it names none). Each is a Blockbench
+// model whose origin sits on the wall 1.85 m up, with an empty group "flame" marking where its fire burns.
+const FITTINGS = {
+  sconce: { flame: { width: 0.3, height: 0.46, pixel: 0.025 }, halo: 0.9, fire: FIRE },
+  wall_torch: { flame: { width: 0.26, height: 0.42, pixel: 0.024 }, halo: 0.9, fire: FIRE },
+  lantern: { flame: { width: 0.09, height: 0.17, pixel: 0.013 }, halo: 1.3, fire: LAMP_FIRE },
+};
+// The colour of the glow about props that shine (glow_N anchors).
+const GLOWS = { crystals: 0x50d8ff };
 let sconceTemplate = null; // built once; every sconce is a clone sharing its geometry and materials
 let blueSconceTemplate = null; // the same, its embers burning blue
 
 class GeoBuilder {
-  constructor() {
+  /** `rough` (see roughRock.js) splits every quad into pieces and moves their corners, for rough-hewn rock. */
+  constructor(rough = null) {
     this.pos = []; this.nrm = []; this.uv = []; this.col = [];
+    this.rough = rough;
   }
 
-  /** p: 4 corners, n: desired normal, uv: 4 uvs, c: 4 brightness values */
+  /**
+   * p: 4 corners, n: desired normal, uv: 4 uvs, c: 4 brightness values (or, with `rough`, a function giving
+   * the brightness at a point).
+   */
   quad(p, n, uv, c) {
+    if (this.rough) {
+      this.roughQuad(p, n, uv, c);
+      return;
+    }
     const e1 = [p[1][0] - p[0][0], p[1][1] - p[0][1], p[1][2] - p[0][2]];
     const e2 = [p[2][0] - p[0][0], p[2][1] - p[0][1], p[2][2] - p[0][2]];
     const cr = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
@@ -47,6 +69,48 @@ class GeoBuilder {
       this.nrm.push(...n);
       this.uv.push(...uv[i]);
       this.col.push(c[i], c[i], c[i]);
+    }
+  }
+
+  roughQuad(p, n, uv, c) {
+    const [nu, nv] = this.rough.split(p);
+    const at = (arr, s, t) => arr[0].map((_, k) => arr[0][k] * (1 - s) * (1 - t) + arr[1][k] * s * (1 - t) + arr[2][k] * s * t + arr[3][k] * (1 - s) * t);
+    const shade = typeof c === 'function' ? c : (q, s, t) => c[0] * (1 - s) * (1 - t) + c[1] * s * (1 - t) + c[2] * s * t + c[3] * (1 - s) * t;
+    // Wound by the flat quad, so the pieces face the same way however far the rock moves them.
+    const e1 = p[1].map((v, k) => v - p[0][k]), e2 = p[3].map((v, k) => v - p[0][k]);
+    const flip = (e1[1] * e2[2] - e1[2] * e2[1]) * n[0] + (e1[2] * e2[0] - e1[0] * e2[2]) * n[1] + (e1[0] * e2[1] - e1[1] * e2[0]) * n[2] < 0;
+    // The corners of the pieces, each worked out once: where it moves to, its uv and its shade.
+    const pts = [], uvs = [], cs = [];
+    for (let j = 0; j <= nv; j++) {
+      for (let i = 0; i <= nu; i++) {
+        const s = i / nu, t = j / nv, flat = at(p, s, t);
+        pts.push(this.rough.move(flat));
+        uvs.push(at(uv, s, t));
+        cs.push(shade(flat, s, t));
+      }
+    }
+    const tris = flip ? [[0, 3, 2], [0, 2, 1]] : [[0, 1, 2], [0, 2, 3]];
+    for (let j = 0; j < nv; j++) {
+      for (let i = 0; i < nu; i++) {
+        const corners = [j * (nu + 1) + i, j * (nu + 1) + i + 1, (j + 1) * (nu + 1) + i + 1, (j + 1) * (nu + 1) + i];
+        for (const tri of tris) {
+          const v = tri.map((k) => corners[k]);
+          this.facet(v.map((k) => pts[k]), v.map((k) => uvs[k]), v.map((k) => cs[k]));
+        }
+      }
+    }
+  }
+
+  /** One triangle with its own flat normal: the chiselled facets of rough rock. */
+  facet(p, uv, c) {
+    const e1 = p[1].map((v, k) => v - p[0][k]), e2 = p[2].map((v, k) => v - p[0][k]);
+    const nx = e1[1] * e2[2] - e1[2] * e2[1], ny = e1[2] * e2[0] - e1[0] * e2[2], nz = e1[0] * e2[1] - e1[1] * e2[0];
+    const len = Math.hypot(nx, ny, nz) || 1;
+    for (let k = 0; k < 3; k++) {
+      this.pos.push(...p[k]);
+      this.nrm.push(nx / len, ny / len, nz / len);
+      this.uv.push(...uv[k]);
+      this.col.push(c[k], c[k], c[k]);
     }
   }
 
@@ -64,8 +128,8 @@ class GeoBuilder {
 const DIR_ANGLE = [Math.PI, Math.PI / 2, 0, -Math.PI / 2]; // N, E, S, W: rotate local +z to face that way
 
 /**
- * Every prop a floor of `theme` might use: its decorations', its channels' and, in every theme after the
- * first, the shop's. They must be loaded (loadProps) before one of its floors is built.
+ * Every prop a floor of `theme` might use: its decorations', its channels', its wall lights and, in every theme
+ * after the first, the shop's. They must be loaded (loadProps) before one of its floors is built.
  */
 export function propsForTheme(theme) {
   const fill = FILLS[theme.channels?.fill];
@@ -73,6 +137,7 @@ export function propsForTheme(theme) {
     ...decorProps(theme.style),
     ...(fill ? [fill.bridge, fill.end, fill.bed].filter(Boolean) : []),
     ...(THEMES.indexOf(theme) > 0 ? SHOP_PROPS : []),
+    ...(theme.lights ?? []),
   ])];
 }
 
@@ -83,7 +148,13 @@ export function buildLevelMeshes(data) {
   const get = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? T.WALL : grid[y * w + x]);
   const isWall = (x, y) => get(x, y) === T.WALL;
 
-  const floor = new GeoBuilder(), ceil = new GeoBuilder(), walls = new GeoBuilder(), banks = new GeoBuilder();
+  // Rough rock (see roughRock.js), calm round whatever is fixed flat to a wall and about the shop.
+  const rough = theme.rough ? roughRock(data, [
+    ...(data.decor ?? []).filter((p) => p.wall).map((p) => ({ x: p.x * TILE, z: p.y * TILE, r: 1.6 })),
+    ...(data.shop ? [...data.shop.props, data.shop.keeper].map((p) => ({ x: p.x * TILE, z: p.y * TILE, r: 2 })) : []),
+    ...(data.shop?.sconces ?? []).map((s) => ({ x: s.x, z: s.z, r: 1.4 })),
+  ]) : null;
+  const floor = new GeoBuilder(rough), ceil = new GeoBuilder(rough), walls = new GeoBuilder(rough), banks = new GeoBuilder(rough), abyss = new GeoBuilder(rough);
   const vh = WALL_H / TILE;
   const sunk = (t) => t === T.CHANNEL || t === T.BRIDGE; // a channel: the floor drops away
   const fill = FILLS[theme.channels?.fill];
@@ -126,7 +197,12 @@ export function buildLevelMeshes(data) {
       };
       side(0, WALL_H, wuv, wc, walls, isWall);
       // A channel's sides run from the floor down to its surface, under the walls at its ends and along its banks.
-      if (sunk(t)) side(-fill.depth, 0, [[0, 0], [1, 0], [1, 1], [0, 1]], [0.5 * tint, 0.5 * tint, 0.85 * tint, 0.85 * tint], banks, (nx, ny) => !sunk(get(nx, ny)));
+      // A chasm's are rock that fades to black as it falls away; its texture repeats every two metres down.
+      if (sunk(t)) {
+        const deep = fill.dark ? (q) => 0.85 * tint * Math.max(0, 1 + q[1] / fill.dark) ** 1.5 : null;
+        const buv = fill.dark ? [[0, 0], [1, 0], [1, fill.depth / TILE], [0, fill.depth / TILE]] : [[0, 0], [1, 0], [1, 1], [0, 1]];
+        side(-fill.depth, 0, buv, deep ?? [0.5 * tint, 0.5 * tint, 0.85 * tint, 0.85 * tint], banks, (nx, ny) => !sunk(get(nx, ny)));
+      }
     }
   }
 
@@ -160,18 +236,23 @@ export function buildLevelMeshes(data) {
     shopSlots.push(...prop.slots);
   }
 
-  const candles = []; // where candle flames burn, from props' candle_N anchors
+  const candles = [], glows = [], drips = []; // from props' candle_N, glow_N and drip_N anchors
   const place = (p) => {
     const prop = placeProp(p);
+    // Things hung from the vault follow the rock up or down.
+    if (p.ceiling && rough) prop.mesh.position.y += rough.offset([p.x * TILE, WALL_H, p.y * TILE], [0, 1, 0]);
     group.add(prop.mesh);
     if (prop.obstacle) obstacles.push(prop.obstacle);
+    const lift = prop.mesh.position.y;
     candles.push(...prop.candles);
+    glows.push(...prop.glows.map(([x, y, z]) => ({ x, y: y + lift, z, color: GLOWS[p.type] })));
+    drips.push(...prop.drips.map(([x, y, z]) => ({ x, y: y + lift, z })));
   };
   // Channels: each one's surface (flowing water, or the floor of a pit), with bridges across and whatever its
   // fill puts at its ends and along its bed.
   const water = [];
   for (const c of data.channels ?? []) {
-    const g = new GeoBuilder(), y0 = -fill.depth;
+    const g = fill.dark ? abyss : new GeoBuilder(), y0 = -fill.depth;
     for (const { x, y } of c.tiles) {
       const x0 = x * TILE, x1 = x0 + TILE, z0 = y * TILE, z1 = z0 + TILE;
       g.quad([[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], [0, 1, 0], [[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1]], [1, 1, 1, 1]);
@@ -183,10 +264,12 @@ export function buildLevelMeshes(data) {
       map.needsUpdate = true;
       group.add(new THREE.Mesh(g.build(), new THREE.MeshPhongMaterial({ map, vertexColors: true, shininess: 60, specular: 0x3c4a38 })));
       water.push({ map, axis: c.axis, flow: c.flow });
-    } else group.add(new THREE.Mesh(g.build(), mat(tex.pitFloor)));
+    } else if (!fill.dark) group.add(new THREE.Mesh(g.build(), mat(tex.pitFloor)));
     for (const b of c.bridges) place({ type: fill.bridge, x: b.x + 0.5, y: b.y + 0.5, yaw: c.axis === 'x' ? 0 : Math.PI / 2 });
     if (fill.end) for (const e of c.ends) place({ type: fill.end, ...wallFace(e.x, e.y, e.side) });
   }
+  // A chasm's floor is only darkness, far down.
+  if (fill?.dark) group.add(new THREE.Mesh(abyss.build(), new THREE.MeshBasicMaterial({ color: 0x000000 })));
   // The theme's decorations (see decor.js). Puddles and cobwebs are drawn here; the rest are props.
   const webMat = tex.cobweb && new THREE.MeshLambertMaterial({ map: tex.cobweb, transparent: true, depthWrite: false, side: THREE.DoubleSide });
   const puddleMats = tex.puddles?.map((map) => new THREE.MeshPhongMaterial({
@@ -210,7 +293,13 @@ export function buildLevelMeshes(data) {
     group.add(m);
   }
 
-  const { flames, lights } = buildSconces(data, group, rng, isWall);
+  const { flames, lights } = buildSconces(data, group, rng, isWall, rough);
+  // Soft glows about things that shine by themselves (glow_N anchors: the caves' crystals).
+  for (const g of glows) {
+    const halo = glowSprite(g.color, 0.9, 0.45);
+    halo.position.set(g.x, g.y, g.z);
+    group.add(halo);
+  }
   // Candles: small flames of their own, flickering with the sconces', but giving no light.
   for (const [x, y, z] of candles) {
     const flame = new Flame({ ...CANDLE, seed: rng.next() });
@@ -232,15 +321,16 @@ export function buildLevelMeshes(data) {
     group.add(built.group);
     return built;
   });
-  return { group, flames, lights, obstacles, doors, shopSlots, water, drips: dripSources(data, rng) };
+  return { group, flames, lights, obstacles, doors, shopSlots, water, drips: dripSources(data, rng, drips) };
 }
 
 /**
- * Where water drips (see fx/drips.js): from every drain pipe's mouth, and from the vault over half the
- * puddles and a tile or two of each channel. Each is { x, y, z, floor (where it lands), every: [min, max] s }.
+ * Where water drips (see fx/drips.js): from every drain pipe's mouth, from the vault over half the puddles and
+ * a tile or two of each water channel, and from props' drip_N anchors (the caves' stalactites), given as
+ * `tips`. Each is { x, y, z, floor (where it lands), every: [min, max] s }.
  */
-function dripSources(data, rng) {
-  const out = [];
+function dripSources(data, rng, tips) {
+  const out = tips.map((t) => ({ ...t, floor: 0.01, every: [2, 5] }));
   for (const p of data.decor ?? []) {
     if (p.type === 'drain_pipe') {
       // Off the lip of the pipe's mouth, 0.44 m out from the wall, into its pool of slime.
@@ -414,7 +504,7 @@ function buildPedestal(p, stoneMat) {
   return g;
 }
 
-function buildSconces(data, group, rng, isWall) {
+function buildSconces(data, group, rng, isWall, rough) {
   const spots = [];
   for (const r of data.rooms) {
     if (r.id === data.shop?.room) continue; // the shop brings its own
@@ -437,25 +527,29 @@ function buildSconces(data, group, rng, isWall) {
   // The shop's sconces burn blue. They go first, so they're sure of a light.
   if (data.shop) spots.unshift(...data.shop.sconces.map((s) => ({ ...s, blue: true })));
 
-  // The sconce is a Blockbench model whose origin sits on the wall; its empty "flame" group marks the fire.
   sconceTemplate ??= buildBBModel(sconceModel, MODEL_PX);
   blueSconceTemplate ??= blueEmbers(sconceTemplate.clone());
-  const fire = new THREE.Vector3().fromArray(sconceTemplate.userData.anchors.flame);
+  const lightsOf = data.theme.lights;
   const flames = [];
   for (const s of spots) {
-    const sg = (s.blue ? blueSconceTemplate : sconceTemplate).clone();
-    const flame = new Flame({ width: 0.3, height: 0.46, pixel: 0.025, seed: rng.next(), blue: s.blue });
+    const kind = s.blue || !lightsOf ? 'sconce' : rng.pick(lightsOf), fit = FITTINGS[kind];
+    const template = kind !== 'sconce' ? propTemplate(kind) : s.blue ? blueSconceTemplate : sconceTemplate;
+    const sg = template.clone();
+    const fire = new THREE.Vector3().fromArray(template.userData.anchors.flame);
+    const flame = new Flame({ ...fit.flame, seed: rng.next(), blue: s.blue });
     flame.position.copy(fire);
-    const fireLook = s.blue ? BLUE_FIRE : FIRE;
-    const halo = glowSprite(fireLook.color, 0.9, 0.55);
-    halo.position.set(fire.x, fire.y + 0.16, fire.z + 0.02);
+    const fireLook = s.blue ? BLUE_FIRE : fit.fire;
+    const halo = glowSprite(fireLook.color, fit.halo, 0.55);
+    halo.position.set(fire.x, fire.y + fit.flame.height * 0.35, fire.z + 0.02);
     sg.add(flame, halo);
-    // Spots are 0.1 m out from the wall face; step back onto it.
-    sg.position.set(s.x - Math.sin(s.ry) * 0.1, 1.85, s.z - Math.cos(s.ry) * 0.1);
+    // Spots are 0.1 m out from the wall face; step back onto it, and on rough rock, out or in with the rock.
+    const out = new THREE.Vector3(Math.sin(s.ry), 0, Math.cos(s.ry)); // away from the wall
+    const onWall = [s.x - out.x * 0.1, 1.85, s.z - out.z * 0.1];
+    const bump = rough ? rough.offset(onWall, out.toArray()) : 0;
+    sg.position.set(onWall[0] + out.x * bump, 1.85, onWall[2] + out.z * bump);
     sg.rotation.y = s.ry;
     group.add(sg);
-    const out = new THREE.Vector3(Math.sin(s.ry), 0, Math.cos(s.ry)); // away from the wall
-    flames.push({ flame, halo, fire: fireLook, phase: rng.next() * 10, pos: new THREE.Vector3(s.x, 2.0, s.z).addScaledVector(out, 0.6) });
+    flames.push({ flame, halo, fire: fireLook, phase: rng.next() * 10, pos: new THREE.Vector3(s.x, 2.0, s.z).addScaledVector(out, 0.6 + bump) });
   }
 
   const lights = [];

@@ -46,7 +46,7 @@ export class Game {
     this.resIdx = 0;
     this.state = 'title'; // title | play | over
     this.paused = false;
-    this.menu = null; // inventory | map | dialog
+    this.menu = null; // inventory | map | dialog | dev
     this.over = false;
     this.time = 0;
     this.shakeT = 0;
@@ -55,6 +55,7 @@ export class Game {
     this.target = null;
     this.level = null;
     this.loading = false; // waiting for a floor's props to download (see enterLevel)
+    this.dev = null; // the dev tools (ui/devTools.js), when main.js loads them
 
     this.input.onLockChange = (locked) => {
       if (this.state !== 'play') return;
@@ -129,6 +130,7 @@ export class Game {
       this.audio.setDrone(this.level.theme.drone);
       this.log(`Welcome, ${this.playerName}. Somewhere beneath you, beyond ${MAX_DEPTH} floors of darkness, lies the Amulet of Yendor.`, 'info');
       this.log('Click to take control. WASD move, mouse looks, click to attack, E to interact, I for your pack.', 'info');
+      if (this.dev) this.log('Dev tools: press ` (the key left of 1).', 'info');
     });
   }
 
@@ -326,12 +328,14 @@ export class Game {
     this.input.mouseDown = false;
     if (which === 'inventory') this.ui.openInventory();
     if (which === 'map') this.ui.openMap();
+    if (which === 'dev') this.dev.show();
   }
 
   closeMenu() {
     const was = this.menu;
     this.menu = null;
     this.ui.closeMenus();
+    this.dev?.hide();
     if (was && this.state === 'play' && !this.over) this.resume();
   }
 
@@ -619,7 +623,7 @@ export class Game {
   // --- Combat & events ---
 
   hurtPlayer(amount, opts = {}) {
-    if (this.over) return;
+    if (this.over || this.dev?.god) return;
     const p = this.player;
     if (opts.fire && p.hasArtefact('ember')) {
       if (!opts.dot) this.popup(playerPopupPos(p), 'immune', 'miss');

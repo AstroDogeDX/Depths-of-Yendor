@@ -167,6 +167,7 @@ export class Sfx {
 
   stopDrone() {
     this.water(0);
+    this.wind(0);
     if (!this.drone || !this.ctx) return;
     const { out, oscs } = this.drone;
     const t = this.ctx.currentTime;
@@ -207,5 +208,38 @@ export class Sfx {
       src.start();
     }
     this.waterOut.gain.setTargetAtTime(level * 0.14, this.ctx.currentTime, 0.4);
+  }
+
+  /** Wind moaning up out of a chasm, as loud as `level` (0..1). */
+  wind(level) {
+    if (!this.ctx) return;
+    if (!this.windOut) {
+      if (level <= 0) return;
+      const c = this.ctx;
+      const src = c.createBufferSource();
+      src.buffer = this.noiseBuf;
+      src.loop = true;
+      // A narrow band swept slowly up and down whistles and moans; a slower swell makes it gust.
+      const band = c.createBiquadFilter();
+      band.type = 'bandpass';
+      band.frequency.value = 320;
+      band.Q.value = 5;
+      const sweep = c.createOscillator(), sweepAmount = c.createGain();
+      sweep.frequency.value = 0.09;
+      sweepAmount.gain.value = 140;
+      sweep.connect(sweepAmount).connect(band.frequency);
+      sweep.start();
+      const gust = c.createGain(), swell = c.createOscillator(), swellAmount = c.createGain();
+      gust.gain.value = 0.7;
+      swell.frequency.value = 0.21;
+      swellAmount.gain.value = 0.3;
+      swell.connect(swellAmount).connect(gust.gain);
+      swell.start();
+      this.windOut = c.createGain();
+      this.windOut.gain.value = 0;
+      src.connect(band).connect(gust).connect(this.windOut).connect(this.master);
+      src.start();
+    }
+    this.windOut.gain.setTargetAtTime(level * 0.5, this.ctx.currentTime, 0.6);
   }
 }

@@ -3,8 +3,9 @@ import { T } from './tiles.js';
 // Decorations by theme `style`: props set about the rooms after they're furnished (see props.js for the models).
 // Wall pieces hang on walls facing into a room; floor pieces keep to the edges of rooms, or to tiles open all
 // round, and clear of doorways, so they never block a way through. Each is { type, x, y (grid tiles,
-// fractional), yaw, solid, round }; the level builder draws two kinds itself, puddles { type: 'puddle', x, y,
-// size, yaw } and cobwebs { type: 'cobweb', x, y (a room corner), corner: [dx, dy] (the way into the room) }.
+// fractional), yaw, solid, round }, with `wall` set on those hung on a wall and `ceiling` on those hung from
+// the vault. The level builder draws two kinds itself, puddles { type: 'puddle', x, y, size, yaw } and cobwebs
+// { type: 'cobweb', x, y (a room corner), corner: [dx, dy] (the way into the room) }.
 
 const SIDE = {
   // Where a wall face lies for a tile with a wall on that side, and the way a prop on it faces (into the room).
@@ -58,30 +59,36 @@ export function decorate({ style, rng, grid, w, rooms, channels, occupied }) {
         if (!f) return false;
         const [x, y, side] = f;
         wallUsed.add(faceKey(x, y, side));
-        props.push({ type, ...wallFace(x, y, side), solid: false });
+        props.push({ type, ...wallFace(x, y, side), solid: false, wall: true });
         return true;
       },
-      /** Stands `type` against a wall, a little out from it, on a free floor tile. */
+      /** Adds a prop as it is (say, a second one where againstWall put the first). */
+      add(prop) {
+        props.push(prop);
+      },
+      /** Stands `type` against a wall, a little out from it, on a free floor tile. Returns the prop, or null. */
       againstWall(type, { solid = true, round = false, turn = 0 } = {}) {
         const f = freeFaces.find(([x, y, side]) => !occupied.has(idx(x, y)) && !wallUsed.has(faceKey(x, y, side)));
-        if (!f) return false;
+        if (!f) return null;
         const [x, y, side] = f;
         occupied.add(idx(x, y));
         const [nx, ny] = SIDE[side].n;
         // Pushed toward the wall and jostled along it, so it doesn't sit dead centre in the tile.
         const along = rng.range(-0.25, 0.25);
-        props.push({
+        const prop = {
           type, solid, round,
           x: x + 0.5 + nx * 0.28 + (ny ? along : 0), y: y + 0.5 + ny * 0.28 + (nx ? along : 0),
           yaw: SIDE[side].yaw + turn,
-        });
-        return true;
+        };
+        props.push(prop);
+        return prop;
       },
       /** Lays something flat on an open floor tile (not solid). */
       onFloor(type, extra = {}) {
         for (let tries = 0; tries < 20; tries++) {
           const x = rng.int(room.x, room.x + room.w - 1), y = rng.int(room.y, room.y + room.h - 1);
           if (at(x, y) !== T.FLOOR || occupied.has(idx(x, y)) || nearDoor(x, y)) continue;
+          if (props.some((p) => p.type === type && Math.floor(p.x) === x && Math.floor(p.y) === y)) continue; // one of each to a tile
           props.push({ type, x: x + rng.range(0.3, 0.7), y: y + rng.range(0.3, 0.7), yaw: rng.range(0, Math.PI * 2), solid: false, ...extra });
           return true;
         }
@@ -145,6 +152,26 @@ const SETS = {
       if (rng.chance(0.45)) d.againstWall('candles', { solid: false, turn: rng.range(0, 6) });
       if (rng.chance(0.45)) d.onFloor('grave_slab');
       d.cobwebs(0.5);
+    },
+  },
+  caves: {
+    props: ['ore_vein', 'crystals', 'mine_timbers', 'minecart', 'rails', 'tools', 'rocks', 'barrel', 'crates', 'stalagmite', 'stalactites'],
+    place(d) {
+      const { rng } = d;
+      // What the rock holds: ore, and crystals that glow.
+      if (rng.chance(0.5)) d.onWall('ore_vein');
+      if (rng.chance(0.3)) d.onWall('crystals');
+      // What the miners left: timbering, a cart of ore on its rails (or just the rails), tools, stores.
+      if (rng.chance(0.35)) d.onWall('mine_timbers');
+      const cart = rng.chance(0.3) && d.againstWall('minecart');
+      if (cart) d.add({ ...cart, type: 'rails', solid: false });
+      else if (rng.chance(0.25)) d.againstWall('rails', { solid: false });
+      if (rng.chance(0.3)) d.againstWall('tools', { solid: false });
+      if (rng.chance(0.2)) d.againstWall(rng.chance(0.5) ? 'barrel' : 'crates', { turn: rng.range(-0.4, 0.4) });
+      for (let i = rng.int(0, 2); i > 0; i--) d.againstWall('rocks', { turn: rng.range(0, 6) });
+      // And the cave's own: stalagmites rising from the floor, stalactites dripping from the vault.
+      if (rng.chance(0.45)) d.inOpen('stalagmite', { round: true });
+      for (let i = rng.int(0, 2); i > 0; i--) d.onFloor('stalactites', { ceiling: true });
     },
   },
 };

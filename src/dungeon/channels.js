@@ -61,15 +61,17 @@ export function digChannels({ rng, grid, w, rooms, start, count }) {
       const [bx, by] = at(-1, across), [ax, ay] = at(len, across);
       if (grid[idx(bx, by)] !== T.WALL || grid[idx(ax, ay)] !== T.WALL) continue; // a doorway at an end
 
-      // Bridges line up with doorways in the walls either side where they can, so the way across is obvious.
+      // Bridges line up with doorways in the walls either side where they can, so the way across is obvious,
+      // and never lead into a pillar on either bank.
       const inLine = room.doorways
         .filter((d) => (axis === 'x' ? d.side === 'N' || d.side === 'S' : d.side === 'E' || d.side === 'W'))
         .map((d) => (axis === 'x' ? d.x - room.x : d.y - room.y))
         .filter((i) => i >= 1 && i <= len - 2);
+      const landings = (i) => [-1, 1].every((s) => grid[idx(...at(i, across + s))] === T.FLOOR);
       const spans = len >= 7 ? 2 : 1;
       const bridges = [];
       for (const i of [...rng.shuffle(inLine), ...rng.shuffle(Array.from({ length: len - 2 }, (_, k) => k + 1))]) {
-        if (bridges.length < spans && bridges.every((b) => Math.abs(b - i) >= 2)) bridges.push(i);
+        if (bridges.length < spans && landings(i) && bridges.every((b) => Math.abs(b - i) >= 2)) bridges.push(i);
       }
 
       const before = reachable();

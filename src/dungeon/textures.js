@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { RNG } from '../rng.js';
 import { sewerTextures } from './sewerTextures.js';
 import { catacombTextures } from './catacombTextures.js';
+import { caveTextures } from './caveTextures.js';
 
 const S = 64;
 const cache = new Map();
@@ -162,7 +163,7 @@ function trapTexture() {
 // (a channel's sides, from its surface up to the floor), the surface itself (`water`, or a pit's `pitFloor`),
 // and decorations' (`puddles`, `cobweb`), and set `wallFullHeight` for a wall texture that spans the wall's
 // height once instead of repeating up it.
-const STYLES = { sewers: sewerTextures, catacombs: catacombTextures };
+const STYLES = { sewers: sewerTextures, catacombs: catacombTextures, caves: caveTextures };
 
 export function getTextures(theme) {
   if (!cache.has(theme.name)) {

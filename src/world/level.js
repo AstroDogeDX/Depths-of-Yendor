@@ -34,9 +34,9 @@ export class Level {
     this.lights = built.lights;
     this.obstacles = built.obstacles;
     this.water = built.water;
-    // Water tiles, for the sound of running water.
-    const water = this.theme.channels?.fill === 'water' ? data.channels : [];
-    this.waterTiles = water.flatMap((c) => c.tiles.map((t) => ({ x: this.center(t.x), z: this.center(t.y) })));
+    // Channel tiles, for the sound they make as you near them: running water, or wind rising out of a chasm.
+    this.channelSound = { water: 'water', chasm: 'wind' }[this.theme.channels?.fill];
+    this.waterTiles = this.channelSound ? data.channels.flatMap((c) => c.tiles.map((t) => ({ x: this.center(t.x), z: this.center(t.y) }))) : [];
     this.waterT = 0;
     this.drips = built.drips.length ? new Drips(this.group, built.drips) : null;
 
@@ -452,7 +452,7 @@ export class Level {
       this.waterT = 0.25;
       let d = Infinity;
       for (const w of this.waterTiles) d = Math.min(d, Math.hypot(w.x - p.x, w.z - p.z));
-      game.audio.water(Math.max(0, 1 - d / 16) ** 2);
+      game.audio[this.channelSound](Math.max(0, 1 - d / 16) ** 2);
     }
     for (const it of this.items) {
       it.mesh.position.y = it.y0 + Math.sin(t * 2 + it.phase) * 0.05;

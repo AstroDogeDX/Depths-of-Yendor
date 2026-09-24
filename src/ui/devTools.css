@@ -1,0 +1,39 @@
+/* The dev tools panel (ui/devTools.js). */
+.panel.dev { width: min(1060px, 96vw); max-height: 94vh; display: flex; flex-direction: column; padding: 14px 20px 18px; }
+.dev-head { flex: none; display: flex; align-items: baseline; gap: 16px; }
+.dev-head h2 { margin: 0; }
+.dev-note { flex: 1; min-width: 0; font-size: 14px; color: #a8e890; }
+.dev-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; min-height: 0; overflow-y: auto; }
+.dev h3 {
+  margin: 14px 0 7px; font-size: 12px; font-weight: normal; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--gold-dim); border-bottom: 1px solid rgba(216, 184, 112, 0.15); padding-bottom: 3px;
+}
+.dev button { font-size: 13px; padding: 3px 9px; }
+.dev button.alt:hover { background: linear-gradient(#6c604a, #4a4034); }
+.dev-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+.dev-floors { display: grid; grid-template-columns: 7.5em repeat(5, 1fr); gap: 4px; align-items: center; }
+.dev-floors span { font-size: 14px; opacity: 0.85; }
+.dev-floors button { font-family: var(--mono); }
+.dev-floors button.boss { color: #ff9a80; }
+.dev-floors button.shop { color: #ffd87a; }
+.dev-floors button.here { background: linear-gradient(#e8cc88, #b08c48); color: #1a140a; }
+
+.dev-stats { display: grid; grid-template-columns: auto auto 1fr; gap: 5px 12px; align-items: center; margin-top: 8px; font-size: 14px; }
+.dev-stats span { color: var(--gold-dim); }
+.dev-stats b { font-weight: normal; font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+.dev-stats div { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.dev-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+.dev-opts { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 9px 0; font-size: 14px; }
+.dev-opts > span { opacity: 0.7; }
+.dev-opts input[type='number'] {
+  width: 4.2em; margin-left: 4px; padding: 2px 4px; font-family: var(--mono); font-size: 13px;
+  color: var(--ink); background: #1a1612; border: 1px solid var(--gold-dim);
+}
+.dev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5em, 1fr)); gap: 4px; }
+.dev-grid button { text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+@media (max-width: 760px) {
+  .dev-cols { grid-template-columns: 1fr; }
+}

@@ -43,7 +43,8 @@ export const FLOORS_PER_THEME = 5;
 // Each theme's colours. `style` names its own textures (dungeon/textures.js) and decorations
 // (dungeon/decor.js); themes without one use plain stone and brick in their colours, as placeholders until
 // they get their own. `channels` runs trenches across some rooms (dungeon/channels.js): `fill` is what's in
-// them and `count` how many ([min, max]) a floor gets.
+// them and `count` how many ([min, max]) a floor gets. `rough` makes its surfaces rough-hewn rock
+// (dungeon/roughRock.js), and `lights` names its wall lights (see FITTINGS in dungeon/levelBuilder.js).
 export const THEMES = [
   {
     // Dank and wet.
@@ -60,8 +61,8 @@ export const THEMES = [
     fog: 0x08090b, fogNear: 2, fogFar: 21, ambient: 0x3c4048, drone: 51,
   },
   {
-    // Natural, rough-hewn rock.
-    name: 'Caves',
+    // Natural, rough-hewn rock, and the leavings of the miners who dug here.
+    name: 'Caves', style: 'caves', rough: true, channels: { fill: 'chasm', count: [1, 2] }, lights: ['wall_torch', 'lantern'],
     wall: ['#5e4e3e', '#4f4133', '#3f3429'], mortar: '#1c1510', moss: '#5a5a30',
     floor: ['#433a30', '#372f27'], ceiling: '#211a14',
     fog: 0x0a0806, fogNear: 2, fogFar: 20, ambient: 0x52463a, drone: 47,
