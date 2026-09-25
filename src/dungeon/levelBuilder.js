@@ -383,7 +383,7 @@ export function buildLevelMeshes(data) {
     group.add(built.group);
     return built;
   });
-  return { group, flames, lights, obstacles, doors, shopSlots, water, haze, drips: dripSources(data, rng, drips) };
+  return { group, flames, lights, obstacles, doors, shopSlots, water, haze, rough, drips: dripSources(data, rng, drips) };
 }
 
 /**

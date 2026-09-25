@@ -353,9 +353,11 @@ export class UI {
     }
     for (const tr of lvl.traps) {
       if (tr.hidden) continue;
+      ctx.globalAlpha = tr.triggered ? 0.4 : 1; // spent traps dimmed
       ctx.fillStyle = hex(TRAP_COLORS[tr.type]);
       ctx.fillRect(px(tr.x) + scale * 0.25, py(tr.y) + scale * 0.25, scale * 0.5, scale * 0.5);
     }
+    ctx.globalAlpha = 1;
     const TS = TILE;
     for (const it of lvl.items) {
       if (!it.seen) continue;

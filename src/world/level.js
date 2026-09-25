@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { TILE, VIEW_RADIUS_TILES, MAX_DEPTH, PLAYER_RADIUS, danger } from '../config.js';
 import { T } from '../dungeon/tiles.js';
 import { buildLevelMeshes, flowWater } from '../dungeon/levelBuilder.js';
-import { getTrapTexture } from '../dungeon/textures.js';
+import { TrapView, loadTraps, trapsLoaded } from './trapModels.js';
 import { buildItemModel } from '../items/models.js';
 import { shopPrice, stackable } from '../items/generate.js';
 import { Monster } from '../monsters/monster.js';
@@ -16,7 +16,8 @@ import { Shopkeeper } from './shopkeeper.js';
 
 const N8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
-export const TRAP_COLORS = { spike: 0xa0a0a0, poison: 0x40c040, teleport: 0x8040e0, alarm: 0xe0c020 };
+// Traps on the map: grey spikes, green gas, azure teleport, yellow alarm (as their models; see trapModels.js).
+export const TRAP_COLORS = { spike: 0xa0a0a0, poison: 0x40c040, teleport: 0x3aa0ff, alarm: 0xe0c020 };
 
 export class Level {
   constructor(game, data) {
@@ -35,6 +36,7 @@ export class Level {
     this.obstacles = built.obstacles;
     this.water = built.water;
     this.haze = built.haze; // the haze rising out of the channels
+    this.rough = built.rough; // the rough rock's shape (see roughRock.js), for setting things on it
     // Channel tiles, for the sound they make as you near them: running water, wind rising out of a chasm, the
     // uneasy hum of a rift, or lava's rumble and bubbling.
     this.channelSound = { water: 'water', chasm: 'wind', rift: 'rift', lava: 'lava' }[this.theme.channels?.fill];
@@ -81,7 +83,7 @@ export class Level {
     for (const it of data.items) {
       this.addItem(it.item, (it.x + 0.5 + rand.range(-0.2, 0.2)) * TILE, (it.y + 0.5 + rand.range(-0.2, 0.2)) * TILE);
     }
-    for (const t of data.traps) this.traps.push({ ...t, hidden: true, triggered: false, mesh: null });
+    for (const t of data.traps) this.traps.push({ ...t, hidden: true, triggered: false, view: null });
     if (data.shrine) this.addItem(data.shrine.item, (data.shrine.x + 0.5) * TILE, (data.shrine.y + 0.5) * TILE, { onPedestal: true });
     if (data.amulet) {
       this.addItem(game.makeAmulet(), (data.amulet.x + 0.5) * TILE, (data.amulet.y + 0.5) * TILE, { onPedestal: true });
@@ -379,14 +381,25 @@ export class Level {
     return m;
   }
 
+  /** Shows a hidden trap, armed (or spent, if it has gone off): see world/trapModels.js. */
   revealTrap(trap) {
     if (!trap.hidden) return;
     trap.hidden = false;
-    const mat = new THREE.MeshLambertMaterial({ map: getTrapTexture(), color: TRAP_COLORS[trap.type], transparent: true, opacity: 0.9 });
-    trap.mesh = new THREE.Mesh(new THREE.PlaneGeometry(TILE * 0.7, TILE * 0.7), mat);
-    trap.mesh.rotation.x = -Math.PI / 2;
-    trap.mesh.position.set(this.center(trap.x), 0.02, this.center(trap.y));
-    this.group.add(trap.mesh);
+    this.showTrap(trap);
+  }
+
+  showTrap(trap) {
+    // (The models download as the game starts; one found in the first moments shows once they're here.)
+    if (!trapsLoaded()) {
+      loadTraps().then(() => this.showTrap(trap), () => {});
+      return;
+    }
+    const x = this.center(trap.x), z = this.center(trap.y);
+    trap.view = new TrapView(trap.type, x, z);
+    // On a rough floor, raised clear of the rock beneath it.
+    if (this.rough) trap.view.root.position.y = Math.max(0, ...[[0, 0], [-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]].map(([dx, dz]) => this.rough.offset([x + dx, 0, z + dz], [0, 1, 0])));
+    if (trap.triggered) trap.view.set('used');
+    this.group.add(trap.view.root);
   }
 
   trapAt(tx, ty) { return this.traps.find((t) => t.x === tx && t.y === ty && !t.triggered); }
@@ -450,6 +463,7 @@ export class Level {
     }
     flowWater(this.water, t);
     this.haze?.update(t);
+    for (const tr of this.traps) tr.view?.update(dt, t);
     this.drips?.update(dt, p, game.audio);
     if (this.waterTiles.length && (this.waterT -= dt) <= 0) {
       this.waterT = 0.25;

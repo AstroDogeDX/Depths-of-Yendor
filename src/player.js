@@ -39,6 +39,7 @@ export class Player {
     this.lastWand = null;
     this.hungerState = 0;
     this.lastTrapTile = -1;
+    this.creeping = null; // a found trap you're sneaking over (see update)
   }
 
   // --- Derived stats ---
@@ -264,13 +265,26 @@ export class Player {
     this.updateRegen(dt);
     this.updateGear(dt, game);
 
-    // Traps trigger when you step onto their tile.
+    // Traps trigger when you step onto their tile, unless you sneak onto one you've found: then you creep over it,
+    // and it goes off only if you stop sneaking (let go, or get winded) before you're off it. Sneaking doesn't
+    // disarm it, and it's no help with a trap you don't know is there.
     const tx = level.toTile(this.x), ty = level.toTile(this.z);
     const tileIdx = level.idx(tx, ty);
     if (tileIdx !== this.lastTrapTile) {
       this.lastTrapTile = tileIdx;
+      this.creeping = null;
       const trap = level.trapAt(tx, ty);
-      if (trap) game.triggerTrap(trap);
+      if (trap && mode === 'sneak' && !trap.hidden) {
+        this.creeping = trap;
+        game.log(`You creep over the ${trap.type} trap, careful not to set it off.`, 'info');
+      } else if (trap) game.triggerTrap(trap);
+    } else if (this.creeping && mode !== 'sneak') {
+      const trap = this.creeping;
+      this.creeping = null;
+      if (!trap.triggered && level.trapAt(tx, ty) === trap) {
+        game.log('Your weight comes down on the plate!', 'warn');
+        game.triggerTrap(trap);
+      }
     }
   }
 

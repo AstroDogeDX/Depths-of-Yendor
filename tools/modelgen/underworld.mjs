@@ -42,13 +42,13 @@ const RUNES = Array.from({ length: 24 }, (_, g) => {
   return bits;
 });
 /** Whether (u, v), model pixels along and up a strip of runes (5×7, 2 apart), falls on a stroke of one. */
-function runeAt(u, v, seed = 0) {
+export function runeAt(u, v, seed = 0) {
   const cx = Math.floor(u / 7), cy = Math.floor(v / 9), lx = Math.floor(u - cx * 7), ly = Math.floor(v - cy * 9);
   if (lx > 4 || ly > 6) return false;
   return RUNES[Math.floor(rand(cx, cy, seed, 3010) * RUNES.length)][(6 - ly) * 5 + lx] === 1;
 }
 /** Distance from (x, y) to the segment a-b. */
-function segDist(x, y, [ax, ay], [bx, by]) {
+export function segDist(x, y, [ax, ay], [bx, by]) {
   const ex = bx - ax, ey = by - ay, k = Math.max(0, Math.min(1, ((x - ax) * ex + (y - ay) * ey) / (ex * ex + ey * ey || 1)));
   return Math.hypot(x - ax - ex * k, y - ay - ey * k);
 }

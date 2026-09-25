@@ -23,6 +23,7 @@ import { catacombs } from './catacombs.mjs';
 import { caves } from './caves.mjs';
 import { dwarven } from './dwarven.mjs';
 import { underworld } from './underworld.mjs';
+import { traps } from './traps.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const MODELS = {
@@ -32,6 +33,7 @@ const MODELS = {
   ...Object.fromEntries(Object.entries(monsters).map(([name, build]) => [name, { file: `monsters/${name}.bbmodel`, build }])),
   ...Object.fromEntries(Object.entries({ ...props, ...sewers, ...catacombs, ...caves, ...dwarven, ...underworld }).map(([name, build]) => [name, { file: `props/${name}.bbmodel`, build }])),
   ...Object.fromEntries(Object.entries(npcs).map(([name, build]) => [name, { file: `npcs/${name}.bbmodel`, build }])),
+  ...Object.fromEntries(Object.entries(traps).map(([name, build]) => [name, { file: `traps/${name.replace('trap_', '')}.bbmodel`, build }])),
   ...Object.fromEntries(Object.entries({ ...items, ...armors, ...artefacts }).map(([name, build]) => [name, { file: `items/${name}.bbmodel`, build }])),
 };
 

@@ -149,18 +149,6 @@ function ceilingTexture(theme) {
   return toTexture(c);
 }
 
-function trapTexture() {
-  const c = canvas();
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#2a2a2a';
-  ctx.fillRect(0, 0, S, S);
-  ctx.fillStyle = '#555';
-  ctx.fillRect(4, 4, S - 8, S - 8);
-  ctx.fillStyle = '#222';
-  for (let y = 12; y < S - 8; y += 12) for (let x = 12; x < S - 8; x += 12) ctx.fillRect(x - 2, y - 2, 4, 4);
-  return toTexture(c);
-}
-
 // Themes with a `style` paint their own textures. Besides wall, floor and ceiling, a style may add `channel`
 // (a channel's sides, from its surface up to the floor), the surface itself (`water`, `lava`, a pit's
 // `pitFloor`, or the `abyss` glowing far down a chasm), the passages' own walls and floor (`tunnelWall`,
@@ -179,11 +167,6 @@ export function getTextures(theme) {
     });
   }
   return cache.get(theme.name);
-}
-
-let trapTex = null;
-export function getTrapTexture() {
-  return (trapTex ??= trapTexture());
 }
 
 /** Vertical planks with iron bands; locked doors are darker, with more (and rustier) iron. */

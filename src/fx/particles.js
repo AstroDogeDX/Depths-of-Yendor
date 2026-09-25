@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { rand } from '../rng.js';
+import { glowTexture } from './glow.js';
 
 const CUBE = new THREE.BoxGeometry(0.06, 0.06, 0.06);
 const mats = new Map();
@@ -40,6 +41,29 @@ export function transient(level, mesh, life = 0.2) {
   level.particles.push({ kind: 'fade', mesh, life, max: life });
 }
 
+/** A cloud of gas billowing up and spreading from a point on the floor, hanging a while before it thins away. */
+export function gasCloud(level, x, z, color, puffs = 7, life = 3.2) {
+  for (let i = 0; i < puffs && level.particles.length < MAX; i++) {
+    const mesh = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture(), color, transparent: true, opacity: 0, depthWrite: false }));
+    const a = rand.range(0, Math.PI * 2), r = rand.range(0, 0.35);
+    mesh.position.set(x + Math.cos(a) * r, 0.25, z + Math.sin(a) * r);
+    level.group.add(mesh);
+    level.particles.push({
+      kind: 'cloud', mesh, life: life * rand.range(0.75, 1), max: life, size: rand.range(1.6, 2.6),
+      vx: Math.cos(a) * rand.range(0.2, 0.6), vy: rand.range(0.35, 0.8), vz: Math.sin(a) * rand.range(0.2, 0.6),
+    });
+  }
+}
+
+/** A column of light standing up from the floor, fading out. */
+export function lightColumn(level, x, z, color, height = 3, life = 0.6) {
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.7, height, 12, 1, true), new THREE.MeshBasicMaterial({
+    color, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+  }));
+  mesh.position.set(x, height / 2, z);
+  transient(level, mesh, life);
+}
+
 export function lightningMesh(x0, y0, z0, x1, y1, z1, color = 0xc0e0ff) {
   const pts = [];
   const n = Math.max(4, Math.round(Math.hypot(x1 - x0, z1 - z0) * 2));
@@ -76,10 +100,20 @@ export function updateParticles(dt, level) {
       p.mesh.material.opacity = 0.8 * (1 - k);
     } else if (p.kind === 'fade') {
       p.mesh.material.opacity = Math.max(0, p.life / p.max);
+    } else if (p.kind === 'cloud') {
+      // Billowing out fast, then drifting and slowing as it spreads, thinning at the end.
+      const k = 1 - p.life / p.max, drag = Math.max(0, 1 - dt * 1.5);
+      p.vx *= drag; p.vy *= drag; p.vz *= drag;
+      p.mesh.position.x += p.vx * dt;
+      p.mesh.position.y += p.vy * dt;
+      p.mesh.position.z += p.vz * dt;
+      p.mesh.scale.setScalar(p.size * (0.3 + 0.7 * Math.min(1, k * 3)));
+      p.mesh.material.opacity = 0.5 * Math.min(1, k * 8) * Math.min(1, p.life / (p.max * 0.4));
     }
     if (p.life <= 0) {
       level.group.remove(p.mesh);
-      if (p.kind !== 'debris') {
+      if (p.kind === 'cloud') p.mesh.material.dispose(); // (sprites share one geometry)
+      else if (p.kind !== 'debris') {
         p.mesh.geometry.dispose();
         p.mesh.material.dispose();
       }

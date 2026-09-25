@@ -29,10 +29,12 @@ function loadTexture(tex) {
 // Blockbench texture render modes: 'emissive' ignores lighting, 'additive' also adds onto what's behind.
 // Render sides 'double' draws the back of each face too. A texture whose name ends in "_translucent" is
 // alpha-blended (see-through) rather than having its transparent texels cut out.
+// Emissive cut-outs (glowing runes and glyphs, often a texel or two wide) keep texels down to a low alpha, so
+// their lines don't vanish in the blurrier mipmaps they're drawn with from a distance or a glancing angle.
 function material(tex, name) {
   const map = tex.source ? loadTexture(tex) : null;
   const side = tex.render_sides === 'double' ? THREE.DoubleSide : THREE.FrontSide;
-  if (tex.render_mode === 'emissive') return new THREE.MeshBasicMaterial({ map, side, alphaTest: 0.5 });
+  if (tex.render_mode === 'emissive') return new THREE.MeshBasicMaterial({ map, side, alphaTest: 0.2 });
   if (tex.render_mode === 'additive') {
     return new THREE.MeshBasicMaterial({ map, side, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
   }

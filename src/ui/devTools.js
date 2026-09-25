@@ -5,9 +5,11 @@ import { MONSTERS } from '../monsters/defs.js';
 import { generateLevel } from '../dungeon/generator.js';
 import { disposeGroup } from '../dungeon/levelBuilder.js';
 import { Level } from '../world/level.js';
+import { T } from '../dungeon/tiles.js';
 import './devTools.css';
 
-// Dev tools, for testing by hand: jump to any floor, give yourself items, change your stats, spawn monsters.
+// Dev tools, for testing by hand: jump to any floor, give yourself items, change your stats, spawn monsters, lay
+// traps.
 // The ` key opens and closes the panel during a run. main.js only loads this in development, or in a build
 // opened with ?dev in the address, so players never download it.
 
@@ -65,6 +67,9 @@ export class DevTools {
             <h3>Monsters</h3>
             <div class="dev-opts"><span>Spawn one in front of you</span><label class="check"><input type="checkbox" data-opt="asleep" /> Asleep</label></div>
             <div class="dev-grid dev-monsters"></div>
+            <h3>Traps</h3>
+            <div class="dev-opts"><span>Lay one on the floor in front of you, armed and in plain sight</span></div>
+            <div class="dev-grid dev-traps"></div>
           </div>
           <div>
             <h3>Items</h3>
@@ -98,6 +103,8 @@ export class DevTools {
     });
     this.$('.dev-monsters').innerHTML = Object.entries(MONSTERS)
       .map(([type, def]) => `<button class="alt" data-monster="${type}" title="${def.name}">${cap(def.name)}</button>`).join('');
+    this.$('.dev-traps').innerHTML = ['spike', 'poison', 'teleport', 'alarm']
+      .map((type) => `<button class="alt" data-trap="${type}">${cap(type)}</button>`).join('');
     this.$('.dev-tabs').innerHTML = KINDS.map(([kind, label]) => `<button class="alt" data-kind="${kind}">${label}</button>`).join('');
     this.renderItems();
 
@@ -112,6 +119,7 @@ export class DevTools {
       else if (d.kind) { this.kind = d.kind; this.renderItems(); }
       else if (d.type) this.give(d.type);
       else if (d.monster) this.spawn(d.monster);
+      else if (d.trap) this.layTrap(d.trap);
       else if (d.stat) this.stat(d.stat);
       else if (d.act) this.act(d.act);
       this.refresh();
@@ -215,7 +223,11 @@ export class DevTools {
     switch (key) {
       case 'close': g.closeMenu(); break;
       case 'layout': this.newLayout(); break;
-      case 'reveal': g.level.revealAll(); this.note('The whole floor is on your map.'); break;
+      case 'reveal':
+        g.level.revealAll();
+        for (const t of g.level.traps) g.level.revealTrap(t);
+        this.note('The whole floor is on your map, traps and all.');
+        break;
       case 'stairs': this.toStairs(); break;
       case 'restore':
         p.hp = p.maxHp;
@@ -276,6 +288,18 @@ export class DevTools {
       g.level.addItem(item, at.x, at.z);
       this.note(`Your pack is full, so ${name} is on the floor in front of you.`);
     }
+  }
+
+  /** Lays a trap of `type` on the tile in front of you, found and armed. */
+  layTrap(type) {
+    const g = this.game, p = g.player, lvl = g.level;
+    const tx = lvl.toTile(p.x - Math.sin(p.yaw) * TILE), ty = lvl.toTile(p.z - Math.cos(p.yaw) * TILE);
+    if (lvl.grid[lvl.idx(tx, ty)] !== T.FLOOR || (tx === lvl.toTile(p.x) && ty === lvl.toTile(p.z))) return this.note('Face a floor tile next to you to lay a trap on it.');
+    if (lvl.traps.some((t) => t.x === tx && t.y === ty)) return this.note('There\'s a trap there already.');
+    const trap = { x: tx, y: ty, type, hidden: true, triggered: false, view: null };
+    lvl.traps.push(trap);
+    lvl.revealTrap(trap);
+    this.note(`Laid a ${type} trap in front of you. Close the panel and step on it to set it off.`);
   }
 
   /** Puts a monster a few steps in front of you, or as near as there's room. */

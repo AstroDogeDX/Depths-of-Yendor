@@ -18,7 +18,7 @@ npm run build      # static build in dist/, deployable anywhere
 | --- | --- |
 | WASD / arrows | Move; ← → turn (King's Field style) |
 | Shift | Sprint: 1.6× speed, but loud (uses stamina) |
-| Ctrl or C | Sneak: half speed, crouched and near-silent (uses stamina) |
+| Ctrl or C | Sneak: half speed, crouched and near-silent (uses stamina); creeps over found traps without setting them off |
 | Mouse | Look (click the view to capture the pointer) |
 | Click / Space | Attack. Click swings once the meter is past 20%; holding re-swings only at full charge |
 | E | Pick up / use stairs |
@@ -36,10 +36,11 @@ npm run build      # static build in dist/, deployable anywhere
 
 For testing by hand, press **`** (the key left of 1) during a run to open the dev tools panel. It's always there under `npm run dev`. A built copy has it only when opened with `?dev` in the address (e.g. `http://localhost:4173/?dev`), and players who don't ask for it never download it (`ui/devTools.js` loads on demand from `main.js`). The game waits while the panel is open. Press ` or Esc to close it.
 
-- **Travel:** jump straight to any of the 25 floors, arriving at its entrance as if you'd walked down (boss floors are marked red, shop floors gold). **New layout** builds the floor you're on again from a new seed, for a quick look at another layout. **Reveal map** maps the whole floor, and **To the stairs down** puts you at its exit.
+- **Travel:** jump straight to any of the 25 floors, arriving at its entrance as if you'd walked down (boss floors are marked red, shop floors gold). **New layout** builds the floor you're on again from a new seed, for a quick look at another layout. **Reveal map** maps the whole floor and shows its hidden traps, and **To the stairs down** puts you at its exit.
 - **You:** god mode (nothing can hurt you), health and maximum health, strength, levelling up, gold, **Restore** (full health and stamina, fed, every status cleared) and **Kill every monster**.
 - **Items:** make any weapon, armour, potion, scroll, wand, ring, artefact or food, or the Amulet or an iron key for this floor, with the enchantment (extra charges, for a wand), quantity, curse and identification you choose. It goes in your pack, or on the floor in front of you when the pack is full. **Identify everything** teaches you every potion, scroll, wand and ring, and identifies what you carry.
 - **Monsters:** spawn any monster a few steps in front of you, awake or asleep.
+- **Traps:** lay a trap of any kind on the floor in front of you, found and armed, to step on.
 
 ## The pack
 
@@ -129,6 +130,17 @@ A doorway is either an open arch or a wooden door. Doors swing open when anyone 
 
 **Locked doors** are fully working but not placed yet. They can only go on a branch, never the loop. Each needs an iron key, which is always placed somewhere on that floor's loop so it can never be locked away. Keys don't take pack slots: they show as *Keys* on the stat line and are used up when you walk into (or use) the locked door. Monsters can't path through a locked door, and teleports never drop you inside a locked room.
 
+**Traps** lie hidden in rooms and corridors (never near the entrance, in the shop or behind a locked door). You notice one now and then when you pass within a couple of tiles of it; the Eye of the Deep and a scroll of magic mapping reveal them all. Step on one and it goes off, whether you'd found it or not, and it's spent afterwards. **Sneak** onto one you've found and you creep over it without setting it off (it stays armed): stop sneaking before you're off its tile (let go of the key, or run out of stamina) and your weight comes down on it. Sneaking is no help with a trap you haven't found. Each kind has its own model (`world/trapModels.js`), told apart at a glance by shape and colour, with three states: **armed** (found, waiting), **active** (going off) and **used** (spent):
+
+| Trap | Looks like | Goes off | Spent |
+| --- | --- | --- | --- |
+| Spike | a square iron grate, spike points glinting in its holes | spikes thrust up half a metre (damage) | spikes left stuck half out, bent and bloodied |
+| Poison | a round vent in a green stain, a slotted brass cap over it | the cap blows off in a cloud of green gas (poisoned) | the cap lying where it fell, the vent open |
+| Teleport | a stone disc with an azure glyph slowly turning on it | the glyph spins and flares in a column of light (you're thrown elsewhere on the floor) | the glyph burnt out, the stone cracked |
+| Alarm | a wooden plate with a brass bell on a post | the plate goes down and the bell swings and rings (monsters within 30 m come) | the plate jammed down, the bell fallen and cracked |
+
+The minimap marks found traps in the same colours (grey, green, azure, yellow), spent ones dimmed. The used state would also serve for a trap that's been disarmed.
+
 ## The shop
 
 On the first floor of each new theme after the first (floors 6, 11, 16 and 21), a door in the room you arrive in leads to a shop. A small hooded shopkeeper stands on a stool behind the counter, idly shaking a purse of coins, watching you and passing remarks. The shop is lit by blue-flamed sconces.
@@ -143,7 +155,7 @@ On the first floor of each new theme after the first (floors 6, 11, 16 and 21), 
 
 ## Blockbench models
 
-The monsters, the shopkeeper, the weapons you hold and find, the torch in your other hand, the sconces, torches and lanterns on the walls, room furniture and the items lying on the floor are [Blockbench](https://www.blockbench.net) projects in `assets/models/`:
+The monsters, the shopkeeper, the weapons you hold and find, the torch in your other hand, the sconces, torches and lanterns on the walls, room furniture, traps and the items lying on the floor are [Blockbench](https://www.blockbench.net) projects in `assets/models/`:
 
 - `monsters/` has one per monster type in `monsters/defs.js` (`rat`, `bat`, `slime`, `goblin`, `archer`, `skeleton`, `orc`, `wraith`, `imp`, `troll`, `golem`, `warden`).
 - `weapons/` has one per `model` name in `items/defs.js` (`dagger`, `sword`, `longsword`, `mace`, `spear`, `axe`, `hammer`).
@@ -152,6 +164,7 @@ The monsters, the shopkeeper, the weapons you hold and find, the torch in your o
   The Caves' wall lights, `wall_torch` and `lantern`, the Dwarven Ruins', `wall_brazier` and `hanging_lamp`, and the Underworld's `skull_sconce`, are props too, but they're built like the sconce: the pivot sits on the wall at the height they hang (1.85 m), and a `flame` group marks the fire. `FITTINGS` in `dungeon/levelBuilder.js` sets each one's flame size and light.
   Props load on demand, each its own small download: the game fetches a theme's props before building one of its floors, and the next theme's while you play the current one, so starting up only waits for the Sewers'. The title screen's walk does the same, fetching each theme during the one before. So the game knows what a theme needs, a new decoration goes in its set's `props` list in `dungeon/decor.js` as well as in the set's placement code (the shop's props are listed in `SHOP_PROPS` in `dungeon/rooms.js`, the channels' in `FILLS` in `dungeon/levelBuilder.js`, and the wall lights in the theme's `lights`).
 - `npcs/` has characters who aren't monsters: the `shopkeeper`.
+- `traps/` has one per kind of trap (`spike`, `poison`, `teleport`, `alarm`), its origin on the floor at the middle of its tile. Each has three groups for its states, shown one at a time: `armed`, `active` and `used`; anything outside them always shows. `world/trapModels.js` moves the active state's parts (the whole `active` group, or a named group inside it, like the alarm's `bell`) and says how long each kind stays active.
 - `torch.bbmodel` and `sconce.bbmodel`.
 
 The game reads the `.bbmodel` files directly, so there is no export step. Open one in Blockbench (desktop or web), edit it, save over the file, and the dev server reloads. (`vite.config.js` imports them as JSON, which keeps the bundle smaller than importing them as text.)
@@ -175,7 +188,7 @@ The game reads the `.bbmodel` files directly, so there is no export step. Open o
 
 Animations add to each group's pose in Blockbench, so a limb you rotate there stays rotated in the game. Monsters face south (+Z) with their origin between their feet. Each one gets its own copy of the lit materials so it can flash red when hurt.
 
-These models were first built in code by `tools/modelgen/`. It shapes low-poly meshes from lathes and lofts, unwraps their UVs automatically and paints pixel-art textures procedurally. `npm run models -- sword torch` rebuilds the named models, and `all` rebuilds every one. Rebuilding replaces the whole file, so any Blockbench edits to it are lost. The script skips a file with uncommitted changes unless you pass `--force`, and `--out <dir>` writes the results somewhere else so you can compare first. To add a model, write a builder like those in `items.mjs`, `monsters.mjs`, `props.mjs`, `sewers.mjs`, `catacombs.mjs`, `caves.mjs`, `dwarven.mjs`, `underworld.mjs` or `sconce.mjs` and list it in `build.mjs`.
+These models were first built in code by `tools/modelgen/`. It shapes low-poly meshes from lathes and lofts, unwraps their UVs automatically and paints pixel-art textures procedurally. `npm run models -- sword torch` rebuilds the named models, and `all` rebuilds every one. Rebuilding replaces the whole file, so any Blockbench edits to it are lost. The script skips a file with uncommitted changes unless you pass `--force`, and `--out <dir>` writes the results somewhere else so you can compare first. To add a model, write a builder like those in `items.mjs`, `monsters.mjs`, `props.mjs`, `sewers.mjs`, `catacombs.mjs`, `caves.mjs`, `dwarven.mjs`, `underworld.mjs`, `traps.mjs` or `sconce.mjs` and list it in `build.mjs`.
 
 ## Code map
 
@@ -204,6 +217,7 @@ src/
   dungeon/texturePaint.js  helpers the themes' textures are painted with
   world/level.js       runtime level: collision, line of sight, doors, BFS flow field, fog of war, spawning
   world/shopkeeper.js  the shop's merchant: idle animation and remarks
+  world/trapModels.js  the traps' models: their armed, active and used states, and how they move going off
   monsters/defs.js     bestiary stats, the floors each monster appears on, spawn tables
   monsters/monster.js  AI state machine (sleep → wander → hunt, fear, ranged kiting), attacks, statuses
   monsters/models.js   loads the rigged Blockbench monsters and animates their bones

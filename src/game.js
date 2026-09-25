@@ -9,13 +9,14 @@ import { ARTEFACTS, WEAPONS } from './items/defs.js';
 import { makeItem, randomItem } from './items/generate.js';
 import { itemActions, zapWand, drinkPotion, activateArtefact } from './items/use.js';
 import { ViewModel } from './fx/viewmodel.js';
-import { burst, ring } from './fx/particles.js';
+import { burst, ring, gasCloud, lightColumn } from './fx/particles.js';
 import { playerPopupPos } from './combat.js';
 import { Input, GAME_KEYS } from './input.js';
 import { Sfx } from './audio.js';
 import { useSlot } from './hotbar.js';
 import { disposeGroup, propsForTheme } from './dungeon/levelBuilder.js';
 import { loadProps } from './dungeon/props.js';
+import { loadTraps } from './world/trapModels.js';
 import { TitleScene } from './ui/titleScene.js';
 
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, matches stair `dir`
@@ -86,6 +87,7 @@ export class Game {
 
     ui.bind(this);
     this.title.start();
+    loadTraps().catch(() => {}); // wanted once a trap is found; fetched while the title plays
     this.last = performance.now();
     requestAnimationFrame(this.loop);
   }
@@ -674,27 +676,32 @@ export class Game {
     const wasHidden = trap.hidden;
     trap.triggered = true;
     level.revealTrap(trap);
-    if (trap.mesh) trap.mesh.material.opacity = 0.35;
+    trap.view?.set('active');
     this.audio.trap();
     const x = level.center(trap.x), z = level.center(trap.y);
     if (wasHidden) this.log('You step on a hidden pressure plate!', 'warn');
     switch (trap.type) {
       case 'spike':
         this.log('Iron spikes stab up from the floor!', 'danger');
+        this.audio.spikes();
         burst(level, x, 0.2, z, 0xb0b0b0, 12, 3, 0.5);
         this.hurtPlayer(rand.int(3, 6) + level.depth, { source: 'a spike trap' });
         break;
       case 'poison':
         this.log('A cloud of green gas billows up around you!', 'danger');
+        this.audio.hiss();
         ring(level, x, z, 0x40c040, 3, 1);
+        gasCloud(level, x, z, 0x6ac03a);
         p.addStatus('poison', 8, this);
         break;
       case 'teleport':
-        this.log('The floor flares violet and the world lurches!', 'warn');
-        this.teleportPlayer();
+        this.log('The glyph flares and the world lurches!', 'warn');
+        lightColumn(level, x, z, 0x3aa0ff);
+        this.teleportPlayer(0x3aa0ff, '#4aa6ee');
         break;
       case 'alarm':
-        this.log('A deafening alarm shrieks through the halls!', 'danger');
+        this.log('A bell clangs out, ringing through the halls!', 'danger');
+        this.audio.bell();
         for (const m of level.monsters) {
           if (!m.dead && Math.hypot(m.x - p.x, m.z - p.z) < 30) m.notice(this);
         }
@@ -702,18 +709,19 @@ export class Game {
     }
   }
 
-  teleportPlayer() {
+  /** Sends the player somewhere else on the floor, in a burst of `color` and a `flash` (violet, or a trap's azure). */
+  teleportPlayer(color = 0x8040e0, flash = '#a060ff') {
     const p = this.player, level = this.level;
     const pos = level.randomFloorPos({ awayFrom: p, minDist: 12 });
     if (!pos) return;
-    burst(level, p.x, 1, p.z, 0x8040e0, 14, 3, 0.6);
+    burst(level, p.x, 1, p.z, color, 14, 3, 0.6);
     p.x = pos.x;
     p.z = pos.z;
     p.lastTrapTile = level.idx(level.toTile(p.x), level.toTile(p.z));
     level.visT = 0;
     level.flowT = 0;
     this.audio.teleport();
-    this.flash('#a060ff', 0.35);
+    this.flash(flash, 0.35);
   }
 
   playerDied(source) {

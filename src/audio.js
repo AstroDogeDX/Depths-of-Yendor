@@ -126,6 +126,23 @@ export class Sfx {
   }
   levelUp() { [523, 659, 784, 1046].forEach((f, i) => this.tone({ f, dur: 0.18, type: 'triangle', vol: 0.14, delay: i * 0.1 })); }
   trap() { this.tone({ f: 90, f2: 420, dur: 0.22, type: 'square', vol: 0.2 }); }
+  // Traps going off, after the click of the plate (trap()): spikes shearing up, gas hissing out, an alarm bell.
+  spikes() {
+    this.noise({ dur: 0.2, vol: 0.28, freq: 3200, freq2: 1400, q: 2.5 });
+    this.tone({ f: 1900, f2: 900, dur: 0.14, type: 'triangle', vol: 0.1 });
+  }
+  hiss() {
+    this.tone({ f: 160, f2: 60, dur: 0.12, type: 'square', vol: 0.12 });
+    this.noise({ dur: 1.6, vol: 0.16, freq: 5000, freq2: 2500, type: 'highpass', q: 0.6 });
+  }
+  bell(rings = 5) {
+    for (let i = 0; i < rings; i++) {
+      const v = 1 - i / (rings + 1), d = i * 0.3;
+      this.tone({ f: 1180, dur: 1.1, type: 'sine', vol: 0.13 * v, delay: d });
+      this.tone({ f: 1180 * 2.76, dur: 0.6, type: 'sine', vol: 0.05 * v, delay: d });
+      this.tone({ f: 1180 * 5.4, dur: 0.3, type: 'sine', vol: 0.025 * v, delay: d });
+    }
+  }
   teleport() { this.tone({ f: 200, f2: 1700, dur: 0.45, type: 'sine', vol: 0.14 }); }
   curse() { this.tone({ f: 300, f2: 100, dur: 0.6, type: 'sawtooth', vol: 0.12 }); }
   horn() {
