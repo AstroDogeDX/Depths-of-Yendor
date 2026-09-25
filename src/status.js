@@ -10,6 +10,7 @@ import { danger } from './config.js';
 //   tint             a monster's glow while it has it (the first in this list that it has wins)
 //   harm             a hostile one: bosses take it for BOSS_STATUS as long
 //   stack: 'add'     a new dose adds its time (haste). Otherwise a new dose tops it up to the longer of the two.
+//   permanent        it never wears off (it's 1 while in effect), only ends when something ends it
 //   dot              hurts every second: { type (a damage type, see damage.js, or none), source (what killed you),
 //                    player(game), monster(game, m) (how much) }
 //   resist           the damage type whose immunity wards it off (fire for burning: nothing burns a fire imp)
@@ -27,6 +28,14 @@ import { danger } from './config.js';
 
 export const BOSS_STATUS = 0.5;
 const FROZEN_THAW_CHILL = 4; // seconds of Chilled a thaw leaves behind
+// How long a charm leaves its target heartbroken (immune to charms) once it ends, or is broken.
+export const HEARTBREAK = { player: 60, monster: 30 };
+
+/** A charm ending (or broken): heartbreak, and a monster turns on you again (see Monster.uncharm). */
+const charmEnds = (game, who) => {
+  afflict(game, who, 'heartbroken', HEARTBREAK[who.isPlayer ? 'player' : 'monster'], { show: false });
+  who.uncharm?.(game);
+};
 
 const poisonDose = { player: (game) => 1 + Math.floor(danger(game.level.depth) / 4), monster: (game, m) => 1 + Math.floor(m.danger / 3) };
 
@@ -75,6 +84,27 @@ export const STATUSES = {
       who.maxHp = who.weakBase;
       who.weakBase = null;
     },
+  },
+  // Charmed: you can't fight (see Game.canFight). A monster takes your side and fights for you (see Monster), and a
+  // boss just stops fighting. Striking one breaks it (see breakCharm). Smitten is a charm that never wears off (for the
+  // Bard, to come); on a boss it's an ordinary charm. Either leaves its target Heartbroken, and no charm takes on the
+  // heartbroken.
+  charmed: {
+    label: 'Charmed', color: '#ff8ac8', tint: 0x7a2050, harm: true, mark: 'CHARMED',
+    immune: (who) => who.status.heartbroken > 0 || who.status.smitten > 0,
+    start: ["You are charmed! You can't bring yourself to fight.", 'warn'], end: 'The charm on you breaks.',
+    onStart: (game, who) => who.charm?.(game),
+    onEnd: charmEnds,
+  },
+  smitten: {
+    label: 'Smitten', color: '#ff8ac8', tint: 0x7a2050, permanent: true, player: false, mark: 'SMITTEN',
+    immune: (who) => who.status.heartbroken > 0,
+    onStart: (game, who) => who.charm?.(game),
+    onEnd: charmEnds,
+  },
+  heartbroken: {
+    label: 'Heartbroken', color: '#b07898', mark: 'HEARTBROKEN',
+    start: ['Your heart aches. No charm will take you for a while.', 'info'], end: 'Your heart has mended.',
   },
   confused: {
     label: 'Confused', color: '#e0a8ff', harm: true,
@@ -148,6 +178,11 @@ export function afflict(game, who, key, secs, { show = true } = {}) {
   }
   if (def.harm && who.boss) secs *= BOSS_STATUS;
   switch (key) {
+    case 'smitten':
+      // A boss is only ever charmed, for a while; anything else stays smitten, and is no longer merely charmed.
+      if (who.boss) return afflict(game, who, 'charmed', secs, { show });
+      s.charmed = 0;
+      break;
     case 'burning':
       if (s.wet > 0) return false;
       if (s.frozen > 0 || s.chilled > 0) {
@@ -181,7 +216,7 @@ export function afflict(game, who, key, secs, { show = true } = {}) {
       break;
   }
   const fresh = !(s[key] > 0);
-  s[key] = def.stack === 'add' ? s[key] + secs : Math.max(s[key], secs);
+  s[key] = def.permanent ? 1 : def.stack === 'add' ? s[key] + secs : Math.max(s[key], secs);
   if (fresh) {
     def.onStart?.(game, who);
     who.statusNote(game, key, 'start');
@@ -195,6 +230,16 @@ export function cure(game, who, key, { quiet = false } = {}) {
   who.status[key] = 0;
   if (key !== 'frozen') STATUSES[key].onEnd?.(game, who);
   if (!quiet) who.statusNote(game, key, 'end');
+}
+
+/** Breaks a charm (or a smitten's devotion) on `who`: struck by the one it was charmed by, it's heartbroken. */
+export function breakCharm(game, who) {
+  if (!(who.status.charmed > 0 || who.status.smitten > 0)) return;
+  const key = who.status.smitten > 0 ? 'smitten' : 'charmed';
+  who.status.charmed = 0;
+  who.status.smitten = 0;
+  STATUSES[key].onEnd(game, who);
+  who.statusNote(game, key, 'end');
 }
 
 function douse(game, who) {
@@ -241,7 +286,7 @@ export function tickStatuses(game, who, dt, { damage = true } = {}) {
   const s = who.status;
   let hurting = false;
   for (const key in s) {
-    if (!(s[key] > 0)) continue;
+    if (!(s[key] > 0) || STATUSES[key].permanent) continue;
     s[key] = Math.max(0, s[key] - dt);
     if (s[key] === 0) {
       STATUSES[key].onEnd?.(game, who);

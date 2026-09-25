@@ -10,7 +10,8 @@ export function playerStrike(game, power) {
   const w = p.weaponStats();
   const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
 
-  let best = null, bestD = Infinity;
+  // The nearest monster in reach, in front of you; your allies only if there's nothing else to hit.
+  let best = null, bestD = Infinity, bestKey = Infinity;
   for (const m of level.monsters) {
     if (m.dead) continue;
     const dx = m.x - p.x, dz = m.z - p.z;
@@ -19,7 +20,8 @@ export function playerStrike(game, power) {
     const cos = (dx * fx + dz * fz) / (d || 1);
     if (d > m.radius + 0.35 && cos < CONE) continue;
     if (!level.los(p.x, p.z, m.x, m.z)) continue;
-    if (d < bestD) { best = m; bestD = d; }
+    const key = d + (m.isAlly() ? 100 : 0);
+    if (key < bestKey) { best = m; bestD = d; bestKey = key; }
   }
   if (!best) return false;
 

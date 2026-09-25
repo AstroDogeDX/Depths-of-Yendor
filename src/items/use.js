@@ -145,6 +145,7 @@ function lookDir(p) {
 }
 
 export function throwPotion(game, item) {
+  if (!game.canFight()) return false;
   const p = game.player;
   const one = p.takeOne(item);
   const d = lookDir(p);
@@ -224,7 +225,7 @@ export function readScroll(game, item) {
     case 'terror': {
       let n = 0;
       for (const m of level.monsters) {
-        if (m.dead || m.boss) continue;
+        if (m.dead || m.boss || m.isAlly()) continue;
         if (Math.hypot(m.x - p.x, m.z - p.z) < 12 && level.los(p.x, p.z, m.x, m.z) && m.afflict(game, 'feared', 12)) n++;
       }
       game.log(n ? 'You hear maniacal laughter. The monsters flee in terror!' : 'You hear maniacal laughter in the distance.', 'good');
@@ -281,6 +282,7 @@ function enchant(game, it) {
 // --- Wands ---
 
 export function zapWand(game, item) {
+  if (!game.canFight()) return false;
   const p = game.player, k = game.knowledge, level = game.level;
   p.lastWand = item;
   game.viewmodel.dip();
@@ -324,7 +326,7 @@ export function zapWand(game, item) {
         ex += d.x * 0.2; ey += d.y * 0.2; ez += d.z * 0.2;
         if (level.blocksSight(level.toTile(ex), level.toTile(ez)) || ey < 0 || ey > 2.8) break;
         for (const m of level.monsters) {
-          if (!m.dead && !hitSet.has(m) && Math.hypot(m.x - ex, m.z - ez) < m.radius + 0.35) hitSet.add(m);
+          if (!m.dead && !m.isAlly() && !hitSet.has(m) && Math.hypot(m.x - ex, m.z - ez) < m.radius + 0.35) hitSet.add(m);
         }
       }
       transient(level, lightningMesh(ox, oy - 0.1, oz, ex, ey, ez), 0.18);
@@ -493,13 +495,14 @@ export function activateArtefact(game, slot) {
     game.log(`The ${def.name} is not ready (${Math.ceil(p.artefactCD[slot])}s).`, 'info');
     return;
   }
+  if (a.type === 'horn' && !game.canFight()) return;
   p.artefactCD[slot] = def.active.cooldown;
   if (a.type === 'horn') {
     game.audio.horn();
     game.shake(0.3);
     ring(level, p.x, p.z, 0xd0a040, 6, 0.6);
     for (const m of level.monsters) {
-      if (m.dead) continue;
+      if (m.dead || m.isAlly()) continue; // (it spares your allies)
       const dx = m.x - p.x, dz = m.z - p.z, d = Math.hypot(dx, dz);
       if (d > 6.5) continue;
       m.afflict(game, 'paralysed', 3.5); // (a boss shakes it off in half the time)

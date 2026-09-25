@@ -303,7 +303,7 @@ export class Player {
         playerStrike(game, this.swingPower);
       }
       if (this.swingT >= this.swingDur) this.swingT = -1;
-    } else if (!para && ((input.attackPressed && this.charge >= 0.2) || (input.attack && this.charge >= 1))) {
+    } else if (!para && ((input.attackPressed && this.charge >= 0.2) || (input.attack && this.charge >= 1)) && game.canFight()) {
       this.swingPower = 0.3 + 0.7 * this.charge;
       this.charge = 0;
       this.swingT = 0;

@@ -322,7 +322,7 @@ export class UI {
     const st = [];
     if (g.hunted) st.push('<span class="st-hunted">Hunted</span>');
     for (const [key, def] of Object.entries(STATUSES)) {
-      if (p.status[key] > 0) st.push(`<span style="color:${def.color}">${def.label} ${Math.ceil(p.status[key])}</span>`);
+      if (p.status[key] > 0) st.push(`<span style="color:${def.color}">${def.label}${def.permanent ? '' : ` ${Math.ceil(p.status[key])}`}</span>`);
     }
     if (p.winded) st.push('<span class="st-winded">Winded</span>');
     else if (p.mode === 'sneak') st.push('<span class="st-sneak">Sneaking</span>');
@@ -350,7 +350,8 @@ export class UI {
     const t = g.target;
     $('target').hidden = !t;
     if (t) {
-      const tag = t.state === 'sleep' ? ' (asleep)' : t.state !== 'hunt' ? ' (unaware)' : !t.seen ? ' (searching)' : '';
+      const tag = t.isAlly() ? ' (fighting for you)' : t.charmed() ? '' : t.state === 'sleep' ? ' (asleep)' : t.state !== 'hunt' ? ' (unaware)'
+        : !t.seen ? ' (searching)' : '';
       const sts = Object.entries(STATUSES).filter(([key]) => t.status[key] > 0)
         .map(([, def]) => `<span style="color:${def.color}">${def.label}</span>`).join(' ');
       this.setHtml('target-name', `${t.name}${tag}${sts ? ` <span class="target-st">${sts}</span>` : ''}`);
@@ -455,7 +456,7 @@ export class UI {
       if (m.dead) continue;
       const seen = lvl.isVisibleWorld(m.x, m.z) && p.status.blind <= 0;
       if (!seen && !sense) continue;
-      ctx.fillStyle = m.boss ? '#ff40ff' : seen ? '#ff4030' : '#b03060';
+      ctx.fillStyle = m.isAlly() ? '#ff8ac8' : m.boss ? '#ff40ff' : seen ? '#ff4030' : '#b03060';
       const s = Math.max(3, scale * (m.boss ? 0.9 : 0.6));
       ctx.fillRect(ox + (m.x / TS) * scale - s / 2, oy + (m.z / TS) * scale - s / 2, s, s);
     }

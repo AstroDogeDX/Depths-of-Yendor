@@ -399,6 +399,16 @@ export class Game {
     }
   }
 
+  /** False while you're charmed: no swinging, zapping, throwing or warlike powers. Says so, at most every 0.6s. */
+  canFight() {
+    if (!(this.player.status.charmed > 0)) return true;
+    if (this.time - (this.charmMsgT ?? -Infinity) >= 0.6) {
+      this.charmMsgT = this.time;
+      this.log("You can't bring yourself to fight!", 'warn');
+    }
+    return false;
+  }
+
   /** False while paralysed: no item use, pickups, stairs or powers. Says so, at most every 0.6s. */
   canAct() {
     if (!this.player.held()) return true;
@@ -762,12 +772,21 @@ export class Game {
     if (!opts.dot) hitStatuses(this, p, opts.type, { ignite: opts.type === 'fire' ? opts.ignite ?? 3 : 0, chill: opts.chill });
   }
 
-  onMonsterKilled(m) {
+  /**
+   * A monster died: to you, or to `killer` (another monster: one of your allies, or in a brawl). Its death is yours to
+   * profit from, unless it was fighting for you.
+   */
+  onMonsterKilled(m, killer = null) {
     const p = this.player;
-    p.kills++;
     this.audio.kill();
-    this.log(m.boss ? `The ${m.name} crashes to the floor and is still.` : `You kill the ${m.name}.`, m.boss ? 'good' : '');
-    p.gainXp(Math.round(m.def.xp * (1 + (m.maxHp / m.def.hp - 1) * 0.5)), this);
+    if (m.isAlly()) {
+      this.log(`The ${m.name} fighting at your side falls.`, 'warn');
+    } else {
+      p.kills++;
+      const how = killer ? `The ${killer.name} kills the ${m.name}.` : `You kill the ${m.name}.`;
+      this.log(m.boss ? `The ${m.name} crashes to the floor and is still.` : how, m.boss ? 'good' : '');
+      p.gainXp(Math.round(m.def.xp * (1 + (m.maxHp / m.def.hp - 1) * 0.5)), this);
+    }
     const level = this.level;
     // Whatever it carried falls where it died, or onto the bank if it flew over water.
     const at = level.landSpot(m.x, m.z);

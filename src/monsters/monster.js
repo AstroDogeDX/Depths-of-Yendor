@@ -8,6 +8,7 @@ import { round2 } from '../save.js';
 import { DAMAGE_TYPES, damageType, damageMult, isPhysical } from '../damage.js';
 import {
   STATUSES, blankStatus, restoreStatus, saveStatus, afflict as applyStatus, tickStatuses, damageTakenMult, hitStatuses,
+  breakCharm,
 } from '../status.js';
 
 const BLOOD = {
@@ -18,6 +19,11 @@ const BLOOD = {
 const STRIKE_TIME = 0.3;
 const TINTS = Object.entries(STATUSES).filter(([, def]) => def.tint); // (in the order they win)
 const BLIND_SIGHT = 1.6; // metres a blinded monster can still make you out at: about a tile
+// Monsters fighting monsters (see pickFoe): a grudge against one that struck it lasts this long (renewed by each blow);
+// an ally goes for hostiles hunting you (or it) this near; a hostile turns on an ally that comes this close.
+const GRUDGE = 8;
+const ALLY_REACH = 12;
+const ALLY_PROVOKES = 4;
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 export class Monster {
@@ -58,6 +64,10 @@ export class Monster {
     this.weakBase = null; // its max health before it was weakened
     this.searchAt = null; // the tile it's searching for you at: where it last saw or heard you (see search)
     this.searchField = null;
+    this.foe = null; // another monster it's fighting, if any (see pickFoe)
+    this.foeT = 0;
+    this.pulledT = 0; // you struck it this recently: it's set on you, whoever else is about
+    this.chase = null; // the way to its foe: { tx, ty, field }
     this.seeT = rand.range(0, 0.2);
     this.canSee = false;
     this.seen = false; // has laid eyes on the player during this hunt (vs. searching for a noise)
@@ -116,6 +126,29 @@ export class Monster {
   /** Paralysed or frozen: it can't move or strike, and it's open to an unaware blow. */
   held() { return this.status.paralysed > 0 || this.status.frozen > 0; }
 
+  /** Charmed or smitten: it won't fight you (see status.js). */
+  charmed() { return this.status.charmed > 0 || this.status.smitten > 0; }
+
+  /** On your side: charmed, and not a boss (a charmed boss only stops fighting). */
+  isAlly() { return this.charmed() && !this.boss; }
+
+  /** Charmed: it stops fighting you at once, wakes, and forgets it was hunting you. */
+  charm() {
+    this.attack.phase = 'none';
+    this.foe = null;
+    this.state = 'wander';
+    this.seen = false;
+    this.wander = null;
+  }
+
+  /** The charm is over: it's a monster again, and will notice you as any would. */
+  uncharm() {
+    this.attack.phase = 'none';
+    this.foe = null;
+    this.state = 'wander';
+    this.seen = false;
+  }
+
   /** Shows what's happened to one of its statuses: a word over it, if you can see it. */
   statusNote(game, key, event) {
     if (this.dead) return;
@@ -145,6 +178,9 @@ export class Monster {
 
     this.tickStatus(dt, game, level);
     if (this.dead) return;
+    this.foeT -= dt;
+    this.pulledT -= dt;
+    if (this.foe && (this.foe.dead || this.foeT <= 0)) this.foe = null;
 
     const p = game.player;
     const dx = p.x - this.x, dz = p.z - this.z;
@@ -154,12 +190,12 @@ export class Monster {
     if (this.seeT <= 0) {
       this.seeT = 0.2;
       // Blinded, it can make you out only right beside it; it hears as well as ever.
-      this.canSee = p.status.invisible <= 0 && dist < (this.status.blind > 0 ? BLIND_SIGHT : 18) &&
-        level.los(this.x, this.z, p.x, p.z);
-      this.perceive(game, level, dist);
+      this.canSee = p.status.invisible <= 0 && dist < this.sight() && level.los(this.x, this.z, p.x, p.z);
+      if (!this.charmed()) this.perceive(game, level, dist);
+      this.pickFoe(game, level);
     }
-    // Carrying the Amulet, you're Hunted: everything on the floor knows where you are.
-    if (game.hunted && (this.state !== 'hunt' || !this.seen)) {
+    // Carrying the Amulet, you're Hunted: everything on the floor knows where you are (all but the charmed).
+    if (game.hunted && !this.charmed() && (this.state !== 'hunt' || !this.seen)) {
       this.state = 'hunt';
       this.seen = true;
       this.lostT = 0;
@@ -171,7 +207,7 @@ export class Monster {
     if (this.held()) {
       this.attack.phase = 'none';
     } else if (this.attack.phase !== 'none') {
-      this.updateAttack(dt * speedMult, game, level, dist, dx, dz);
+      this.updateAttack(dt * speedMult, game, level);
     } else {
       this.cooldown -= dt * speedMult;
       moving = this.think(dt, game, level, dist, dx, dz, speedMult);
@@ -245,6 +281,35 @@ export class Monster {
     }
   }
 
+  /** How far it can see: hardly at all while blinded. */
+  sight() { return this.status.blind > 0 ? BLIND_SIGHT : 18; }
+
+  /**
+   * Who it fights besides you, looked at a few times a second. An ally (see isAlly) goes for the nearest monster in
+   * sight that's hunting you, or fighting it. Anything else fights a monster that struck it, for as long as the grudge
+   * lasts (see takeDamage), or an ally that comes close. A charmed boss fights no one.
+   */
+  pickFoe(game, level) {
+    const ally = this.isAlly();
+    if (this.foe && !this.foe.dead && this.foeT > 0 && !(ally && this.foe.charmed())) return;
+    this.foe = null;
+    if (this.charmed() && !ally) return;
+    if (!ally && (this.state === 'sleep' || this.pulledT > 0)) return;
+    let best = null, bestD = Infinity;
+    for (const m of level.monsters) {
+      if (m === this || m.dead) continue;
+      if (ally ? m.charmed() || !(m.state === 'hunt' || m.foe === this) : !m.isAlly()) continue;
+      const d = Math.hypot(m.x - this.x, m.z - this.z);
+      if (d >= bestD || d > (ally ? ALLY_REACH : ALLY_PROVOKES) || d > this.sight() || !level.los(this.x, this.z, m.x, m.z)) continue;
+      best = m;
+      bestD = d;
+    }
+    if (best) {
+      this.foe = best;
+      this.foeT = GRUDGE;
+    }
+  }
+
   /** Where to search for you: the tile at (x, z). */
   setSearch(level, x, z) {
     const tx = level.toTile(x), ty = level.toTile(z);
@@ -271,7 +336,7 @@ export class Monster {
    * finds nothing and hears no more (see think). Still open to an unaware strike.
    */
   hear(game, level, x = game.player.x, z = game.player.z) {
-    if (this.state === 'hunt' && this.seen && this.canSee) return;
+    if (this.charmed() || (this.state === 'hunt' && this.seen && this.canSee)) return;
     this.state = 'hunt';
     this.seen = false;
     this.lostT = 0;
@@ -290,7 +355,7 @@ export class Monster {
 
   /** Knows where you are now, and hunts you. `mark` shows a "!" over it (not when a hit woke it: that has its own). */
   notice(game, mark = true) {
-    if (this.state === 'hunt' && this.seen) return;
+    if (this.charmed() || (this.state === 'hunt' && this.seen)) return;
     this.state = 'hunt';
     this.seen = true;
     this.lostT = 0;
@@ -304,6 +369,19 @@ export class Monster {
     const p = game.player;
     const speed = def.speed * speedMult;
 
+    if (this.status.feared > 0) {
+      const wp = level.step(level.flowFor(this.flies), this.x, this.z, true, this.flies);
+      return !!wp && this.moveTo(wp.x, wp.z, speed, dt, level, game);
+    }
+    if (this.charmed()) {
+      if (!this.isAlly()) {
+        this.face(dx, dz, dt, 2); // a charmed boss stands and watches you
+        return false;
+      }
+      return this.foe ? this.fightMonster(dt, game, level, this.foe, speed) : this.followYou(dt, game, level, speed, dist);
+    }
+    if (this.foe) return this.fightMonster(dt, game, level, this.foe, speed);
+
     // It knows where you are while it can see you (or while you're Hunted); otherwise it's searching where it last saw
     // or heard you, and gives up after a while with no sign of you (never, if it's a boss).
     const knows = this.canSee || game.hunted;
@@ -314,10 +392,6 @@ export class Monster {
         this.state = 'wander';
         this.wander = null;
       }
-    }
-    if (this.status.feared > 0) {
-      const wp = level.step(level.flowFor(this.flies), this.x, this.z, true, this.flies);
-      return !!wp && this.moveTo(wp.x, wp.z, speed, dt, level, game);
     }
     if (this.state === 'sleep') return false;
     if (this.state === 'wander') return this.doWander(dt, level, game, speed * 0.55);
@@ -330,7 +404,7 @@ export class Monster {
         this.decideT = 0.4;
         const prefersMelee = r.keepAway === 0 && inReach;
         if (!prefersMelee && rand.chance(r.chance ?? 1)) {
-          this.startAttack(true);
+          this.startAttack(true, p);
           return false;
         }
       }
@@ -351,7 +425,7 @@ export class Monster {
 
     if (inReach) {
       this.face(dx, dz, dt);
-      if (this.cooldown <= 0) this.startAttack(false);
+      if (this.cooldown <= 0) this.startAttack(false, p);
       return false;
     }
     // Straight at you if it can see you and nothing's in the way (you might be across water); else by the path.
@@ -361,6 +435,44 @@ export class Monster {
       return !!wp && this.moveTo(wp.x, wp.z, speed, dt, level, game);
     }
     return this.search(dt, level, game, speed);
+  }
+
+  /**
+   * Goes for another monster (`t`): into reach and strikes, or shoots if it can and it's further off, making its way
+   * round what's between them if need be.
+   */
+  fightMonster(dt, game, level, t, speed) {
+    const dx = t.x - this.x, dz = t.z - this.z, dist = Math.hypot(dx, dz);
+    const sees = dist < this.sight() && level.los(this.x, this.z, t.x, t.z);
+    const reach = this.def.reach + t.radius;
+    const r = this.def.ranged;
+    if (sees && r && dist > reach && dist <= r.maxRange && this.cooldown <= 0 && rand.chance(r.chance ?? 1)) {
+      this.face(dx, dz, dt);
+      this.startAttack(true, t);
+      return false;
+    }
+    if (dist <= reach) {
+      this.face(dx, dz, dt);
+      if (this.cooldown <= 0) this.startAttack(false, t);
+      return false;
+    }
+    if (sees && level.clearPath(this.x, this.z, t.x, t.z, this.flies)) return this.moveTo(t.x, t.z, speed, dt, level, game);
+    const tx = level.toTile(t.x), ty = level.toTile(t.z);
+    if (this.chase?.tx !== tx || this.chase?.ty !== ty) this.chase = { tx, ty, field: level.fieldTo(tx, ty, this.flies) };
+    const wp = level.step(this.chase.field, this.x, this.z, false, this.flies);
+    return !!wp && this.moveTo(wp.x, wp.z, speed, dt, level, game);
+  }
+
+  /** An ally with nothing to fight keeps near you: it closes in when you're a few steps off, then waits. */
+  followYou(dt, game, level, speed, dist) {
+    const p = game.player;
+    if (dist < 2.8) {
+      this.face(p.x - this.x, p.z - this.z, dt, 2);
+      return false;
+    }
+    if (dist < 8 && level.clearPath(this.x, this.z, p.x, p.z, this.flies)) return this.moveTo(p.x, p.z, speed, dt, level, game);
+    const wp = level.step(level.flowFor(this.flies), this.x, this.z, false, this.flies);
+    return !!wp && this.moveTo(wp.x, wp.z, speed, dt, level, game);
   }
 
   /** Makes for where it last saw or heard you, and looks about when it gets there. */
@@ -442,24 +554,30 @@ export class Monster {
     this.yaw += wrapAngle(target - this.yaw) * Math.min(1, dt * rate);
   }
 
-  startAttack(ranged) {
+  /** Winds up an attack on `target`: you, or a monster it's fighting. */
+  startAttack(ranged, target) {
     this.attack.phase = 'windup';
     this.attack.t = 0;
     this.attack.ranged = ranged;
+    this.attack.target = target;
   }
 
-  updateAttack(dt, game, level, dist, dx, dz) {
-    const a = this.attack;
+  updateAttack(dt, game, level) {
+    const a = this.attack, t = a.target;
+    if (t.dead || (this.isAlly() && t !== game.player && t.charmed())) {
+      a.phase = 'none'; // its foe fell, or it's been charmed too: on the same side now
+      return;
+    }
     a.t += dt;
-    // Monsters track you slowly while winding up — circle-strafe to make them whiff.
-    const target = Math.atan2(dx, dz);
+    // Monsters track their target slowly while winding up — circle-strafe to make them whiff.
+    const target = Math.atan2(t.x - this.x, t.z - this.z);
     const maxTurn = 2.6 * dt;
     this.yaw += Math.max(-maxTurn, Math.min(maxTurn, wrapAngle(target - this.yaw)));
     if (a.phase === 'windup' && a.t >= this.def.windup) {
       a.phase = 'strike';
       a.t = 0;
-      if (a.ranged) this.fire(game, level);
-      else this.melee(game, level, dist, dx, dz);
+      if (a.ranged) this.fire(game, level, t);
+      else this.melee(game, level, t);
     } else if (a.phase === 'strike' && a.t >= STRIKE_TIME) {
       a.phase = 'none';
       this.cooldown = this.def.cooldown * rand.range(0.8, 1.2);
@@ -471,9 +589,10 @@ export class Monster {
     return Math.round(rand.int(this.def.dmg[0], this.def.dmg[1]) * this.dmgMult * scale * (this.status.weakened > 0 ? 0.75 : 1));
   }
 
-  melee(game, level, dist, dx, dz) {
+  melee(game, level, target) {
     const p = game.player;
     const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
+    const nearYou = Math.hypot(p.x - this.x, p.z - this.z) < 14;
     // Confused, it lays about at whatever's nearest: half the time, another monster in reach.
     if (this.status.confused > 0 && rand.chance(0.5)) {
       const other = level.monsters.find((m) => m !== this && !m.dead &&
@@ -484,6 +603,16 @@ export class Monster {
         return;
       }
     }
+    if (target !== p) {
+      // Another monster: in reach and in front, it's struck, unless it ducks.
+      const mx = target.x - this.x, mz = target.z - this.z, md = Math.hypot(mx, mz);
+      if (md <= this.def.reach + target.radius + 0.25 && (mx * fx + mz * fz) / (md || 1) > 0.35 &&
+          level.los(this.x, this.z, target.x, target.z) && rand.chance(0.9 - target.def.dodge)) {
+        target.takeDamage(game, this.rollDamage(), { type: damageType(this.def), attacker: this });
+      } else if (nearYou) game.audio.whiff();
+      return;
+    }
+    const dx = p.x - this.x, dz = p.z - this.z, dist = Math.hypot(dx, dz);
     const facing = (dx * fx + dz * fz) / (dist || 1);
     if (dist <= this.def.reach + PLAYER_RADIUS + 0.25 && facing > 0.35 && p.status.invisible <= 0 &&
         level.los(this.x, this.z, p.x, p.z)) {
@@ -499,11 +628,13 @@ export class Monster {
     }
   }
 
-  fire(game, level) {
+  /** Shoots at `target` (you, or a monster it's fighting). An ally's shots pass by you and your other allies. */
+  fire(game, level, target) {
     const r = this.def.ranged;
     const p = game.player;
     const ox = this.x + Math.sin(this.yaw) * 0.4, oy = this.baseY + this.height * 0.75, oz = this.z + Math.cos(this.yaw) * 0.4;
-    const tx = p.x - ox, ty = EYE_H - 0.35 - oy, tz = p.z - oz;
+    const aimY = target === p ? EYE_H - 0.35 : target.baseY + target.height * 0.55;
+    const tx = target.x - ox, ty = aimY - oy, tz = target.z - oz;
     const len = Math.hypot(tx, ty, tz) || 1;
     const n = r.volley || 1;
     // Confused, its aim goes astray.
@@ -514,12 +645,12 @@ export class Monster {
       const vx = (tx * c - tz * s) / len, vz = (tx * s + tz * c) / len;
       spawnProjectile(level, {
         x: ox, y: oy, z: oz, vx: vx * r.speed, vy: (ty / len) * r.speed, vz: vz * r.speed,
-        owner: 'monster', kind: r.kind, color: r.color, size: r.size, source: this.name,
+        owner: this.isAlly() ? 'ally' : 'monster', attacker: this, kind: r.kind, color: r.color, size: r.size, source: this.name,
         dmg: this.rollDamage(0.85),
         type: r.dmgType && damageType(r),
       });
     }
-    game.audio.shoot(r.kind);
+    if (Math.hypot(p.x - this.x, p.z - this.z) < 18) game.audio.shoot(r.kind);
   }
 
   /**
@@ -527,6 +658,8 @@ export class Monster {
    * as its statuses make it (see damageTakenMult in status.js). A hit may thaw it, set it alight (`ignite` seconds)
    * or chill it (`chill` seconds): see hitStatuses. Returns the damage it took.
    * opts: { type, dot, sneak, ignite, chill, knockback: {x, z}, attacker (a monster that struck it, not you) }.
+   * A monster that strikes it becomes its foe for a while (see pickFoe); your blows turn it back on you, and break a
+   * charm on it (see breakCharm).
    */
   takeDamage(game, amount, opts = {}) {
     if (this.dead) return 0;
@@ -534,6 +667,7 @@ export class Monster {
     // (A frozen monster's resistances don't show: they're stripped.)
     if (own !== 1 && !(own < 1 && this.status.frozen > 0)) this.revealResist(game, opts.type, own);
     const mult = damageTakenMult(this, opts.type, own);
+    this.struck(game, opts);
     if (mult === 0) {
       if (!opts.dot) game.popup(this.headPos(), 'IMMUNE', 'immune');
       if (isPhysical(opts.type)) game.audio.block();
@@ -566,8 +700,23 @@ export class Monster {
       this.attack.phase = 'none';
       this.cooldown = 0.5;
     }
-    if (this.hp <= 0) this.die(game);
+    if (this.hp <= 0) this.die(game, opts.attacker);
     return amount;
+  }
+
+  /** Who a blow came from, and what that does: a grudge against a monster, or you breaking a charm on it. */
+  struck(game, opts) {
+    if (opts.attacker) {
+      if (opts.attacker !== this && !opts.attacker.dead) {
+        this.foe = opts.attacker;
+        this.foeT = GRUDGE;
+      }
+      if (this.state === 'sleep') this.state = 'wander';
+    } else if (!opts.dot) {
+      if (this.charmed()) breakCharm(game, this);
+      this.foe = null;
+      this.pulledT = GRUDGE;
+    }
   }
 
   /** The first time in a run you see its kind resist a damage type (or be weak to it), the log says so. */
@@ -579,12 +728,13 @@ export class Monster {
     else game.log(`The ${this.name} is weak to ${noun}!`, 'good');
   }
 
-  die(game) {
+  /** Dies, to you or to `killer` (another monster). */
+  die(game, killer = null) {
     this.dead = true;
     this.deathT = 0;
     this.attack.phase = 'none';
     burst(game.level, this.x, this.baseY + this.height * 0.5, this.z, BLOOD[this.type], 16, 3.5, 0.9);
-    game.onMonsterKilled(this);
+    game.onMonsterKilled(this, killer);
   }
 
   updateTint(dt) {

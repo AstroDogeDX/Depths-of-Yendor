@@ -154,6 +154,9 @@ Statuses afflict you and monsters alike, by one set of rules (`status.js`): what
 | Confused | confusion potions | you stagger. Monsters stagger, shoot wide, and half the time lay into another monster in reach |
 | Blind | potions of darkness | you see almost nothing; a monster sees only about a tile around it, so it hunts by ear (below) |
 | Feared | scrolls of terror | monsters run from you |
+| Charmed | nothing yet | you can't fight: no swinging, zapping, throwing or Horn. A monster takes your side (see *Allies* below); a boss just stops fighting. Striking a charmed monster breaks the charm |
+| Smitten | nothing yet (the Bard, to come) | monsters only: a charm that never wears off. On a boss it's an ordinary charm |
+| Heartbroken | a charm ending, or broken | no charm takes. 60 s for you, 30 s for a monster |
 | Hasted, Mind vision, Invisible | their potions, the Cloak of Shadows | yours only: you're faster, you sense every monster on the floor, monsters lose track of you |
 | Hunted | carrying the Amulet (not timed) | every monster on the floor knows where you are, even while you're invisible (but they can't strike what they can't see) |
 
@@ -162,7 +165,15 @@ How they meet (`afflict` in `status.js`):
 - **Water puts out fire,** and nothing wet will burn.
 - **Cold puts out fire, and heat drives out cold.** Setting something chilled or frozen alight thaws it instead, and chilling something that's burning douses it instead. A fire hit on something frozen thaws it and does its full damage.
 - **Cold on something wet freezes it solid,** as does wetting something chilled. Oozes are `fluid` (a trait in `monsters/defs.js`), so cold alone freezes them.
+- **A charm leaves its target Heartbroken,** whether it wears off or is broken, and nothing heartbroken can be charmed.
 - **Immunity to a damage type wards off its status.** A resistance of 0 to fire, poison or ice (the fire imp to fire, Emberheart's wearer, the undead to poison) means no burning, no poison, or no chill or freezing.
+
+**Allies.** A charmed or smitten monster fights for you. It keeps near you, and goes for any monster in sight that's hunting you or fighting it, while leaving sleepers and wanderers be. Hostile monsters turn on an ally that strikes them or comes within a few metres. Any monster struck by another holds a grudge for 8 s, so a confused one's wild blows start brawls too. Striking a monster yourself pulls it back onto you for as long.
+
+- **Your attacks spare your allies.** Your sword goes for an enemy in reach before an ally. Your bolts, the lightning wand and the Horn pass them by, and so do your allies' own shots. Enemies' shots can hit them. Splashes and fire catch everyone.
+- **Striking an ally** (or a charmed boss) breaks its charm, and it turns on you.
+- **Kills:** what your allies kill (or a brawl does) counts as yours, experience and all. An ally that falls counts as nothing.
+- **Charmed allies stay on their floor** when you take the stairs. That floor stands still while you're away, but its charms still wear off by the time you come back (see above).
 
 **Hunger** has three stages:
 
@@ -344,7 +355,7 @@ src/
   world/shopkeeper.js  the shop's merchant: idle animation and remarks
   world/trapModels.js  the traps' models: their armed, active and used states, and how they move going off
   monsters/defs.js     bestiary stats, the floors each monster appears on, spawn tables
-  monsters/monster.js  AI state machine (sleep → wander → hunt, fear, ranged kiting), attacks, statuses
+  monsters/monster.js  AI state machine (sleep → wander → hunt by sight or by ear, fear, ranged kiting), allies and brawls, attacks
   monsters/models.js   loads the rigged Blockbench monsters and animates their bones
   items/defs.js        item catalog and unidentified appearances
   items/identify.js    per-run appearance shuffle, naming, descriptions
