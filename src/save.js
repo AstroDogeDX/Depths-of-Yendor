@@ -11,8 +11,14 @@
 // floors are laid out can: each saved floor carries its layout's fingerprint, and one that no longer matches
 // starts afresh (see Game.getLevel).
 
+import { randomBane } from './items/enchant.js';
+import { rand } from './rng.js';
+
 const KEY = 'doy.save';
 export const SAVE_VERSION = 1;
+// Changes a save made before them can be brought up to date with (see upgrade): 2, the rework of curses and the
+// scroll of upgrade.
+export const SAVE_FORMAT = 2;
 
 /** Writes a save. False if storage refused it (full, or blocked). */
 export function writeSave(data) {
@@ -36,18 +42,39 @@ export function readSave() {
 }
 
 /**
- * Brings a save up to date with what's been renamed since it was made: the wand of slowness is now the wand of frost.
- * (Renamed statuses are dealt with as they're restored: see restoreStatus in status.js.)
+ * Brings a save up to date with what's changed since it was made. (Renamed statuses are dealt with as they're
+ * restored: see restoreStatus in status.js.)
+ * - The wand of slowness is now the wand of frost.
+ * - Before format 2, the scroll of enchanting was what's now the scroll of upgrade, and an item's enchantment could be
+ *   negative: now it's a + of 0 or more, a curse is a strength (item.curse), and a cursed weapon or armour has a Curse
+ *   of ___ (see items/enchant.js). A cursed ring's old minus becomes a + that works against you, as before.
  */
 function upgrade(save) {
-  const wand = (it) => { if (it?.kind === 'wand' && it.type === 'slow') it.type = 'frost'; };
-  save.player.inventory.forEach(wand);
-  save.player.hotbar.forEach(wand);
-  for (const level of save.levels) for (const e of level.items) wand(e.item);
-  for (const list of [save.knowledge.known.wand, save.knowledge.tried.wand]) {
-    const i = list.indexOf('slow');
-    if (i >= 0) list[i] = 'frost';
-  }
+  const old = !(save.format >= 2);
+  const fix = (it) => {
+    if (!it) return;
+    if (it.kind === 'wand' && it.type === 'slow') it.type = 'frost';
+    if (!old) return;
+    if (it.kind === 'scroll' && it.type === 'enchant') it.type = 'upgrade';
+    if ('ench' in it || 'cursed' in it) {
+      const ench = it.ench ?? 0;
+      it.plus = it.kind === 'ring' ? Math.abs(ench) : Math.max(0, ench);
+      it.curse = it.cursed ? 2 : 0;
+      if (it.cursed && (it.kind === 'weapon' || it.kind === 'armor')) it.bane = randomBane(rand, it.kind);
+      delete it.ench;
+      delete it.cursed;
+    }
+  };
+  save.player.inventory.forEach(fix);
+  save.player.hotbar.forEach(fix);
+  for (const level of save.levels) for (const e of level.items) fix(e.item);
+  const rename = (list, from, to) => {
+    const i = list.indexOf(from);
+    if (i >= 0) list[i] = to;
+  };
+  for (const list of [save.knowledge.known.wand, save.knowledge.tried.wand]) rename(list, 'slow', 'frost');
+  if (old) for (const list of [save.knowledge.known.scroll, save.knowledge.tried.scroll]) rename(list, 'enchant', 'upgrade');
+  save.format = SAVE_FORMAT;
   return save;
 }
 

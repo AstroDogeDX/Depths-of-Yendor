@@ -40,14 +40,14 @@ For testing by hand, press **`** (the key left of 1) during a run to open the de
 
 - **Travel:** jump straight to any of the 25 floors, arriving at its entrance as if you'd walked down (boss floors are marked red, shop floors gold). **New layout** builds the floor you're on again from a new seed, for a quick look at another layout. **Reveal map** maps the whole floor and shows its hidden traps, and **To the stairs down** puts you at its exit.
 - **You:** god mode (nothing can hurt you), health and maximum health, strength, levelling up, gold, **Restore** (full health and stamina, fed, every status cleared) and **Kill every monster**.
-- **Items:** make any weapon, armour, potion, scroll, wand, ring, artefact or food, or the Amulet or an iron key for this floor, with the enchantment (extra charges, for a wand), quantity, curse and identification you choose. It goes in your pack, or on the floor in front of you when the pack is full. **Identify everything** teaches you every potion, scroll, wand and ring, and identifies what you carry.
+- **Items:** make any weapon, armour, potion, scroll, wand, ring, artefact or food, or the Amulet or an iron key for this floor, with the +N (a charge more each, for a wand), quantity, curse (none, weakened or full), enchantment and identification you choose. It goes in your pack, or on the floor in front of you when the pack is full. **Identify everything** teaches you every potion, scroll, wand and ring, and identifies what you carry.
 - **Monsters:** spawn any monster a few steps in front of you, awake or asleep.
 - **Traps:** lay a trap of any kind on the floor in front of you, found and armed, to step on.
 - **Statuses:** give yourself, or the monster you're facing, any status for 15 s, as it would happen in play (immunities and how statuses meet included).
 
 ## The pack
 
-The left of the pack shows a paper doll of what you have equipped: weapon in hand, armor on the chest (tinting the figure), two rings and two artefact attunements. A known curse gives the slot a red border. Clicking a filled slot selects that item. Selecting something you haven't equipped highlights the slot it would go into. Underneath are your derived stats (damage and its type, recovery, reach, defense, speed, strength), with anything too heavy for you shown in red. An unidentified weapon's enchantment stays hidden: its damage shows as *(+?)*.
+The left of the pack shows a paper doll of what you have equipped: weapon in hand, armor on the chest (tinting the figure), two rings and two artefact attunements. A known curse gives the slot a red border. Clicking a filled slot selects that item. Selecting something you haven't equipped highlights the slot it would go into. Underneath are your derived stats (damage and its type, recovery, reach, defense, speed, strength), with anything too heavy for you shown in red. An unidentified weapon's + stays hidden: its damage shows as *(+?)*. A curse on it you don't know of stays hidden too.
 
 ## Hotbar
 
@@ -66,15 +66,15 @@ Potion, scroll and food slots remember the *type*, so a slot whose stack runs ou
 - **Stealth and sneak attacks.** Monsters start asleep or wandering. Unaware targets take double damage and cannot dodge (Pixel Dungeon's surprise attacks). Monsters notice you by sight and by the sound of your footsteps (see below). Standing still, rings of stealth and light armour help. Heavy armour hurts.
 - **Clocks tick in seconds.** Hunger, regeneration, status effects, wand recharge and ring identification all run on real time. The world pauses while the pack or map is open, but drinking, eating, throwing or changing equipment empties your attack meter, so doing it mid-fight still costs a swing.
 - **Paralysis means paralysis.** While paralysed (or frozen) you can't use items (from the pack or the hotbar), pick things up, take stairs or invoke artefacts. Only the map stays available.
-- **Identification is per run.** Potion colours, scroll labels, wand woods and ring gems are reshuffled from the seed. Potions reveal themselves when drunk, and throwing a potion identifies it if the splash does something visible. Weapons and armour reveal their enchantment after enough hits. Rings reveal themselves after about 100 s of wear.
-- **Curses.** About 16% of equipment is cursed with a negative enchantment and binds to you when equipped. Scrolls of remove curse or enchanting break the curse.
+- **Identification is per run.** Potion colours, scroll labels, wand woods and ring gems are reshuffled from the seed. Potions reveal themselves when drunk, and throwing a potion identifies it if the splash does something visible. Weapons and armour reveal their + after enough hits. Rings reveal themselves after about 100 s of wear.
+- **Curses.** About 16% of weapons and armour, a fifth of rings and an eighth of wands are cursed. See *Curses, upgrades and enchantments* below.
 - **Persistent floors.** Levels are kept when you leave, so you can go back up, and they're saved with the run (see *Saving*). The dungeon also restocks itself slowly, and fast and angrily once you carry the Amulet.
 
 ## What's in it
 
 - **25 floors in 5 themes** of five floors each: Sewers, Catacombs, Caves, Dwarven Ruins and the Underworld. Seeded layouts with pillared halls, wall sconces, doors and hidden traps (spike, poison gas, teleport, alarm). See *The dungeon* and *Floors and doors* below.
 - **12 monsters:** rat, bat, ooze, goblin, goblin archer, skeleton, orc, wraith, fire imp, troll, stone golem, and the **Warden of Yendor**, who fires bolt volleys and raises the dead at half health.
-- **Items:** 7 weapons with different reach, speed and damage types (spears out-reach swords, hammers hit hard but recover slowly), 5 armours with strength requirements, 10 potions, 9 scrolls, 5 wands, 6 rings, food.
+- **Items:** 7 weapons with different reach, speed and damage types (spears out-reach swords, hammers hit hard but recover slowly), 5 armours with strength requirements, 10 potions, 10 scrolls, 5 wands, 6 rings, food.
 - **A shop** on the first floor of each theme after the first (floors 6, 11, 16 and 21). See *The shop* below.
 - **6 artefacts**, 5 per run in guarded shrines on the third floor of each theme (3, 8, 13, 18 and 23): Chalice of Crimson Thirst (lifesteal), Eye of the Deep (see all monsters and traps), Horn of Thunder (stun blast), Cloak of Shadows (invisibility), Boots of the Wind (speed), Emberheart (burning strikes, fire immunity). You have two attunement slots.
 - A title screen that walks you through a floor of each theme in turn, down the stairs from one to the next.
@@ -131,6 +131,29 @@ Each monster's blows fit what it fights with, and most resist some kinds of dama
 So a mace is the answer to skeletons, golems and the Warden but little use against oozes, wraiths and trolls. A spear or dagger runs through orcs, imps and trolls, but not the undead. Fire is the troll's bane, and magic is the golem's. Carrying a second weapon, and the right wand, pays. The dev tools' monster buttons list these as tooltips.
 
 You can see when a type matters. A hit on a monster's weakness shows a bigger number tagged **WEAK!**, and a melee hit on a weakness lands with a crunch. A resisted hit shows a smaller number tagged **RESISTED**, and a resisted melee hit lands with a dull clank. For physical hits the number itself turns orange or grey. A monster immune to the damage shows **IMMUNE**, including when you try to poison or burn it. Burning and poison ticks aren't tagged; the hit that started them was. The first time in a run you see a kind of monster resist a type or be weak to it, the log says so, e.g. "The troll is weak to fire!" or "Poison can't harm the skeleton!". A hit on one of your armour's weaknesses is tagged **WEAK SPOT**, and one it resists is tagged **RESISTED**.
+
+## Curses, upgrades and enchantments
+
+Equipment has a **+N** (never below 0), which the scroll of **upgrade** raises. A weapon or armour can also have an **Enchantment of ___**, or a **Curse of ___**, but not both (`items/enchant.js`: the effects there so far are a first few).
+
+**Curses** come in two strengths (`item.curse`):
+
+- **Full:** a cursed weapon, armour or ring binds itself to you once you put it on, and a weapon or armour has a Curse of ___ (clumsiness, frailty, burden, clamour...). A weapon's or armour's + still counts as normal. A cursed ring's + works *against* you instead: a cursed ring of protection +1 is −1 defense until the curse is lifted.
+- **Weakened:** it comes off, but its Curse of ___ (or a ring's reversal) remains.
+
+**Cursed wands** misfire. They don't cast their own spell, but some wand's bolt at random: missile, firebolt, frost or teleport other, never a line like lightning. A fifth of the time that fizzles, wasting the charge. Otherwise it flies as a wild, green, flickering bolt carrying that spell, or, while the curse is full, a quarter of the time the spell turns on you. The first misfire tells you the wand is cursed.
+
+What you know shows in its name: "(cursed)", "(curse weakened)", or "(uncursed)" when you know it's clean but nothing more.
+
+The scrolls:
+
+| Scroll | On | Does |
+| --- | --- | --- |
+| Upgrade | a weapon, armour, ring or wand | +1, and a wand gains a charge. On anything cursed it goes into the curse instead: a full curse is weakened (a fifth of the time lifted outright), and a weakened one is lifted |
+| Enchantment | a weapon or armour free of curses | a random enchantment, in place of any it had; identifies it. On something with a curse you didn't know of, the magic recoils and shows you the curse |
+| Remove curse | one item that might be cursed | lifts any curse, and either way marks it clean. Things you know are clean aren't offered |
+
+**Wands** show their charges in the pack and on the hotbar, where a bar fills toward the next charge, and an empty wand counts down the seconds to it. A charge returns every 55 s at +0, a tenth faster for each + (to no faster than every 27.5 s). Each + also adds a charge, and 2 to both ends of a damaging wand's damage, which its description shows.
 
 ## Statuses
 
@@ -278,9 +301,15 @@ The minimap marks found traps in the same colours (grey, green, azure, yellow), 
 
 On the first floor of each new theme after the first (floors 6, 11, 16 and 21), a door in the room you arrive in leads to a shop. A small hooded shopkeeper stands on a stool behind the counter, idly shaking a purse of coins, watching you and passing remarks. The shop is lit by blue-flamed sconces.
 
-- **Stock:** five items, three on the counter and one on each display table. There's always a ration, a potion and a scroll (often healing and identify), a piece of uncursed gear from a little deeper than the floor you're on, and a wand or an uncursed ring. Items keep their unidentified names. A price depends only on the kind of item (and, for weapons and armour, which one), never on what's hidden about it, so prices give nothing away. Prices rise a little on deeper floors (see `shopStock` and `sellPrice` in `items/generate.js`).
+- **Stock:** five items, three on the counter and one on each display table. There's always a ration, a potion and a scroll (often healing and identify), a piece of uncursed gear from a little deeper than the floor you're on, and an uncursed wand or ring. Items keep their unidentified names. What the shop charges depends only on the kind of item (and, for weapons and armour, which one: its `value` in `items/defs.js`), never on what's hidden about it, so prices give nothing away. Prices rise a little on deeper floors (see `shopStock` and `worth` in `items/generate.js`).
 - **Buying:** walk up to an item and press **E**. The prompt shows the price, or what you're short. Gold goes, the item goes into your pack, and there's no haggling or refunds.
-- **Selling:** open your pack while you're in the shop and every item gets a **Sell** button with its price: 40% of what the shop would charge for that kind of item, by the same rules, so selling something unidentified tells you nothing about it. Stacks sell one at a time, equipped items come off first (not if they're cursed), and the shopkeeper won't buy the Amulet.
+- **Selling:** open your pack while you're in the shop and every item gets a **Sell** button with its price: 40% of what it's worth, as far as you know it (`worth` in `items/generate.js`). The price never tells you more than you knew:
+  - **A potion, scroll, wand or ring of a kind you don't know** fetches a low price, the same for every kind.
+  - **Known potions and scrolls** fetch their value.
+  - **Equipment you know nothing about** (not even whether it's cursed) fetches a share of what its kind is worth, cursed or not.
+  - **Known to be clean** but not identified, it fetches its full value. **Identified**, add what its + and any enchantment are worth.
+  - **A weakened curse you know of** halves the price. **A full curse you know of**, and the shopkeeper refuses it outright.
+  - Stacks sell one at a time, equipped items come off first (not if they're cursed), and the shopkeeper won't buy the Amulet.
 - **Buying back:** the shopkeeper sets what you sell out with its wares, at its usual price for that item. It goes on the first free spot on the counter or the display tables, then on the rug, which holds six. Potions, scrolls and food of the same kind pile up on one spot and sell back one at a time. When every spot is taken, the item you sold longest ago goes to make room.
 - **Monsters** never spawn, wander or get teleported into the shop. Only a monster that was chasing you when you went in may follow you in. Any other monster that comes looking waits at the door, unless you attack it from inside.
 
@@ -359,7 +388,8 @@ src/
   monsters/models.js   loads the rigged Blockbench monsters and animates their bones
   items/defs.js        item catalog and unidentified appearances
   items/identify.js    per-run appearance shuffle, naming, descriptions
-  items/generate.js    random items by depth, enchant/curse rolls, shop stock and prices
+  items/generate.js    random items by depth, their + and curses, shop stock, what things are worth
+  items/enchant.js     Enchantments and Curses of ___ on weapons and armour, and what a curse's strength means
   items/use.js         potions, scrolls, wands, equip/curses, throwing, artefact powers
   items/models.js      loads the weapon and item models, tinting each item in its colour
   items/bbmodel.js     loads Blockbench .bbmodel projects (cubes, meshes, groups, textures) into three.js

@@ -8,6 +8,8 @@ import { Level } from '../world/level.js';
 import { T } from '../dungeon/tiles.js';
 import { DAMAGE_TYPES, damageType, describeResist } from '../damage.js';
 import { STATUSES, afflict, cure } from '../status.js';
+import { ENCHANTMENTS, CURSES } from '../items/enchant.js';
+import { rand } from '../rng.js';
 import './devTools.css';
 
 // Dev tools, for testing by hand: jump to any floor, give yourself items, change your stats, give you or a monster a
@@ -81,9 +83,12 @@ export class DevTools {
             <h3>Items</h3>
             <div class="dev-tabs"></div>
             <div class="dev-opts">
-              <label>Enchant <input type="number" data-opt="ench" value="0" min="-5" max="20" /></label>
+              <label>Upgrade + <input type="number" data-opt="plus" value="0" min="0" max="20" /></label>
               <label>Quantity <input type="number" data-opt="qty" value="1" min="1" max="99" /></label>
-              <label class="check"><input type="checkbox" data-opt="cursed" /> Cursed</label>
+              <label>Curse <select data-opt="curse"><option value="0">none</option><option value="1">weakened</option><option value="2">full</option></select></label>
+              <label>Enchantment <select data-opt="enchant"><option value="">none</option><option value="random">random</option>${
+                Object.entries(ENCHANTMENTS).flatMap(([kind, set]) => Object.entries(set).map(([key, e]) =>
+                  `<option value="${kind}:${key}">${e.name} (${kind === 'armor' ? 'armour' : kind})</option>`)).join('')}</select></label>
               <label class="check"><input type="checkbox" data-opt="identified" checked /> Identified</label>
             </div>
             <div class="dev-grid dev-items"></div>
@@ -270,14 +275,15 @@ export class DevTools {
   /** Makes an item of `type` (of the selected kind) as the options say and puts it in your pack, or at your feet. */
   give(type) {
     const g = this.game, p = g.player, kind = this.kind;
-    const ench = Math.round(+this.opt('ench').value || 0), qty = Math.max(1, Math.round(+this.opt('qty').value || 1));
+    const plus = Math.max(0, Math.round(+this.opt('plus').value || 0)), qty = Math.max(1, Math.round(+this.opt('qty').value || 1));
+    const curse = +this.opt('curse').value, enchant = this.opt('enchant').value;
     let item;
     switch (kind) {
       case 'weapon': item = makeItem('weapon', type, { hitsToId: 20 }); break;
       case 'armor': item = makeItem('armor', type, { hitsToId: 14 }); break;
       case 'ring': item = makeItem('ring', type, { wornTime: 0 }); break;
       case 'wand': {
-        const max = Math.max(1, WANDS[type].charges[1] + ench); // for a wand, the enchantment adds charges
+        const max = WANDS[type].charges[1] + plus; // for a wand, each + is a charge more
         item = makeItem('wand', type, { charges: max, maxCharges: max, rechargeT: 0 });
         break;
       }
@@ -287,9 +293,16 @@ export class DevTools {
         break;
       default: item = makeItem(kind, type);
     }
-    if (kind === 'weapon' || kind === 'armor' || kind === 'ring') {
-      item.ench = ench;
-      item.cursed = this.opt('cursed').checked;
+    // Its +, its curse (a weapon's or armour's comes with a Curse of ___), and an enchantment, if it can take the one asked
+    // for: a weapon or armour, free of curses (see items/enchant.js).
+    if (['weapon', 'armor', 'ring', 'wand'].includes(kind)) {
+      item.plus = plus;
+      item.curse = curse;
+      if (curse && CURSES[kind]) item.bane = rand.pick(Object.keys(CURSES[kind]));
+      if (enchant && !curse && ENCHANTMENTS[kind]) {
+        const [ekind, key] = enchant.split(':');
+        item.enchant = enchant === 'random' ? rand.pick(Object.keys(ENCHANTMENTS[kind])) : ekind === kind ? key : undefined;
+      }
     }
     if (stackable(item)) item.qty = qty;
     if (this.opt('identified').checked) g.knowledge.identify(item);

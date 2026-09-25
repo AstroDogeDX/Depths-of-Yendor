@@ -18,7 +18,7 @@ import { disposeGroup, propsForTheme } from './dungeon/levelBuilder.js';
 import { loadProps } from './dungeon/props.js';
 import { loadTraps } from './world/trapModels.js';
 import { TitleScene } from './ui/titleScene.js';
-import { SAVE_VERSION, writeSave, deleteSave, fingerprint } from './save.js';
+import { SAVE_VERSION, SAVE_FORMAT, writeSave, deleteSave, fingerprint } from './save.js';
 import { damageTakenMult, hitStatuses } from './status.js';
 
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, matches stair `dir`
@@ -178,7 +178,7 @@ export class Game {
     const levels = [...this.levels.values()].map((l) => l.snapshot());
     for (const s of this.savedLevels.values()) levels.push(s); // (from the save we continued, not yet revisited)
     return writeSave({
-      version: SAVE_VERSION, savedAt: Date.now(),
+      version: SAVE_VERSION, format: SAVE_FORMAT, savedAt: Date.now(),
       seed: this.seed, name: this.playerName, depth: this.level.depth, time: Math.round(this.time),
       level: p.level, amuletTaken: this.amuletTaken, artefactQueue: this.artefactQueue, nextUid: nextItemUid(),
       knowledge: this.knowledge.snapshot(), player: p.snapshot(), levels,

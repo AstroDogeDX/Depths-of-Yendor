@@ -3,6 +3,27 @@ import {
   POTION_COLORS, SCROLL_SYLLABLES, WAND_MATERIALS, RING_GEMS,
 } from './defs.js';
 import { DAMAGE_TYPES, damageType, describeResist } from '../damage.js';
+import { WAND_PLUS_DMG, wandRecharge } from './defs.js';
+import { enchantOf, baneOf } from './enchant.js';
+
+const GEAR = new Set(['weapon', 'armor', 'ring', 'wand']);
+const cap = (s) => s[0].toUpperCase() + s.slice(1);
+
+/** What you know of an item's curse, in words (or '' if you don't know). */
+function curseNote(item) {
+  if (!item.curseKnown) return '';
+  if (item.curse >= 2) return 'A malevolent curse clings to it: once put on, it won\'t come off.';
+  if (item.curse === 1) return 'Its curse is weakened: you can put it aside, though its taint remains.';
+  return 'It is free of curses.';
+}
+
+/** A weapon's or armour's Enchantment or Curse of ___, as far as you know it: [label, description] or null. */
+function effectOf(item) {
+  const e = item.identified && enchantOf(item);
+  if (e) return [`Enchantment of ${cap(e.name)}`, e];
+  const b = item.curseKnown && baneOf(item);
+  return b ? [`Curse of ${cap(b.name)}`, b] : null;
+}
 
 // Per-run knowledge: which unidentified appearance maps to which item type, and what the player knows.
 export class Knowledge {
@@ -54,17 +75,23 @@ export class Knowledge {
     return false;
   }
 
-  /** What a save keeps of what you know (the appearances come back from the seed). */
+  /**
+   * What a save keeps of what you know, and of how things look: the appearances come from the seed too, but kept,
+   * they stay put through changes to the game (a new kind of scroll shifts everything drawn after it).
+   */
   snapshot() {
     const lists = (sets) => Object.fromEntries(Object.entries(sets).map(([k, set]) => [k, [...set]]));
-    return { known: lists(this.known), tried: lists(this.tried), resists: [...this.resists] };
+    return { known: lists(this.known), tried: lists(this.tried), resists: [...this.resists], appearance: this.appearance };
   }
 
-  /** Takes up what snapshot() kept. */
+  /** Takes up what snapshot() kept. Kinds added to the game since keep the look the seed gives them now. */
   restore(s) {
     for (const k in this.known) this.known[k] = new Set(s.known[k] ?? []);
     for (const k in this.tried) this.tried[k] = new Set(s.tried[k] ?? []);
     this.resists = new Set(s.resists ?? []);
+    for (const kind in s.appearance ?? {}) {
+      for (const type in s.appearance[kind]) if (this.appearance[kind]?.[type]) this.appearance[kind][type] = s.appearance[kind][type];
+    }
   }
 
   /** Notes that you've seen a kind of monster resist a damage type or be weak to it. True the first time. */
@@ -75,7 +102,7 @@ export class Knowledge {
     return true;
   }
 
-  /** Fully identify an item: its type and, for equipment, its enchantment and curse. */
+  /** Fully identify an item: its type and, for equipment, its +, its enchantment and its curse. */
   identify(item) {
     this.learn(item);
     item.identified = true;
@@ -108,17 +135,21 @@ export class Knowledge {
     const known = this.isKnown(item);
     const q = item.qty || 1;
     const plural = q > 1;
-    const ench = (e) => (e >= 0 ? `+${e}` : `${e}`);
-    const curseTag = item.curseKnown && item.cursed ? ' (cursed)' : '';
+    const plus = `+${item.plus}`;
+    // What you know of its curse: bound, weakened, or (if you know that much but no more) none.
+    const curseTag = !item.curseKnown ? '' : item.curse >= 2 ? ' (cursed)' : item.curse === 1 ? ' (curse weakened)'
+      : !item.identified && GEAR.has(item.kind) ? ' (uncursed)' : '';
+    const effect = effectOf(item);
+    const of = effect ? ` of ${effect[1].name}` : '';
 
     switch (item.kind) {
       case 'weapon': {
         const base = WEAPONS[item.type].name;
-        return (item.identified ? `${ench(item.ench)} ${base}` : base) + curseTag;
+        return (item.identified ? `${plus} ${base}` : base) + of + curseTag;
       }
       case 'armor': {
         const base = ARMORS[item.type].name;
-        return (item.identified ? `${ench(item.ench)} ${base}` : base) + curseTag;
+        return (item.identified ? `${plus} ${base}` : base) + of + curseTag;
       }
       case 'potion': {
         const app = this.appearance.potion[item.type].name;
@@ -134,11 +165,12 @@ export class Knowledge {
           : `${prefix}${noun} labeled "${this.appearance.scroll[item.type].name}"`;
       }
       case 'wand': {
-        const charges = item.identified ? ` [${item.charges}/${item.maxCharges}]` : '';
-        return (known ? `wand of ${WANDS[item.type].name}` : `${this.appearance.wand[item.type].name} wand`) + charges;
+        const tag = item.identified ? ` ${plus}` : '';
+        return (known ? `wand of ${WANDS[item.type].name}` : `${this.appearance.wand[item.type].name} wand`) + tag +
+          ` [${item.charges}/${item.maxCharges}]` + curseTag;
       }
       case 'ring': {
-        const tag = item.identified && item.type !== 'teleportation' ? ` ${ench(item.ench)}` : '';
+        const tag = item.identified && item.type !== 'teleportation' ? ` ${plus}` : '';
         return (known ? `ring of ${RINGS[item.type].name}` : `${this.appearance.ring[item.type].name} ring`) + tag + curseTag;
       }
       case 'food': {
@@ -156,20 +188,19 @@ export class Knowledge {
   describe(item) {
     const known = this.isKnown(item);
     switch (item.kind) {
-      case 'weapon': {
-        const d = WEAPONS[item.type];
-        let s = `${d.desc}\n\nDamage ${d.dmg[0]}–${d.dmg[1]} (${DAMAGE_TYPES[damageType(d)].name}), recovery ${d.recharge.toFixed(2)}s, reach ${d.reach}m. Requires ${d.str} strength.`;
-        if (!item.identified) s += '\n\nYou do not know its enchantment. Fight with it for a while to learn more.';
-        if (item.curseKnown && item.cursed) s += '\n\nA malevolent curse clings to it.';
-        return s;
-      }
-      case 'armor': {
-        const d = ARMORS[item.type];
-        const stats = [`Defense ${d.def}.`, describeResist(d), `Requires ${d.str} strength; each point short slows you.`];
-        let s = `${d.desc}\n\n${stats.filter(Boolean).join(' ')}`;
-        if (!item.identified) s += '\n\nYou do not know its enchantment. Wear it into a few fights to learn more.';
-        if (item.curseKnown && item.cursed) s += '\n\nA malevolent curse clings to it.';
-        return s;
+      case 'weapon': case 'armor': {
+        const weapon = item.kind === 'weapon', d = weapon ? WEAPONS[item.type] : ARMORS[item.type];
+        const plus = item.identified && item.plus ? ` (+${item.plus})` : '';
+        const stats = weapon
+          ? [`Damage ${d.dmg[0]}–${d.dmg[1]}${plus} (${DAMAGE_TYPES[damageType(d)].name}), recovery ${d.recharge.toFixed(2)}s, reach ${d.reach}m. Requires ${d.str} strength.`]
+          : [`Defense ${d.def}${plus}.`, describeResist(d), `Requires ${d.str} strength; each point short slows you.`];
+        const parts = [d.desc, stats.filter(Boolean).join(' ')];
+        const effect = effectOf(item);
+        if (effect) parts.push(`${effect[0]}: ${effect[1].desc}`);
+        if (!item.identified) parts.push(weapon ? 'You do not know how fine it is. Fight with it for a while to learn more.'
+          : 'You do not know how fine it is. Wear it into a few fights to learn more.');
+        parts.push(curseNote(item));
+        return parts.filter(Boolean).join('\n\n');
       }
       case 'potion': return known ? POTIONS[item.type].desc
         : `A flask of ${this.appearance.potion[item.type].name} liquid. Who knows what it does?` +
@@ -177,15 +208,29 @@ export class Knowledge {
       case 'scroll': return known ? SCROLLS[item.type].desc
         : 'The words are in no language you can read aloud safely... or can you?';
       case 'wand': {
-        if (!known) {
-          return `A slender ${this.appearance.wand[item.type].name} wand humming with unknown power.` +
-            (this.tried.wand.has(item.type) ? ' (tried)' : '');
-        }
         const d = WANDS[item.type];
-        return `${d.desc}${d.dmgType ? ` It deals ${DAMAGE_TYPES[d.dmgType].name} damage.` : ''} Wands slowly recharge over time.`;
+        const parts = [known ? d.desc : `A slender ${this.appearance.wand[item.type].name} wand humming with unknown power.` +
+          (this.tried.wand.has(item.type) ? ' (tried)' : '')];
+        if (known && d.dmg) {
+          const up = item.identified ? item.plus * WAND_PLUS_DMG : 0;
+          parts.push(`Damage ${d.dmg[0] + up}–${d.dmg[1] + up} (${DAMAGE_TYPES[d.dmgType].name})${item.identified && item.plus ? `, with its +${item.plus}` : ''}.`);
+        }
+        // Charges come back one at a time, faster for each + (see wandRecharge).
+        const every = Math.round(wandRecharge(item.plus));
+        parts.push(`${item.charges} of ${item.maxCharges} charges.` + (item.charges < item.maxCharges
+          ? ` The next returns in ${Math.ceil(wandRecharge(item.plus) - item.rechargeT)}s (one every ${every}s).` : ` A spent charge returns every ${every}s.`));
+        if (item.curseKnown && item.curse > 0) {
+          parts.push(item.curse >= 2 ? 'A curse twists its magic: it misfires, and may turn on you.' : 'Its curse is weakened, but its magic still goes astray.');
+        } else if (item.curseKnown) parts.push('It is free of curses.');
+        return parts.join('\n\n');
       }
-      case 'ring': return known ? RINGS[item.type].desc
-        : `A ring set with ${/^[aeiou]/.test(this.appearance.ring[item.type].name) ? 'an' : 'a'} ${this.appearance.ring[item.type].name}. Wear it long enough and you will learn its nature.`;
+      case 'ring': {
+        const parts = [known ? RINGS[item.type].desc
+          : `A ring set with ${/^[aeiou]/.test(this.appearance.ring[item.type].name) ? 'an' : 'a'} ${this.appearance.ring[item.type].name}. Wear it long enough and you will learn its nature.`];
+        if (item.identified && item.curse > 0 && item.type !== 'teleportation') parts.push(`While it's cursed, its +${item.plus} works against you.`);
+        parts.push(curseNote(item));
+        return parts.filter(Boolean).join('\n\n');
+      }
       case 'food': return FOOD[item.type].desc;
       case 'artefact': return ARTEFACTS[item.type].desc;
       case 'amulet': return 'The Amulet of Yendor. It thrums with the heartbeat of the dungeon itself. Invoke it to escape now, or carry it back to the surface for true glory.';

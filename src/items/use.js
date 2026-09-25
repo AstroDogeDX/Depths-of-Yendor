@@ -1,11 +1,12 @@
-import { WEAPONS, ARMORS, FOOD, ARTEFACTS, WANDS } from './defs.js';
+import { WEAPONS, ARMORS, FOOD, ARTEFACTS, WANDS, WAND_PLUS_DMG } from './defs.js';
+import { ENCHANTMENTS, binds } from './enchant.js';
 import { buildItemModel } from './models.js';
 import { HUNGER_MAX, EYE_H } from '../config.js';
 import { rand } from '../rng.js';
 import { spawnProjectile } from '../fx/projectiles.js';
 import { burst, ring, transient, lightningMesh } from '../fx/particles.js';
 import { spawnTable } from '../monsters/defs.js';
-import { sellPrice } from './generate.js';
+import { sellPrice, refusedAsCursed } from './generate.js';
 import { cure } from '../status.js';
 
 // --- Inventory actions shown in the pack screen ---
@@ -30,8 +31,13 @@ export function itemActions(game, item) {
     case 'amulet': acts.push({ label: 'Invoke', fn: () => game.amuletDialog() }); break;
   }
   // Drop stays last: the pack's D key uses the last action.
-  const price = game.level.shopkeeper && game.level.playerInShop ? sellPrice(item, game.level.depth) : 0;
-  if (price) acts.push({ label: `Sell${item.qty > 1 ? ' one' : ''} (${price} gold)`, fn: () => sellItem(game, item) });
+  if (game.level.shopkeeper && game.level.playerInShop) {
+    const price = sellPrice(item, game.level.depth, game.knowledge);
+    if (price) acts.push({ label: `Sell${item.qty > 1 ? ' one' : ''} (${price} gold)`, fn: () => sellItem(game, item) });
+    else if (refusedAsCursed(item)) {
+      acts.push({ label: 'Sell (refused: cursed)', fn: () => { game.log('The shopkeeper recoils, "Take that cursed thing away from me!"', 'speech'); return false; } });
+    }
+  }
   acts.push({ label: 'Drop', fn: () => dropItem(game, item) });
   return acts;
 }
@@ -187,24 +193,28 @@ export function readScroll(game, item) {
       });
       return 'select';
     }
+    case 'upgrade': {
+      announce();
+      const can = (it) => GEAR.includes(it.kind);
+      if (!p.inventory.some(can)) { game.log('You feel a surge of power, but have nothing to channel it into.', 'info'); return false; }
+      game.ui.selectItem('Upgrade which item?', can, (it) => upgrade(game, it));
+      return 'select';
+    }
     case 'enchant': {
       announce();
-      const can = (it) => ['weapon', 'armor', 'ring', 'wand'].includes(it.kind);
-      if (!p.inventory.some(can)) { game.log('You feel a surge of power, but have nothing to channel it into.', 'info'); return false; }
-      game.ui.selectItem('Enchant which item?', can, (it) => {
-        enchant(game, it);
-      });
+      // Weapons and armour, but none you know to be cursed (one you don't, it fails on: see enchantItem).
+      const can = (it) => (it.kind === 'weapon' || it.kind === 'armor') && !(it.curseKnown && it.curse > 0);
+      if (!p.inventory.some(can)) { game.log('The magic finds nothing it can take hold of: only weapons and armour free of curses.', 'info'); return false; }
+      game.ui.selectItem('Enchant which weapon or armour?', can, (it) => enchantItem(game, it));
       return 'select';
     }
     case 'removecurse': {
-      let n = 0;
-      for (const it of p.inventory) {
-        if (it.cursed) { it.cursed = false; it.curseKnown = true; n++; }
-        else if (['weapon', 'armor', 'ring'].includes(it.kind)) it.curseKnown = true;
-      }
-      game.log(n ? 'A cleansing light washes over your pack. The curses are lifted!' : 'A cleansing light washes over your pack. You carry nothing cursed.', 'good');
       announce();
-      return false;
+      // Anything that might be cursed: not what you know to be clean.
+      const can = (it) => GEAR.includes(it.kind) && !(it.curseKnown && it.curse === 0);
+      if (!p.inventory.some(can)) { game.log('A cleansing light flickers over you. You carry nothing that might be cursed.', 'info'); return false; }
+      game.ui.selectItem('Cleanse which item?', can, (it) => removeCurse(game, it));
+      return 'select';
     }
     case 'teleport':
       game.teleportPlayer();
@@ -264,22 +274,92 @@ function fullyKnown(game, it) {
   return true;
 }
 
-function enchant(game, it) {
+const GEAR = ['weapon', 'armor', 'ring', 'wand'];
+const LIFT_CHANCE = 0.2; // an upgrade on something fully cursed lifts the curse outright, rather than weakening it
+
+/**
+ * A scroll of upgrade on `it`: +1 (and a wand a charge more). On something cursed, it goes into the curse instead:
+ * a full curse is weakened (it no longer binds, but its effect remains), now and then lifted outright, and a weakened
+ * one is lifted.
+ */
+function upgrade(game, it) {
   const k = game.knowledge;
+  if (it.curse > 0) {
+    const lifted = it.curse === 1 || rand.chance(LIFT_CHANCE);
+    it.curse = lifted ? 0 : 1;
+    if (lifted) it.bane = null;
+    it.curseKnown = true;
+    game.log(lifted ? `Light floods from the scroll, and the curse on your ${plainName(game, it)} is gone!`
+      : `Your ${plainName(game, it)} glows, and the curse on it weakens: you can put it aside now, though its taint remains.`, 'good');
+    return;
+  }
+  it.plus++;
   if (it.kind === 'wand') {
     it.maxCharges++;
-    it.charges = it.maxCharges;
-    it.ench = (it.ench || 0) + 1;
-  } else {
-    it.ench++;
+    it.charges++;
   }
-  const wasCursed = it.cursed;
-  it.cursed = false;
-  if (it.kind !== 'wand') it.curseKnown = true;
-  game.log(`Your ${k.name(it)} glows blue for a moment.${wasCursed ? ' The malevolent aura around it fades.' : ''}`, 'good');
+  it.curseKnown = true;
+  game.log(`Your ${k.name(it)} glows blue for a moment.`, 'good');
+}
+
+/** A scroll of enchantment on a weapon or armour: a new enchantment at random, if it's free of every curse. */
+function enchantItem(game, it) {
+  const k = game.knowledge;
+  if (it.curse > 0) {
+    it.curseKnown = true;
+    game.log(`The magic recoils from your ${plainName(game, it)}: a curse lies on it.`, 'warn');
+    return;
+  }
+  const choices = Object.keys(ENCHANTMENTS[it.kind]).filter((e) => e !== it.enchant);
+  it.enchant = rand.pick(choices);
+  k.identify(it);
+  game.log(`Your ${k.name(it)} shimmers as the enchantment takes hold.`, 'good');
+}
+
+/** A scroll of remove curse on one item: any curse lifted, and either way, you know it's clean now. */
+function removeCurse(game, it) {
+  const k = game.knowledge;
+  const was = it.curse > 0;
+  it.curse = 0;
+  it.bane = null;
+  it.curseKnown = true;
+  game.log(was ? `A cleansing light washes over your ${plainName(game, it)}, and the curse on it lifts!`
+    : `A cleansing light washes over your ${plainName(game, it)}. It was never cursed.`, 'good');
 }
 
 // --- Wands ---
+
+// What each wand's bolt does to what it hits: a monster, or you when a cursed wand turns on you. `power` is the wand's +,
+// adding WAND_PLUS_DMG to its damage. `known`: what it does is plain as soon as it's zapped (else, once it hits).
+const WAND_BOLTS = {
+  missile: { color: 0xc080ff, speed: 16, known: true,
+    hit: (game, who, power, pr) => wandHurt(game, who, 'missile', power, { knockback: pr && { x: pr.vx / 16, z: pr.vz / 16 } }) },
+  fire: { color: 0xff6010, speed: 13, known: true, hit: (game, who, power) => wandHurt(game, who, 'fire', power, { ignite: 5 }) },
+  frost: { color: 0x9ad8ff, speed: 13, hit: (game, who, power) => wandHurt(game, who, 'frost', power, { chill: 10 + power * 2 }) },
+  teleother: { color: 0x8040e0, speed: 12, hit: (game, who) => teleportOther(game, who) },
+};
+const WILD_BOLT = 0x70ff70; // a cursed wand's bolt, whatever it carries
+
+function wandHurt(game, who, wand, power, opts) {
+  const d = WANDS[wand], amount = rand.int(d.dmg[0], d.dmg[1]) + power * WAND_PLUS_DMG;
+  if (who.isPlayer) game.hurtPlayer(amount, { source: 'a backfiring wand', type: d.dmgType, ignoreArmor: true, ...opts });
+  else who.takeDamage(game, amount, { type: d.dmgType, ...opts });
+}
+
+function teleportOther(game, who) {
+  if (who.isPlayer) {
+    game.teleportPlayer();
+    return;
+  }
+  const level = game.level, pos = level.randomFloorPos({ awayFrom: game.player, minDist: 18, monster: true });
+  if (pos && !who.boss) {
+    burst(level, who.x, 0.8, who.z, 0x8040e0, 14, 3, 0.6);
+    who.x = pos.x; who.z = pos.z;
+    who.state = 'wander';
+    who.wander = null;
+    game.log(`The ${who.name} vanishes!`, 'good');
+  } else game.log(`The ${who.name} shudders but resists.`, 'warn');
+}
 
 export function zapWand(game, item) {
   if (!game.canFight()) return false;
@@ -292,10 +372,9 @@ export function zapWand(game, item) {
   }
   item.charges--;
   game.audio.zap();
+  const power = item.plus;
   const d = lookDir(p);
   const ox = p.x + d.x * 0.5, oy = EYE_H - 0.15 + d.y * 0.5, oz = p.z + d.z * 0.5;
-  const power = item.ench || 0;
-  const type = WANDS[item.type].dmgType;
   const bolt = (color, speed, onHit) => spawnProjectile(level, {
     x: ox, y: oy, z: oz, vx: d.x * speed, vy: d.y * speed, vz: d.z * speed,
     owner: 'player', kind: 'bolt', color, size: 0.14, life: 2,
@@ -307,56 +386,62 @@ export function zapWand(game, item) {
   });
   const learn = () => { if (k.learn(item)) game.log(`This must be a ${k.name(item)}!`, 'info'); };
 
-  switch (item.type) {
-    case 'missile':
-      bolt(0xc080ff, 16, (m, pr) => m.takeDamage(game, rand.int(4, 9) + power * 2, { type, knockback: { x: pr.vx / 16, z: pr.vz / 16 } }));
-      learn();
-      break;
-    case 'fire':
-      bolt(0xff6010, 13, (m) => {
-        m.takeDamage(game, rand.int(5, 10) + power * 2, { type, ignite: 5 });
-      });
-      learn();
-      break;
-    case 'lightning': {
-      const len = 16;
-      let ex = ox, ey = oy, ez = oz;
-      const hitSet = new Set();
-      for (let s = 0; s < len / 0.2; s++) {
-        ex += d.x * 0.2; ey += d.y * 0.2; ez += d.z * 0.2;
-        if (level.blocksSight(level.toTile(ex), level.toTile(ez)) || ey < 0 || ey > 2.8) break;
-        for (const m of level.monsters) {
-          if (!m.dead && !m.isAlly() && !hitSet.has(m) && Math.hypot(m.x - ex, m.z - ez) < m.radius + 0.35) hitSet.add(m);
-        }
-      }
-      transient(level, lightningMesh(ox, oy - 0.1, oz, ex, ey, ez), 0.18);
-      transient(level, lightningMesh(ox, oy - 0.1, oz, ex, ey, ez, 0xffffff), 0.12);
-      for (const m of hitSet) m.takeDamage(game, rand.int(6, 12) + power * 2, { type });
-      game.flash('#c0e0ff', 0.25);
-      learn();
-      break;
-    }
-    case 'frost':
-      bolt(0x9ad8ff, 13, (m) => {
-        m.takeDamage(game, rand.int(3, 7) + power * 2, { type, chill: 10 + power * 2 });
-        learn();
-      });
-      break;
-    case 'teleother':
-      bolt(0x8040e0, 12, (m) => {
-        const pos = level.randomFloorPos({ awayFrom: p, minDist: 18, monster: true });
-        if (pos && !m.boss) {
-          burst(level, m.x, 0.8, m.z, 0x8040e0, 14, 3, 0.6);
-          m.x = pos.x; m.z = pos.z;
-          m.state = 'wander';
-          m.wander = null;
-          game.log(`The ${m.name} vanishes!`, 'good');
-        } else game.log(`The ${m.name} shudders but resists.`, 'warn');
-        learn();
-      });
-      break;
+  // A cursed wand won't cast its own spell, but some wand's bolt at random, and it may fizzle, or turn on you.
+  if (item.curse > 0) {
+    wildZap(game, item, power, bolt);
+    return true;
   }
+  if (item.type === 'lightning') {
+    const len = 16;
+    let ex = ox, ey = oy, ez = oz;
+    const hitSet = new Set();
+    for (let s = 0; s < len / 0.2; s++) {
+      ex += d.x * 0.2; ey += d.y * 0.2; ez += d.z * 0.2;
+      if (level.blocksSight(level.toTile(ex), level.toTile(ez)) || ey < 0 || ey > 2.8) break;
+      for (const m of level.monsters) {
+        if (!m.dead && !m.isAlly() && !hitSet.has(m) && Math.hypot(m.x - ex, m.z - ez) < m.radius + 0.35) hitSet.add(m);
+      }
+    }
+    transient(level, lightningMesh(ox, oy - 0.1, oz, ex, ey, ez), 0.18);
+    transient(level, lightningMesh(ox, oy - 0.1, oz, ex, ey, ez, 0xffffff), 0.12);
+    const w = WANDS.lightning;
+    for (const m of hitSet) m.takeDamage(game, rand.int(w.dmg[0], w.dmg[1]) + power * WAND_PLUS_DMG, { type: w.dmgType });
+    game.flash('#c0e0ff', 0.25);
+    learn();
+    return true;
+  }
+  const b = WAND_BOLTS[item.type];
+  bolt(b.color, b.speed, (m, pr) => {
+    b.hit(game, m, power, pr);
+    learn();
+  });
+  if (b.known) learn();
   return true;
+}
+
+/**
+ * A cursed wand's zap: some wand's bolt at random (see WAND_BOLTS) in place of its own spell, which fizzles a fifth of
+ * the time (the charge spent all the same), goes off as a wild bolt carrying that spell, or, while the curse is at full
+ * strength, a quarter of the time turns on you. Only bolts go in the draw: nothing like lightning's line.
+ */
+function wildZap(game, item, power, bolt) {
+  const k = game.knowledge, p = game.player;
+  const spell = WAND_BOLTS[rand.pick(Object.keys(WAND_BOLTS))];
+  const roll = rand.next();
+  if (!k.isKnown(item)) k.tried.wand.add(item.type);
+  if (roll < 0.2) game.log('The wand sputters, and fizzles out.', 'warn');
+  else if (item.curse >= 2 && roll < 0.45) {
+    game.log('The wand bucks in your grip, and its magic turns on you!', 'danger');
+    burst(game.level, p.x, 1.2, p.z, WILD_BOLT, 14, 2.5, 0.5);
+    spell.hit(game, p, power);
+  } else {
+    game.log('The wand spits out a wild, flickering bolt!', 'warn');
+    bolt(WILD_BOLT, 11, (m, pr) => spell.hit(game, m, power, pr));
+  }
+  if (!item.curseKnown) {
+    item.curseKnown = true;
+    game.log('The wand is cursed!', 'danger');
+  }
 }
 
 // --- Equipment ---
@@ -373,7 +458,7 @@ export function equipSlotFor(p, item) {
     case 'armor': return 'armor';
     case 'ring': {
       let s = e.rings.indexOf(null);
-      if (s < 0) s = !e.rings[0].cursed ? 0 : !e.rings[1].cursed ? 1 : -1;
+      if (s < 0) s = !binds(e.rings[0]) ? 0 : !binds(e.rings[1]) ? 1 : -1;
       return s < 0 ? null : `ring${s}`;
     }
     case 'artefact': {
@@ -384,7 +469,7 @@ export function equipSlotFor(p, item) {
   return null;
 }
 
-/** An item's name without the "(cursed)" tag, for messages that say it's cursed themselves. */
+/** An item's name without what you know of its curse, for messages that say it's cursed themselves. */
 const plainName = (game, item) => game.knowledge.name({ ...item, curseKnown: false });
 
 function cursedStuck(game, item) {
@@ -396,16 +481,20 @@ function cursedStuck(game, item) {
 export function equipItem(game, item) {
   const p = game.player, k = game.knowledge, e = p.equip;
   const name = () => k.name(item);
+  // Putting on something cursed tells you so: a full curse binds it to you; a weakened one only taints you.
   const bind = () => {
-    if (item.cursed) {
+    if (binds(item)) {
       item.curseKnown = true;
       game.log(`You wince as the ${plainName(game, item)} binds itself to you. It is cursed!`, 'danger');
       game.audio.curse();
+    } else if (item.curse > 0 && item.kind !== 'artefact') {
+      item.curseKnown = true;
+      game.log(`A lingering taint creeps from the ${plainName(game, item)} into you: its curse is weakened, but not gone.`, 'warn');
     }
   };
   switch (item.kind) {
     case 'weapon':
-      if (e.weapon?.cursed) return cursedStuck(game, e.weapon);
+      if (e.weapon && binds(e.weapon)) return cursedStuck(game, e.weapon);
       e.weapon = item;
       game.viewmodel.setWeapon(WEAPONS[item.type]);
       game.log(`You wield the ${name()}.`);
@@ -413,7 +502,7 @@ export function equipItem(game, item) {
       bind();
       break;
     case 'armor':
-      if (e.armor?.cursed) return cursedStuck(game, e.armor);
+      if (e.armor && binds(e.armor)) return cursedStuck(game, e.armor);
       e.armor = item;
       game.log(`You strap on the ${name()}.`);
       if (p.str < ARMORS[item.type].str) game.log('Its weight slows you down.', 'warn');
@@ -444,7 +533,7 @@ export function equipItem(game, item) {
 
 export function unequipItem(game, item, silent = false) {
   const p = game.player, k = game.knowledge, e = p.equip;
-  if (item.cursed && item.kind !== 'artefact') return cursedStuck(game, item);
+  if (binds(item)) return cursedStuck(game, item);
   if (e.weapon === item) { e.weapon = null; game.viewmodel.setWeapon(null); }
   if (e.armor === item) e.armor = null;
   e.rings = e.rings.map((r) => (r === item ? null : r));
@@ -472,7 +561,7 @@ export function sellItem(game, item) {
   if (p.isEquipped(item) && !unequipItem(game, item, true)) return false;
   const one = p.takeOne(item);
   if (p.lastWand === one) p.lastWand = null;
-  const price = sellPrice(one, level.depth);
+  const price = sellPrice(one, level.depth, game.knowledge);
   p.gold += price;
   game.audio.coins();
   game.log(`You sell ${game.knowledge.name(one, { article: true })} for ${price} gold.`, 'good');

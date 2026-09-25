@@ -36,8 +36,8 @@ export function playerStrike(game, power) {
     return true;
   }
 
-  let dmg = rand.int(w.dmg[0], w.dmg[1]) + w.ench + (w.excess > 0 ? rand.int(0, w.excess) : 0);
-  dmg = Math.round(dmg * power);
+  let dmg = rand.int(w.dmg[0], w.dmg[1]) + w.plus + (w.excess > 0 ? rand.int(0, w.excess) : 0);
+  dmg = Math.round(dmg * power * w.dmgMult);
   if (sneak) dmg *= 2;
   dmg -= rand.int(0, m.def.def);
   dmg = Math.max(1, dmg);
@@ -49,6 +49,12 @@ export function playerStrike(game, power) {
   if (dealt > 0) game.audio.hit(mult > 1 ? 'weak' : mult < 1 ? 'resist' : null);
   game.shake(0.06);
 
+  // An enchanted weapon's blows bring its effect (see items/enchant.js).
+  if (dealt > 0 && w.onHit && !m.dead) {
+    if (w.onHit.ignite) m.afflict(game, 'burning', w.onHit.ignite, false);
+    if (w.onHit.chill) m.afflict(game, 'chilled', w.onHit.chill, false);
+    if (w.onHit.poison) m.afflict(game, 'poisoned', w.onHit.poison, false);
+  }
   if (dealt > 0 && p.hasArtefact('chalice')) {
     const heal = Math.max(1, Math.round(dealt * 0.25));
     p.heal(heal);

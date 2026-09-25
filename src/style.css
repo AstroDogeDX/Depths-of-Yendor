@@ -119,6 +119,9 @@ body.lowhp #hurt { animation: pulse 1.2s infinite; }
 #hotbar .act.throw { color: #ff9a70; opacity: 1; }
 #hotbar .act.attune { color: #a09080; }
 #hotbar .cd { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); }
+/* A wand's way to its next charge. */
+#hotbar .rc { position: absolute; left: 4px; right: 4px; bottom: 1px; height: 3px; background: rgba(0, 0, 0, 0.6); }
+#hotbar .rc i { display: block; height: 100%; background: #7ab8ff; }
 
 /* Floating text (see ui.js POPUPS). Sized to the window, in a heavy face with a hard dark outline, so it reads
    against lit walls and black corridors alike. Classes size it in em. */
@@ -215,6 +218,7 @@ button.alt { background: linear-gradient(#5a5040, #3a3228); color: var(--ink); }
 .ds .dg { font-family: var(--mono); font-weight: bold; font-size: 24px; }
 .ds.ring .dg { font-size: 18px; }
 .ds .de { position: absolute; right: 3px; top: 1px; font-size: 10px; font-family: var(--mono); color: var(--gold); }
+.ds .de.bad { color: #ff7a60; }
 .ds .dl { font-size: 9px; text-transform: uppercase; opacity: 0.45; }
 .ds.empty { cursor: default; border-style: dashed; border-color: rgba(216, 184, 112, 0.25); }
 .ds.cursed { border-color: #c04030; box-shadow: 0 0 8px rgba(200, 60, 40, 0.55); }

@@ -2,7 +2,8 @@ import {
   PLAYER_RADIUS, PLAYER_SPEED, TURN_SPEED, MOUSE_SENS, HUNGER_MAX, HUNGER_HUNGRY, HUNGER_FAMISHED, INVENTORY_SIZE, HOTBAR_SIZE,
   STAMINA_BASE, STAMINA_PER_LEVEL, STAMINA_DRAIN, STAMINA_REGEN, STAMINA_REGEN_DELAY, STAMINA_RECOVER, MODE_SPEED, NOISE,
 } from './config.js';
-import { WEAPONS, ARMORS, ARTEFACTS } from './items/defs.js';
+import { WEAPONS, ARMORS, ARTEFACTS, wandRecharge } from './items/defs.js';
+import { enchantOf, baneOf } from './items/enchant.js';
 import { stackable } from './items/generate.js';
 import { playerStrike } from './combat.js';
 import { damageType, damageMult } from './damage.js';
@@ -84,7 +85,8 @@ export class Player {
 
   ringBonus(type) {
     let b = 0;
-    for (const r of this.equip.rings) if (r && r.type === type) b += r.ench;
+    // A cursed ring's + works against you, until the curse is lifted.
+    for (const r of this.equip.rings) if (r && r.type === type) b += r.curse > 0 ? -r.plus : r.plus;
     return b;
   }
   wearingRing(type) { return this.equip.rings.some((r) => r && r.type === type); }
@@ -96,37 +98,51 @@ export class Player {
   /** Paralysed or frozen: no moving, looking, fighting or using things. */
   held() { return this.status.paralysed > 0 || this.status.frozen > 0; }
 
+  /**
+   * Your weapon (or fists) as it fights now: its +, strength, statuses, and any Enchantment or Curse of ___ on it
+   * (see items/enchant.js): `onHit` is what an enchantment's blows bring, `dmgMult` what a curse takes off them.
+   */
   weaponStats() {
     const it = this.equip.weapon;
     const d = it ? WEAPONS[it.type] : FISTS;
-    const ench = it ? it.ench : 0;
+    const plus = it ? it.plus : 0;
     const short = Math.max(0, d.str - this.str);
+    const bane = baneOf(it);
     return {
-      dmg: d.dmg, dmgType: damageType(d), ench, reach: d.reach, model: d.model,
+      dmg: d.dmg, dmgType: damageType(d), plus, reach: d.reach, model: d.model,
       recharge: (d.recharge * (1 + short * 0.15) * (this.status.chilled > 0 ? 1.25 : 1)) / (this.status.hasted > 0 ? 1.35 : 1),
-      accuracy: ench * 0.03 - short * 0.08,
+      accuracy: plus * 0.03 - short * 0.08 + (bane?.accuracy ?? 0),
       excess: Math.max(0, this.str - d.str),
+      onHit: enchantOf(it)?.onHit ?? null,
+      dmgMult: bane?.dmgMult ?? 1,
     };
+  }
+
+  /** What your armour's Enchantment or Curse of ___ does to `stat` (a multiplier: noise, speed; see items/enchant.js). */
+  armorMult(stat) {
+    const a = this.equip.armor;
+    return (enchantOf(a)?.[stat] ?? 1) * (baneOf(a)?.[stat] ?? 1);
   }
 
   /** The multiplier on damage of this type you take (see damage.js), from your armour and artefacts' `resist`. */
   resistMult(type) {
     let mult = 1;
     const a = this.equip.armor;
-    if (a) mult *= damageMult(ARMORS[a.type], type);
+    if (a) mult *= damageMult(ARMORS[a.type], type) * damageMult(enchantOf(a) ?? {}, type);
     for (const art of this.equip.artefacts) if (art) mult *= damageMult(ARTEFACTS[art.type], type);
     return mult;
   }
 
   get defense() {
     const a = this.equip.armor;
-    return Math.max(0, (a ? ARMORS[a.type].def + a.ench : 0) + this.ringBonus('protection'));
+    return Math.max(0, (a ? ARMORS[a.type].def + a.plus : 0) + this.ringBonus('protection'));
   }
 
   moveSpeed() {
     let s = PLAYER_SPEED;
     if (this.status.hasted > 0) s *= 1.45;
     if (this.status.chilled > 0) s *= 0.6;
+    s *= this.armorMult('speed');
     if (this.hasArtefact('boots')) s *= 1.33;
     const a = this.equip.armor;
     if (a) s *= Math.max(0.6, 1 - Math.max(0, ARMORS[a.type].str - this.str) * 0.08);
@@ -263,7 +279,7 @@ export class Player {
     this.mode = mode;
     this.crouch += ((mode === 'sneak' ? 1 : 0) - this.crouch) * Math.min(1, dt * 8);
     this.updateStamina(dt, game, this.moving && mode !== 'walk');
-    this.noise = this.moving ? NOISE[mode] * (this.heavyArmor() ? 1.25 : 1) : 0;
+    this.noise = this.moving ? NOISE[mode] * (this.heavyArmor() ? 1.25 : 1) * this.armorMult('noise') : 0;
     if (this.moving) {
       mx /= ml; mz /= ml;
       if (this.status.confused > 0) {
@@ -403,9 +419,10 @@ export class Player {
 
   updateGear(dt, game) {
     for (const it of this.inventory) {
+      // Wands regain a charge at a time, faster for each + (see wandRecharge).
       if (it.kind === 'wand' && it.charges < it.maxCharges) {
         it.rechargeT += dt;
-        if (it.rechargeT >= 75) {
+        if (it.rechargeT >= wandRecharge(it.plus)) {
           it.rechargeT = 0;
           it.charges++;
         }

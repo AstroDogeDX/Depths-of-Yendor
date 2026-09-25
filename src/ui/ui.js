@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { KIND_GLYPH, ARTEFACTS, WEAPONS, ARMORS } from '../items/defs.js';
+import { KIND_GLYPH, ARTEFACTS, WEAPONS, ARMORS, wandRecharge } from '../items/defs.js';
 import { equipSlotFor } from '../items/use.js';
 import { T } from '../dungeon/tiles.js';
 import { TRAP_COLORS } from '../world/level.js';
@@ -639,13 +639,15 @@ export class UI {
       const el = this.dollEls[d.key];
       const it = equippedIn(p, d.key);
       el.classList.toggle('empty', !it);
-      el.classList.toggle('cursed', !!it && it.cursed && it.curseKnown);
+      el.classList.toggle('cursed', !!it && it.curse > 0 && it.curseKnown);
       el.classList.toggle('sel', !!it && it === sel);
       el.classList.toggle('target', d.key === target);
       if (it) {
-        const showEnch = it.identified && (it.kind === 'weapon' || it.kind === 'armor' || (it.kind === 'ring' && it.type !== 'teleportation'));
-        const ench = showEnch ? `<span class="de">${it.ench >= 0 ? '+' : ''}${it.ench}</span>` : '';
-        el.innerHTML = `<span class="dg" style="color:${glyphColor(k, it)}">${KIND_GLYPH[it.kind]}</span>${ench}`;
+        // Its + (a cursed ring's shown as what it does to you: against you).
+        const showPlus = it.identified && (it.kind === 'weapon' || it.kind === 'armor' || (it.kind === 'ring' && it.type !== 'teleportation'));
+        const against = it.kind === 'ring' && it.curse > 0;
+        const plus = showPlus ? `<span class="de${against ? ' bad' : ''}">${against ? '−' : '+'}${it.plus}</span>` : '';
+        el.innerHTML = `<span class="dg" style="color:${glyphColor(k, it)}">${KIND_GLYPH[it.kind]}</span>${plus}`;
         el.title = k.name(it);
       } else {
         el.innerHTML = `<span class="dl">${d.label}</span>`;
@@ -657,11 +659,13 @@ export class UI {
     $('doll-torso').style.fill = a ? hex(ARMORS[a.type].color) : '';
 
     const w = p.weaponStats(), wi = p.equip.weapon;
-    const known = !wi || wi.identified; // an unidentified enchantment must not leak through the numbers
+    // An unknown + or curse must not leak through the numbers.
+    const known = !wi || wi.identified;
+    const mult = !wi || wi.curseKnown ? w.dmgMult : 1;
     const heavy = !!wi && WEAPONS[wi.type].str > p.str;
     const slow = !!a && ARMORS[a.type].str > p.str;
-    const lo = Math.max(1, w.dmg[0] + (known ? w.ench : 0));
-    const hi = Math.max(1, w.dmg[1] + (known ? w.ench : 0) + w.excess);
+    const lo = Math.max(1, Math.round((w.dmg[0] + (known ? w.plus : 0)) * mult));
+    const hi = Math.max(1, Math.round((w.dmg[1] + (known ? w.plus : 0) + w.excess) * mult));
     // Two label/value pairs per row: wide values on the left, short ones on the right.
     const rows = [
       ['Damage', `${lo}–${hi}${known ? '' : ' (+?)'} ${DAMAGE_TYPES[w.dmgType].name}`, heavy], ['Reach', `${w.reach}m`],
@@ -734,9 +738,17 @@ export class UI {
       let unattuned = false;
       if (b) {
         const probe = it ?? { ...b, qty: 0 };
-        let qty = '', cd = 0;
+        let qty = '', cd = 0, rc = '';
         if (stackable(b)) qty = String(it ? it.qty : 0);
-        else if (b.kind === 'wand' && it) qty = it.identified ? String(it.charges) : '?';
+        else if (b.kind === 'wand' && it) {
+          // Its charges, and while it's short of them, how near the next is (the seconds to it, when it's empty).
+          qty = String(it.charges);
+          if (it.charges < it.maxCharges) {
+            const every = wandRecharge(it.plus);
+            rc = `<span class="rc"><i style="width:${Math.round((it.rechargeT / every) * 50) * 2}%"></i></span>`;
+            if (it.charges === 0) qty = `${Math.ceil(every - it.rechargeT)}s`;
+          }
+        }
         else if (b.kind === 'artefact' && it) {
           const s = p.equip.artefacts.indexOf(it);
           if (s < 0) unattuned = true;
@@ -749,7 +761,7 @@ export class UI {
         // Cooldown shade sits over the glyph but under the text, so a recharging power reads as dimmed.
         html = `<span class="glyph" style="color:${glyphColor(k, probe)}">${KIND_GLYPH[b.kind]}</span>` +
           (cd > 0 ? `<span class="cd" style="height:${Math.round(cd * 100)}%"></span>` : '') +
-          html + `<span class="qty">${qty}</span><span class="act ${act}">${act}</span>`;
+          html + `<span class="qty">${qty}</span><span class="act ${act}">${act}</span>${rc}`;
       }
       if (this.hotKeys[i] !== html) {
         this.hotKeys[i] = html;
