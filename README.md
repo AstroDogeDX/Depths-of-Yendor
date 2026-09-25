@@ -43,6 +43,7 @@ For testing by hand, press **`** (the key left of 1) during a run to open the de
 - **Items:** make any weapon, armour, potion, scroll, wand, ring, artefact or food, or the Amulet or an iron key for this floor, with the enchantment (extra charges, for a wand), quantity, curse and identification you choose. It goes in your pack, or on the floor in front of you when the pack is full. **Identify everything** teaches you every potion, scroll, wand and ring, and identifies what you carry.
 - **Monsters:** spawn any monster a few steps in front of you, awake or asleep.
 - **Traps:** lay a trap of any kind on the floor in front of you, found and armed, to step on.
+- **Statuses:** give yourself, or the monster you're facing, any status for 15 s, as it would happen in play (immunities and how statuses meet included).
 
 ## The pack
 
@@ -64,7 +65,7 @@ Potion, scroll and food slots remember the *type*, so a slot whose stack runs ou
 - **Telegraphed monster attacks.** Monsters wind up before striking, and during the windup they turn slowly toward you. Stepping back or circle-strafing makes them whiff, which replaces Rogue's to-hit dice for defence. Heavy hits can stagger a monster out of its windup.
 - **Stealth and sneak attacks.** Monsters start asleep or wandering. Unaware targets take double damage and cannot dodge (Pixel Dungeon's surprise attacks). Monsters notice you by sight and by the sound of your footsteps (see below). Standing still, rings of stealth and light armour help. Heavy armour hurts.
 - **Clocks tick in seconds.** Hunger, regeneration, status effects, wand recharge and ring identification all run on real time. The world pauses while the pack or map is open, but drinking, eating, throwing or changing equipment empties your attack meter, so doing it mid-fight still costs a swing.
-- **Paralysis means paralysis.** While paralysed you can't use items (from the pack or the hotbar), pick things up, take stairs or invoke artefacts. Only the map stays available.
+- **Paralysis means paralysis.** While paralysed (or frozen) you can't use items (from the pack or the hotbar), pick things up, take stairs or invoke artefacts. Only the map stays available.
 - **Identification is per run.** Potion colours, scroll labels, wand woods and ring gems are reshuffled from the seed. Potions reveal themselves when drunk, and throwing a potion identifies it if the splash does something visible. Weapons and armour reveal their enchantment after enough hits. Rings reveal themselves after about 100 s of wear.
 - **Curses.** About 16% of equipment is cursed with a negative enchantment and binds to you when equipped. Scrolls of remove curse or enchanting break the curse.
 - **Persistent floors.** Levels are kept when you leave, so you can go back up, and they're saved with the run (see *Saving*). The dungeon also restocks itself slowly, and fast and angrily once you carry the Amulet.
@@ -81,7 +82,7 @@ Potion, scroll and food slots remember the *type*, so a slot whose stack runs ou
 
 ## Damage types
 
-Every source of damage has a type (`damage.js`), physical or magical. Only starvation has none.
+Every source of damage has a type (`damage.js`), physical or magical. Only starvation and bleeding have none.
 
 **Physical.** Every melee blow deals one of three kinds of physical damage: **slash** (the swords and the battle axe), **stab** (the dagger and the spear, which thrust rather than swing) or **bash** (the mace, the war hammer and your fists). A weapon's description and the pack's stats say which. Monsters' blows work the same way. Goblin archers' arrows stab, as do spike traps. A weapon or monster that doesn't give a type deals generic physical damage.
 
@@ -91,7 +92,7 @@ Every source of damage has a type (`damage.js`), physical or magical. Only starv
 | --- | --- | --- |
 | Magic | the wand of magic missile, wraiths' and the Warden's bolts, the Horn of Thunder's blast | non-elemental magic |
 | Fire | the wand of firebolt, liquid flame, fire imps' fireballs, burning | fire hits set you burning; being immune to fire means you can't burn |
-| Ice | nothing yet | for future wands, enchantments and monsters |
+| Ice | the wand of frost | chills, and freezes what's wet (see *Statuses*); being immune to ice means you can't be chilled or frozen |
 | Lightning | the wand of lightning | |
 | Poison | being poisoned (potions, gas traps, oozes) | being immune to poison means you can't be poisoned |
 | Holy | nothing yet | holy light, for use against the undead and the cursed |
@@ -130,6 +131,51 @@ Each monster's blows fit what it fights with, and most resist some kinds of dama
 So a mace is the answer to skeletons, golems and the Warden but little use against oozes, wraiths and trolls. A spear or dagger runs through orcs, imps and trolls, but not the undead. Fire is the troll's bane, and magic is the golem's. Carrying a second weapon, and the right wand, pays. The dev tools' monster buttons list these as tooltips.
 
 You can see when a type matters. A hit on a monster's weakness shows a bigger number tagged **WEAK!**, and a melee hit on a weakness lands with a crunch. A resisted hit shows a smaller number tagged **RESISTED**, and a resisted melee hit lands with a dull clank. For physical hits the number itself turns orange or grey. A monster immune to the damage shows **IMMUNE**, including when you try to poison or burn it. Burning and poison ticks aren't tagged; the hit that started them was. The first time in a run you see a kind of monster resist a type or be weak to it, the log says so, e.g. "The troll is weak to fire!" or "Poison can't harm the skeleton!". A hit on one of your armour's weaknesses is tagged **WEAK SPOT**, and one it resists is tagged **RESISTED**.
+
+## Statuses
+
+Statuses afflict you and monsters alike, by one set of rules (`status.js`): what each does, what wards it off, and how they meet.
+
+- **Showing them.** Yours show under your health, with the seconds left. The monster you're facing lists its own beside its name. Some also show as a colour on the monster, and a word pops up over it as they take hold.
+- **Bosses** take any hostile status for half as long.
+- **Floors you've left** stand still, since only the one you're on runs. When you come back, its monsters' statuses have worn down by the time you were away, without doing their damage.
+
+| Status | Comes from | Does |
+| --- | --- | --- |
+| Burning | fire hits (the wand of firebolt, liquid flame, fire imps), Emberheart's strikes | fire damage every second |
+| Poisoned | poison potions and gas traps, oozes' hits | poison damage every second, and you don't heal |
+| Bleeding | nothing yet | damage every second that armour and resistances don't reduce, and you don't heal. The bloodless (skeletons, wraiths, golems, oozes) can't bleed |
+| Chilled | the wand of frost | you move at 60% speed, and your weapon recovers a quarter slower; monsters move and strike at half speed |
+| Frozen | cold on something wet, or on an ooze | frozen stiff: it can't move or act, a frozen monster takes a blow as if unaware (double damage), and it loses every resistance (weaknesses stay). A thaw leaves 4 s of Chilled |
+| Wet | nothing yet (wading, to come) | won't burn, and lightning does half as much damage again |
+| Oiled | nothing yet (oil flasks and traps, to come) | fire does half as much damage again, and set alight, it burns twice as long |
+| Paralysed | paralysis potions, the Horn of Thunder | as Frozen, but its resistances stay |
+| Weakened | nothing yet | you: 3 less strength. A monster: 3/4 of its damage and of its health |
+| Confused | confusion potions | you stagger. Monsters stagger, shoot wide, and half the time lay into another monster in reach |
+| Blind | potions of darkness | you see almost nothing; a monster sees only about a tile around it, so it hunts by ear (below) |
+| Feared | scrolls of terror | monsters run from you |
+| Hasted, Mind vision, Invisible | their potions, the Cloak of Shadows | yours only: you're faster, you sense every monster on the floor, monsters lose track of you |
+| Hunted | carrying the Amulet (not timed) | every monster on the floor knows where you are, even while you're invisible (but they can't strike what they can't see) |
+
+How they meet (`afflict` in `status.js`):
+
+- **Water puts out fire,** and nothing wet will burn.
+- **Cold puts out fire, and heat drives out cold.** Setting something chilled or frozen alight thaws it instead, and chilling something that's burning douses it instead. A fire hit on something frozen thaws it and does its full damage.
+- **Cold on something wet freezes it solid,** as does wetting something chilled. Oozes are `fluid` (a trait in `monsters/defs.js`), so cold alone freezes them.
+- **Immunity to a damage type wards off its status.** A resistance of 0 to fire, poison or ice (the fire imp to fire, Emberheart's wearer, the undead to poison) means no burning, no poison, or no chill or freezing.
+
+**Hunger** has three stages:
+
+- **Hungry:** a warning.
+- **Famished** (below 80 of 1,000): your wounds stop healing.
+- **Starving** (at 0): you lose 1 health every 3 s and move slower.
+
+**Hunting by ear.** A monster knows where you are only while it can see you (or while you're Hunted).
+
+- When it hears you, it goes to where the sound came from. Footsteps, the alarm trap and a scroll of aggravate monsters all count.
+- When it loses sight of you, it goes to where it last saw you.
+- Either way, it looks around when it gets there and heads for anything else it hears.
+- It gives up after 12 s with no sign of you. A boss never gives up.
 
 ## Stamina, sprinting and sneaking
 
@@ -275,6 +321,7 @@ src/
   player.js            movement, attack meter, stats, statuses, hunger/regen, inventory
   combat.js            player melee resolution
   damage.js            damage types (physical, magic and the elements) and the resistances to them
+  status.js            statuses for the player and monsters alike: what they do, what wards them off, how they meet
   hotbar.js            hotbar bindings and what each slot does when pressed
   input.js / audio.js  pointer-lock input; WebAudio synth sfx + ambient drone
   save.js              the saved run in local storage, and the helpers floors are saved with

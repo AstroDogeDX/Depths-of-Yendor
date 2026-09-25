@@ -29,10 +29,26 @@ export function writeSave(data) {
 export function readSave() {
   try {
     const save = JSON.parse(localStorage.getItem(KEY));
-    return save?.version === SAVE_VERSION ? save : null;
+    return save?.version === SAVE_VERSION ? upgrade(save) : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Brings a save up to date with what's been renamed since it was made: the wand of slowness is now the wand of frost.
+ * (Renamed statuses are dealt with as they're restored: see restoreStatus in status.js.)
+ */
+function upgrade(save) {
+  const wand = (it) => { if (it?.kind === 'wand' && it.type === 'slow') it.type = 'frost'; };
+  save.player.inventory.forEach(wand);
+  save.player.hotbar.forEach(wand);
+  for (const level of save.levels) for (const e of level.items) wand(e.item);
+  for (const list of [save.knowledge.known.wand, save.knowledge.tried.wand]) {
+    const i = list.indexOf('slow');
+    if (i >= 0) list[i] = 'frost';
+  }
+  return save;
 }
 
 export function deleteSave() {

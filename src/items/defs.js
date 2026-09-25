@@ -64,7 +64,8 @@ export const WANDS = {
   lightning: { name: 'lightning',     freq: 18, charges: [3, 5], dmgType: 'lightning',
                desc: 'A bolt of lightning that tears through everything in a line.' },
   fire:      { name: 'firebolt',      freq: 18, charges: [3, 5], dmgType: 'fire', desc: 'A gout of flame that sets its target alight.' },
-  slow:      { name: 'slowness',      freq: 16, charges: [3, 5], desc: 'Drags a creature down to a crawl.' },
+  frost:     { name: 'frost',         freq: 16, charges: [3, 5], dmgType: 'ice',
+               desc: 'A lance of bitter cold that chills its target to a crawl, and freezes it solid if it\'s wet.' },
   teleother: { name: 'teleport other',freq: 14, charges: [2, 4], desc: 'Sends a creature somewhere else on the floor.' },
 };
 

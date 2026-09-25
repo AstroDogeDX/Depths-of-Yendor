@@ -32,7 +32,7 @@ export const INVENTORY_SIZE = 20;
 export const HOTBAR_SIZE = 6; // number keys 1..HOTBAR_SIZE
 export const HUNGER_MAX = 1000;
 export const HUNGER_HUNGRY = 250;
-export const HUNGER_WEAK = 80;
+export const HUNGER_FAMISHED = 80; // below this, your wounds don't heal on their own
 
 export const VIEW_RADIUS_TILES = 9;
 

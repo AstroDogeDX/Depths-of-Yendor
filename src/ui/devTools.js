@@ -7,10 +7,11 @@ import { disposeGroup } from '../dungeon/levelBuilder.js';
 import { Level } from '../world/level.js';
 import { T } from '../dungeon/tiles.js';
 import { DAMAGE_TYPES, damageType, describeResist } from '../damage.js';
+import { STATUSES, afflict, cure } from '../status.js';
 import './devTools.css';
 
-// Dev tools, for testing by hand: jump to any floor, give yourself items, change your stats, spawn monsters, lay
-// traps.
+// Dev tools, for testing by hand: jump to any floor, give yourself items, change your stats, give you or a monster a
+// status, spawn monsters, lay traps.
 // The ` key opens and closes the panel during a run. main.js only loads this in development, or in a build
 // opened with ?dev in the address, so players never download it.
 
@@ -66,6 +67,9 @@ export class DevTools {
               <button class="alt" data-act="restore" title="Full health and stamina, not hungry, no statuses">Restore</button>
               <button class="alt" data-act="kill">Kill every monster</button>
             </div>
+            <h3>Statuses</h3>
+            <div class="dev-opts"><span>Give one for 15 s to you, or</span><label class="check"><input type="checkbox" data-opt="stmonster" /> the monster you're facing</label></div>
+            <div class="dev-grid dev-statuses"></div>
             <h3>Monsters</h3>
             <div class="dev-opts"><span>Spawn one in front of you</span><label class="check"><input type="checkbox" data-opt="asleep" /> Asleep</label></div>
             <div class="dev-grid dev-monsters"></div>
@@ -109,6 +113,8 @@ export class DevTools {
         const tip = `${cap(def.name)}. Melee: ${DAMAGE_TYPES[damageType(def)].name}.${shots} ${describeResist(def)}`;
         return `<button class="alt" data-monster="${type}" title="${tip.trim()}">${cap(def.name)}</button>`;
       }).join('');
+    this.$('.dev-statuses').innerHTML = Object.entries(STATUSES)
+      .map(([key, def]) => `<button class="alt" data-status="${key}">${def.label}</button>`).join('');
     this.$('.dev-traps').innerHTML = ['spike', 'poison', 'teleport', 'alarm']
       .map((type) => `<button class="alt" data-trap="${type}">${cap(type)}</button>`).join('');
     this.$('.dev-tabs').innerHTML = KINDS.map(([kind, label]) => `<button class="alt" data-kind="${kind}">${label}</button>`).join('');
@@ -126,6 +132,7 @@ export class DevTools {
       else if (d.type) this.give(d.type);
       else if (d.monster) this.spawn(d.monster);
       else if (d.trap) this.layTrap(d.trap);
+      else if (d.status) this.giveStatus(d.status);
       else if (d.stat) this.stat(d.stat);
       else if (d.act) this.act(d.act);
       this.refresh();
@@ -240,7 +247,7 @@ export class DevTools {
         p.stamina = p.maxStamina;
         p.winded = false;
         p.hunger = HUNGER_MAX;
-        for (const k in p.status) p.status[k] = 0;
+        for (const k in p.status) cure(g, p, k, { quiet: true });
         this.note('Restored: full health and stamina, fed, and every status cleared.');
         break;
       case 'kill': {
@@ -306,6 +313,26 @@ export class DevTools {
     lvl.traps.push(trap);
     lvl.revealTrap(trap);
     this.note(`Laid a ${type} trap in front of you. Close the panel and step on it to set it off.`);
+  }
+
+  /**
+   * Gives you a status, or the monster you're facing (the one whose health shows, else the nearest you can see), as it
+   * would come in play: immunities and how it meets what's there already apply (see status.js).
+   */
+  giveStatus(key) {
+    const g = this.game, p = g.player, lvl = g.level, def = STATUSES[key];
+    let who = p;
+    if (this.opt('stmonster').checked) {
+      who = g.target && !g.target.dead ? g.target : lvl.monsters
+        .filter((m) => !m.dead && lvl.isVisibleWorld(m.x, m.z))
+        .sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
+      if (!who) return this.note('There\'s no monster in sight to give it to.');
+    }
+    if (def[who.isPlayer ? 'player' : 'monster'] === false) return this.note(`${def.label} only happens to ${who.isPlayer ? 'monsters' : 'you'}.`);
+    const name = who.isPlayer ? 'You' : `The ${who.name}`;
+    const took = afflict(g, who, key, 15);
+    const now = Object.entries(STATUSES).filter(([k]) => who.status[k] > 0).map(([, d]) => d.label).join(', ') || 'nothing';
+    this.note(`${took ? `${name}: ${def.label}.` : `${def.label} didn't take on ${name.toLowerCase()} (immune, or it met something).`} Now: ${now}.`);
   }
 
   /** Puts a monster a few steps in front of you, or as near as there's room. */

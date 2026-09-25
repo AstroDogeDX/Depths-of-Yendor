@@ -41,6 +41,7 @@ body.lowhp #hurt { animation: pulse 1.2s infinite; }
 
 #target { position: absolute; top: 18px; left: 50%; transform: translateX(-50%); text-align: center; min-width: 220px; }
 #target-name { font-size: 16px; color: #f0d0c0; margin-bottom: 4px; }
+#target-name .target-st { font-size: 13px; margin-left: 4px; }
 .tbar { height: 6px; background: rgba(0, 0, 0, 0.6); border: 1px solid #5a2020; }
 #target-fill { height: 100%; background: linear-gradient(#e04030, #901810); }
 
@@ -87,8 +88,8 @@ body.lowhp #hurt { animation: pulse 1.2s infinite; }
 .st-sprint { color: #c8e0a0 !important; }
 #status-line { font-size: 14px; min-height: 18px; display: flex; flex-wrap: wrap; gap: 8px; }
 #status-line span { color: #f0d060; }
-.st-poison, .st-burning, .st-starving, .st-paralysis { color: #ff7a60 !important; }
-.st-haste, .st-mindvision, .st-invisible { color: #a8e890 !important; }
+.st-starving, .st-hunted { color: #ff7a60 !important; }
+.st-famished { color: #ffa860 !important; }
 
 #gear { position: absolute; right: 16px; bottom: 18px; text-align: right; font-size: 14px; line-height: 1.5; }
 #gear .art { color: #ffc070; }
@@ -154,6 +155,15 @@ body.lowhp #hurt { animation: pulse 1.2s infinite; }
 .popup.el-lightning { color: #f6f060; }
 .popup.el-poison { color: #9ee070; }
 .popup.el-holy { color: #fffbe8; filter: drop-shadow(0 0 0.2em rgba(255, 214, 90, 0.9)); }
+/* A status taking hold of a monster, or fire and cold meeting on it (see status.js). */
+.popup.status { font-size: 0.55em; letter-spacing: 0.1em; color: #e0e0e0; }
+.popup.s-frozen, .popup.s-chilled { color: #a8e0ff; }
+.popup.s-bleeding { color: #ff5060; }
+.popup.s-weakened { color: #d0a878; }
+.popup.s-oiled { color: #d8b050; }
+.popup.s-wet { color: #70b0ff; }
+.popup.s-doused { color: #d8e4ec; }
+.popup.s-thawed { color: #ffb070; }
 
 /* --- Panels & overlays --- */
 .overlay {

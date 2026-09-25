@@ -1,11 +1,12 @@
 import {
-  PLAYER_RADIUS, PLAYER_SPEED, TURN_SPEED, MOUSE_SENS, HUNGER_MAX, HUNGER_HUNGRY, HUNGER_WEAK, INVENTORY_SIZE, HOTBAR_SIZE,
-  STAMINA_BASE, STAMINA_PER_LEVEL, STAMINA_DRAIN, STAMINA_REGEN, STAMINA_REGEN_DELAY, STAMINA_RECOVER, MODE_SPEED, NOISE, danger,
+  PLAYER_RADIUS, PLAYER_SPEED, TURN_SPEED, MOUSE_SENS, HUNGER_MAX, HUNGER_HUNGRY, HUNGER_FAMISHED, INVENTORY_SIZE, HOTBAR_SIZE,
+  STAMINA_BASE, STAMINA_PER_LEVEL, STAMINA_DRAIN, STAMINA_REGEN, STAMINA_REGEN_DELAY, STAMINA_RECOVER, MODE_SPEED, NOISE,
 } from './config.js';
 import { WEAPONS, ARMORS, ARTEFACTS } from './items/defs.js';
 import { stackable } from './items/generate.js';
 import { playerStrike } from './combat.js';
-import { STATUS_TYPES, damageType, damageMult } from './damage.js';
+import { damageType, damageMult } from './damage.js';
+import { STATUSES, blankStatus, restoreStatus, saveStatus, afflict, tickStatuses } from './status.js';
 import { rand } from './rng.js';
 import { round2 } from './save.js';
 
@@ -39,7 +40,9 @@ export class Player {
     this.crouch = 0; // 0..1, eases the camera down while sneaking
     this.noise = 0; // metres of walking distance at which monsters can hear you this frame
     this.swingT = -1; this.swingDur = 0.3; this.swingHit = false; this.swingPower = 1;
-    this.status = { haste: 0, poison: 0, confusion: 0, blind: 0, paralysis: 0, mindvision: 0, invisible: 0, burning: 0 };
+    this.status = blankStatus(true); // seconds left of each status (see status.js)
+    this.isPlayer = true;
+    this.boss = false;
     this.artefactCD = [0, 0];
     this.regenT = 0; this.dotT = 0; this.starveT = 0; this.teleT = rand.range(40, 90);
     this.moving = false; this.bob = 0;
@@ -61,8 +64,7 @@ export class Player {
     const e = this.equip;
     s.equip = { weapon: uid(e.weapon), armor: uid(e.armor), rings: e.rings.map(uid), artefacts: e.artefacts.map(uid) };
     s.lastWand = uid(this.lastWand);
-    s.status = {};
-    for (const k in this.status) if (this.status[k] > 0) s.status[k] = round2(this.status[k]);
+    s.status = saveStatus(this.status);
     return s;
   }
 
@@ -75,7 +77,7 @@ export class Player {
       rings: s.equip.rings.map(byUid), artefacts: s.equip.artefacts.map(byUid),
     };
     this.lastWand = byUid(s.lastWand);
-    Object.assign(this.status, s.status);
+    restoreStatus(this.status, s.status);
   }
 
   // --- Derived stats ---
@@ -89,7 +91,10 @@ export class Player {
   hasArtefact(type) { return this.equip.artefacts.some((a) => a && a.type === type); }
   hasAmulet() { return this.inventory.some((i) => i.kind === 'amulet'); }
 
-  get str() { return this.baseStr + this.ringBonus('strength') - (this.hunger < HUNGER_WEAK ? 1 : 0); }
+  get str() { return this.baseStr + this.ringBonus('strength') - (this.status.weakened > 0 ? 3 : 0); }
+
+  /** Paralysed or frozen: no moving, looking, fighting or using things. */
+  held() { return this.status.paralysed > 0 || this.status.frozen > 0; }
 
   weaponStats() {
     const it = this.equip.weapon;
@@ -98,7 +103,7 @@ export class Player {
     const short = Math.max(0, d.str - this.str);
     return {
       dmg: d.dmg, dmgType: damageType(d), ench, reach: d.reach, model: d.model,
-      recharge: (d.recharge * (1 + short * 0.15)) / (this.status.haste > 0 ? 1.35 : 1),
+      recharge: (d.recharge * (1 + short * 0.15) * (this.status.chilled > 0 ? 1.25 : 1)) / (this.status.hasted > 0 ? 1.35 : 1),
       accuracy: ench * 0.03 - short * 0.08,
       excess: Math.max(0, this.str - d.str),
     };
@@ -120,7 +125,8 @@ export class Player {
 
   moveSpeed() {
     let s = PLAYER_SPEED;
-    if (this.status.haste > 0) s *= 1.45;
+    if (this.status.hasted > 0) s *= 1.45;
+    if (this.status.chilled > 0) s *= 0.6;
     if (this.hasArtefact('boots')) s *= 1.33;
     const a = this.equip.armor;
     if (a) s *= Math.max(0.6, 1 - Math.max(0, ARMORS[a.type].str - this.str) * 0.08);
@@ -144,18 +150,18 @@ export class Player {
 
   heal(n) { this.hp = Math.min(this.maxHp, this.hp + n); }
 
-  addStatus(key, dur, game) {
-    if (STATUS_TYPES[key] && this.resistMult(STATUS_TYPES[key]) === 0) return; // e.g. no burning with Emberheart
-    const fresh = this.status[key] <= 0;
-    this.status[key] = Math.max(this.status[key], dur);
-    if (fresh && game) {
-      const msg = {
-        poison: ['You feel very sick.', 'danger'], confusion: ['Huh? What? Where am I?', 'warn'],
-        blind: ['Darkness swallows your sight!', 'warn'], paralysis: ['Your limbs lock rigid!', 'danger'],
-        burning: ['You are on fire!', 'danger'],
-      }[key];
-      if (msg) game.log(...msg);
-    }
+  /** Gives you a status (see status.js). Returns whether it took. */
+  addStatus(key, dur, game) { return afflict(game, this, key, dur); }
+
+  hasTrait() { return false; }
+
+  /** The log's word on what's happened to one of your statuses (see status.js). */
+  statusNote(game, key, event) {
+    const def = STATUSES[key];
+    if (event === 'start' && def.start) game.log(...def.start);
+    else if (event === 'end' && def.end) game.log(def.end, 'info');
+    else if (event === 'doused') game.log('The flames on you go out.', 'good');
+    else if (event === 'thawed') game.log('Warmth floods back into your limbs.', 'good');
   }
 
   gainXp(n, game) {
@@ -226,7 +232,7 @@ export class Player {
     const level = game.level;
     this.tickStatus(dt, game);
     if (game.over) return;
-    const para = this.status.paralysis > 0;
+    const para = this.held();
 
     if (!para) {
       this.yaw -= input.mouseDX * MOUSE_SENS;
@@ -260,7 +266,7 @@ export class Player {
     this.noise = this.moving ? NOISE[mode] * (this.heavyArmor() ? 1.25 : 1) : 0;
     if (this.moving) {
       mx /= ml; mz /= ml;
-      if (this.status.confusion > 0) {
+      if (this.status.confused > 0) {
         const a = Math.sin(game.time * 1.3) * 1.6 + Math.sin(game.time * 3.7) * 0.6;
         const c = Math.cos(a), sn = Math.sin(a);
         [mx, mz] = [mx * c - mz * sn, mx * sn + mz * c];
@@ -336,26 +342,7 @@ export class Player {
     }
   }
 
-  tickStatus(dt, game) {
-    const s = this.status;
-    const was = { ...s };
-    for (const k in s) if (s[k] > 0) s[k] = Math.max(0, s[k] - dt);
-    const ended = {
-      haste: 'You feel yourself slow down.', confusion: 'You feel less confused now.',
-      blind: 'Your sight returns.', paralysis: 'You can move again.', mindvision: 'Your mind\'s eye closes.',
-      invisible: 'You fade back into view.', poison: 'You feel less sick.',
-    };
-    for (const k in ended) if (was[k] > 0 && s[k] <= 0) game.log(ended[k], 'info');
-
-    if (s.poison > 0 || s.burning > 0) {
-      this.dotT += dt;
-      if (this.dotT >= 1) {
-        this.dotT -= 1;
-        if (s.poison > 0) game.hurtPlayer(1 + Math.floor(danger(game.level.depth) / 4), { source: 'poison', type: 'poison', ignoreArmor: true, dot: true });
-        if (s.burning > 0 && !game.over) game.hurtPlayer(rand.int(1, 3), { source: 'flames', type: 'fire', ignoreArmor: true, dot: true });
-      }
-    }
-  }
+  tickStatus(dt, game) { tickStatuses(game, this, dt); }
 
   updateStamina(dt, game, spending) {
     if (spending) {
@@ -385,9 +372,11 @@ export class Player {
     if (this.wearingRing('sustenance')) rate = this.ringBonus('sustenance') >= 0 ? 0.4 : 1.6;
     if (this.wearingRing('regeneration')) rate *= 1.3;
     this.hunger = Math.max(0, this.hunger - dt * rate);
-    const state = this.hunger <= 0 ? 3 : this.hunger < HUNGER_WEAK ? 2 : this.hunger < HUNGER_HUNGRY ? 1 : 0;
+    // Hungry is a warning; Famished, your wounds stop healing; Starving, you waste away.
+    const state = this.hunger <= 0 ? 3 : this.hunger < HUNGER_FAMISHED ? 2 : this.hunger < HUNGER_HUNGRY ? 1 : 0;
     if (state > this.hungerState) {
-      game.log(['', 'You are getting hungry.', 'You feel weak with hunger!', 'You are starving to death!'][state], state > 1 ? 'danger' : 'warn');
+      game.log(['', 'You are getting hungry.', "You are famished. Your wounds won't heal until you eat.", 'You are starving to death!'][state],
+        state > 1 ? 'danger' : 'warn');
     }
     this.hungerState = state;
     if (this.hunger <= 0) {
@@ -400,7 +389,8 @@ export class Player {
   }
 
   updateRegen(dt) {
-    if (this.hunger <= 0 || this.hp >= this.maxHp || this.status.poison > 0) return;
+    // Nothing heals while you're famished, poisoned or bleeding.
+    if (this.hunger < HUNGER_FAMISHED || this.hp >= this.maxHp || this.status.poisoned > 0 || this.status.bleeding > 0) return;
     let mult = 1;
     if (this.wearingRing('regeneration')) mult = Math.max(0.25, 1 + this.ringBonus('regeneration') * 0.8);
     const interval = Math.max(1.5, 8 - this.level * 0.35);

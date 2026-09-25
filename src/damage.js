@@ -4,14 +4,14 @@
 // say deals generic physical damage.
 //
 // Everything else is magical: raw magic (magic missiles, bolts, the Horn's blast) or one of the elements: fire,
-// ice, lightning, poison and holy light. Wands, potions, artefacts and monsters' spells say which they deal. Ice and
-// holy have no source yet; they're here for the items and enchantments to come (holy for the cursed and undead).
+// ice, lightning, poison and holy light. Wands, potions, artefacts and monsters' spells say which they deal. Holy has
+// no source yet: it's here for the items and enchantments to come, for the cursed and undead.
 // Damage with no type at all (starvation) is just damage.
 //
 // Monsters, armour and artefacts can take more or less from some types: `resist` in a def maps a type to a
 // multiplier on the damage that gets through, e.g. { slash: 0.5, bash: 1.5 } (below 1 resists it, above 1 is a
-// weakness, 0 is immune). Types it doesn't list, and damage with no type, hit as normal. Being immune to fire or
-// poison also means you can't be set burning or poisoned (see STATUS_TYPES).
+// weakness, 0 is immune). Types it doesn't list, and damage with no type, hit as normal. Being immune to fire,
+// ice or poison also wards off burning, chill and poison (see status.js), which can change what a hit does too.
 //
 // `noun` is what the log calls a type ("The troll is weak to fire!"). Magical damage numbers take the type's
 // colour (.popup.el-* in style.css).
@@ -28,9 +28,6 @@ export const DAMAGE_TYPES = {
   poison: { name: 'poison', noun: 'poison' },
   holy: { name: 'holy', noun: 'holy light' },
 };
-
-/** Statuses that hurt over time, and the type of their damage: being immune to it wards off the status too. */
-export const STATUS_TYPES = { burning: 'fire', poison: 'poison' };
 
 const warned = new Set();
 

@@ -5,7 +5,10 @@ import { PLAYER_RADIUS, EYE_H, TILE, danger } from '../config.js';
 import { spawnProjectile } from '../fx/projectiles.js';
 import { burst } from '../fx/particles.js';
 import { round2 } from '../save.js';
-import { DAMAGE_TYPES, STATUS_TYPES, damageType, damageMult, isPhysical } from '../damage.js';
+import { DAMAGE_TYPES, damageType, damageMult, isPhysical } from '../damage.js';
+import {
+  STATUSES, blankStatus, restoreStatus, saveStatus, afflict as applyStatus, tickStatuses, damageTakenMult, hitStatuses,
+} from '../status.js';
 
 const BLOOD = {
   rat: 0x901010, bat: 0x901010, slime: 0x40c040, goblin: 0x902010, archer: 0x902010, skeleton: 0xe0d8c0,
@@ -13,6 +16,8 @@ const BLOOD = {
 };
 
 const STRIKE_TIME = 0.3;
+const TINTS = Object.entries(STATUSES).filter(([, def]) => def.tint); // (in the order they win)
+const BLIND_SIGHT = 1.6; // metres a blinded monster can still make you out at: about a tile
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 export class Monster {
@@ -47,8 +52,12 @@ export class Monster {
 
     this.attack = { phase: 'none', t: 0, ranged: false };
     this.cooldown = rand.range(0.3, 1);
-    this.status = { poison: 0, confused: 0, paralyzed: 0, slowed: 0, feared: 0, burning: 0, blind: 0 };
-    this.dotAcc = 0;
+    this.status = blankStatus(false); // seconds left of each status (see status.js)
+    this.isPlayer = false;
+    this.dotT = 0;
+    this.weakBase = null; // its max health before it was weakened
+    this.searchAt = null; // the tile it's searching for you at: where it last saw or heard you (see search)
+    this.searchField = null;
     this.seeT = rand.range(0, 0.2);
     this.canSee = false;
     this.seen = false; // has laid eyes on the player during this hunt (vs. searching for a noise)
@@ -68,18 +77,19 @@ export class Monster {
 
   /** What a save keeps of it (see Level.snapshot). Only statuses in effect are kept. */
   snapshot() {
-    const status = {};
-    for (const k in this.status) if (this.status[k] > 0) status[k] = round2(this.status[k]);
+    const status = saveStatus(this.status);
     return {
       type: this.type, x: round2(this.x), z: round2(this.z), yaw: round2(this.yaw), hp: round2(this.hp), maxHp: this.maxHp,
       danger: this.danger, dmgMult: this.dmgMult, state: this.state, seen: this.seen || undefined, status,
       boss: this.boss || undefined, guardian: this.guardian || undefined, summoned: this.summoned || undefined,
+      weakBase: this.weakBase ?? undefined,
     };
   }
 
   /** Takes up where snapshot() left it. */
   restore(s) {
-    Object.assign(this.status, s.status);
+    restoreStatus(this.status, s.status);
+    this.weakBase = s.weakBase ?? null;
     this.yaw = s.yaw;
     this.hp = s.hp;
     this.maxHp = s.maxHp;
@@ -90,6 +100,33 @@ export class Monster {
     this.summoned = !!s.summoned;
     this.mesh.rotation.y = this.yaw;
     return this;
+  }
+
+  // --- Statuses (see status.js) ---
+
+  /** Gives it a status. `show`: pop up "IMMUNE" if it can't take it. Returns whether it took. */
+  afflict(game, key, secs, show = true) { return applyStatus(game, this, key, secs, { show }); }
+
+  /** Its own resistance to a damage type (see damage.js). */
+  resistMult(type) { return damageMult(this.def, type); }
+
+  /** A trait from its def: `bloodless` (can't bleed), `fluid` (always as good as wet: cold freezes it solid). */
+  hasTrait(trait) { return !!this.def.traits?.includes(trait); }
+
+  /** Paralysed or frozen: it can't move or strike, and it's open to an unaware blow. */
+  held() { return this.status.paralysed > 0 || this.status.frozen > 0; }
+
+  /** Shows what's happened to one of its statuses: a word over it, if you can see it. */
+  statusNote(game, key, event) {
+    if (this.dead) return;
+    if (event === 'immune') {
+      game.popup(this.headPos(), 'IMMUNE', 'immune');
+      if (STATUSES[key].resist) this.revealResist(game, STATUSES[key].resist, 0);
+      return;
+    }
+    if (!game.level.isVisibleWorld(this.x, this.z)) return;
+    if (event === 'start' && STATUSES[key].mark) game.popup(this.headPos(), STATUSES[key].mark, `status s-${key}`);
+    else if (event === 'doused' || event === 'thawed') game.popup(this.headPos(), event.toUpperCase(), `status s-${event}`);
   }
 
   headPos() {
@@ -116,14 +153,22 @@ export class Monster {
     this.seeT -= dt;
     if (this.seeT <= 0) {
       this.seeT = 0.2;
-      this.canSee = this.status.blind <= 0 && p.status.invisible <= 0 && dist < 18 &&
+      // Blinded, it can make you out only right beside it; it hears as well as ever.
+      this.canSee = p.status.invisible <= 0 && dist < (this.status.blind > 0 ? BLIND_SIGHT : 18) &&
         level.los(this.x, this.z, p.x, p.z);
       this.perceive(game, level, dist);
     }
+    // Carrying the Amulet, you're Hunted: everything on the floor knows where you are.
+    if (game.hunted && (this.state !== 'hunt' || !this.seen)) {
+      this.state = 'hunt';
+      this.seen = true;
+      this.lostT = 0;
+      this.wander = null;
+    }
 
-    const speedMult = this.status.slowed > 0 ? 0.45 : 1;
+    const speedMult = this.status.chilled > 0 ? 0.5 : 1;
     let moving = false;
-    if (this.status.paralyzed > 0) {
+    if (this.held()) {
       this.attack.phase = 'none';
     } else if (this.attack.phase !== 'none') {
       this.updateAttack(dt * speedMult, game, level, dist, dx, dz);
@@ -137,7 +182,7 @@ export class Monster {
     this.mesh.rotation.y = this.yaw;
     const a = this.attack;
     this.model.animate({
-      t: this.status.paralyzed > 0 ? 0 : this.t,
+      t: this.held() ? 0 : this.t,
       walk: this.walk,
       windup: a.phase === 'windup' ? Math.min(1, a.t / this.def.windup) : -1,
       strike: a.phase === 'strike' ? Math.min(1, a.t / STRIKE_TIME) : -1,
@@ -154,16 +199,8 @@ export class Monster {
   }
 
   tickStatus(dt, game, level) {
-    const s = this.status;
-    for (const k in s) if (s[k] > 0) s[k] = Math.max(0, s[k] - dt);
-    if (s.poison > 0 || s.burning > 0) {
-      this.dotAcc += dt;
-      if (this.dotAcc >= 1) {
-        this.dotAcc -= 1;
-        if (s.poison > 0) this.takeDamage(game, 1 + Math.floor(this.danger / 3), { dot: true, type: 'poison' });
-        if (s.burning > 0 && !this.dead) this.takeDamage(game, rand.int(2, 4), { dot: true, type: 'fire' });
-      }
-    }
+    tickStatuses(game, this, dt);
+    if (this.dead) return;
     if (this.def.regen && this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + this.def.regen * dt);
 
     if (this.boss && !this.summoned && this.hp < this.maxHp * 0.5) {
@@ -197,9 +234,23 @@ export class Monster {
     } else if (this.state === 'wander') {
       if (this.canSee && (dist < 4 || rand.chance(0.35 * stealth + 0.08))) this.notice(game);
       else if (heard > 0 && rand.chance(0.45 * heard * stealth)) this.hear(game, level);
-    } else if (this.state === 'hunt' && this.canSee && !this.seen) {
-      this.notice(game);
+    } else if (this.state === 'hunt') {
+      if (this.canSee) {
+        if (!this.seen) this.notice(game);
+        this.setSearch(level, p.x, p.z); // (where it last saw you, should it lose sight of you)
+      } else if (heard > 0 && rand.chance(0.45 * heard * stealth)) {
+        this.setSearch(level, p.x, p.z); // it heard you again: that's where to look now
+        this.lostT = 0;
+      }
     }
+  }
+
+  /** Where to search for you: the tile at (x, z). */
+  setSearch(level, x, z) {
+    const tx = level.toTile(x), ty = level.toTile(z);
+    if (this.searchAt?.tx === tx && this.searchAt?.ty === ty) return;
+    this.searchAt = { tx, ty };
+    this.searchField = null;
   }
 
   /**
@@ -215,13 +266,26 @@ export class Monster {
     return d < p.noise ? 1 - d / p.noise : 0;
   }
 
-  /** Heard something: come and look, without knowing yet what it was. Still open to an unaware strike. */
-  hear(game, level) {
+  /**
+   * Heard something at (x, z) (you, by default): it goes to look, without knowing yet what it was, and gives up if it
+   * finds nothing and hears no more (see think). Still open to an unaware strike.
+   */
+  hear(game, level, x = game.player.x, z = game.player.z) {
+    if (this.state === 'hunt' && this.seen && this.canSee) return;
     this.state = 'hunt';
     this.seen = false;
-    this.lostT = 6; // searches for ~6s (hunters give up at 12) unless it lays eyes on you
+    this.lostT = 0;
     this.wander = null;
+    this.setSearch(level, x, z);
     if (level.isVisibleWorld(this.x, this.z)) game.popup(this.headPos(), '?', 'alert');
+  }
+
+  /** Loses sight of you (blinded): it hunts on by sound, from where you were. */
+  loseTrack(game, level) {
+    if (this.state !== 'hunt') return;
+    this.seen = false;
+    this.lostT = 0;
+    this.setSearch(level, game.player.x, game.player.z);
   }
 
   /** Knows where you are now, and hunts you. `mark` shows a "!" over it (not when a hit woke it: that has its own). */
@@ -240,8 +304,11 @@ export class Monster {
     const p = game.player;
     const speed = def.speed * speedMult;
 
-    if (this.state === 'hunt' && this.canSee) this.lostT = 0;
-    if (this.state === 'hunt' && !this.canSee) {
+    // It knows where you are while it can see you (or while you're Hunted); otherwise it's searching where it last saw
+    // or heard you, and gives up after a while with no sign of you (never, if it's a boss).
+    const knows = this.canSee || game.hunted;
+    if (this.state === 'hunt' && knows) this.lostT = 0;
+    if (this.state === 'hunt' && !knows) {
       this.lostT += dt;
       if ((this.lostT > 12 && !this.boss) || p.status.invisible > 0) {
         this.state = 'wander';
@@ -289,7 +356,23 @@ export class Monster {
     }
     // Straight at you if it can see you and nothing's in the way (you might be across water); else by the path.
     if (this.canSee && level.clearPath(this.x, this.z, p.x, p.z, this.flies)) return this.moveTo(p.x, p.z, speed, dt, level, game);
-    const wp = level.step(level.flowFor(this.flies), this.x, this.z, false, this.flies);
+    if (knows) {
+      const wp = level.step(level.flowFor(this.flies), this.x, this.z, false, this.flies);
+      return !!wp && this.moveTo(wp.x, wp.z, speed, dt, level, game);
+    }
+    return this.search(dt, level, game, speed);
+  }
+
+  /** Makes for where it last saw or heard you, and looks about when it gets there. */
+  search(dt, level, game, speed) {
+    const at = this.searchAt;
+    if (!at) return false;
+    if (level.toTile(this.x) === at.tx && level.toTile(this.z) === at.ty) {
+      this.yaw += dt * 1.4;
+      return false;
+    }
+    this.searchField ??= level.fieldTo(at.tx, at.ty, this.flies);
+    const wp = level.step(this.searchField, this.x, this.z, false, this.flies);
     return !!wp && this.moveTo(wp.x, wp.z, speed, dt, level, game);
   }
 
@@ -383,16 +466,30 @@ export class Monster {
     }
   }
 
+  /** A roll of its damage: less while it's weakened (see status.js). `scale` for shots, which hit softer. */
+  rollDamage(scale = 1) {
+    return Math.round(rand.int(this.def.dmg[0], this.def.dmg[1]) * this.dmgMult * scale * (this.status.weakened > 0 ? 0.75 : 1));
+  }
+
   melee(game, level, dist, dx, dz) {
     const p = game.player;
     const fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
+    // Confused, it lays about at whatever's nearest: half the time, another monster in reach.
+    if (this.status.confused > 0 && rand.chance(0.5)) {
+      const other = level.monsters.find((m) => m !== this && !m.dead &&
+        Math.hypot(m.x - this.x, m.z - this.z) <= this.def.reach + m.radius + 0.25 &&
+        ((m.x - this.x) * fx + (m.z - this.z) * fz) > 0);
+      if (other) {
+        other.takeDamage(game, this.rollDamage(), { type: damageType(this.def), attacker: this });
+        return;
+      }
+    }
     const facing = (dx * fx + dz * fz) / (dist || 1);
     if (dist <= this.def.reach + PLAYER_RADIUS + 0.25 && facing > 0.35 && p.status.invisible <= 0 &&
         level.los(this.x, this.z, p.x, p.z)) {
       if (rand.chance(Math.max(0.3, 0.9 - p.evasion()))) {
-        const dmg = Math.round(rand.int(this.def.dmg[0], this.def.dmg[1]) * this.dmgMult);
-        game.hurtPlayer(dmg, { source: this.name, monster: this, type: damageType(this.def) });
-        if (this.def.poisonHit && rand.chance(this.def.poisonHit)) p.addStatus('poison', 6, game);
+        game.hurtPlayer(this.rollDamage(), { source: this.name, monster: this, type: damageType(this.def) });
+        if (this.def.poisonHit && rand.chance(this.def.poisonHit)) p.addStatus('poisoned', 6, game);
       } else {
         game.popup({ x: p.x - Math.sin(p.yaw) * 0.8, y: EYE_H, z: p.z - Math.cos(p.yaw) * 0.8 }, 'dodge', 'miss');
         game.audio.whiff();
@@ -409,14 +506,16 @@ export class Monster {
     const tx = p.x - ox, ty = EYE_H - 0.35 - oy, tz = p.z - oz;
     const len = Math.hypot(tx, ty, tz) || 1;
     const n = r.volley || 1;
+    // Confused, its aim goes astray.
+    const wild = this.status.confused > 0 ? rand.range(-0.7, 0.7) : 0;
     for (let i = 0; i < n; i++) {
-      const spread = (i - (n - 1) / 2) * 0.2;
+      const spread = (i - (n - 1) / 2) * 0.2 + wild;
       const c = Math.cos(spread), s = Math.sin(spread);
       const vx = (tx * c - tz * s) / len, vz = (tx * s + tz * c) / len;
       spawnProjectile(level, {
         x: ox, y: oy, z: oz, vx: vx * r.speed, vy: (ty / len) * r.speed, vz: vz * r.speed,
         owner: 'monster', kind: r.kind, color: r.color, size: r.size, source: this.name,
-        dmg: Math.round(rand.int(this.def.dmg[0], this.def.dmg[1]) * this.dmgMult * 0.85),
+        dmg: this.rollDamage(0.85),
         type: r.dmgType && damageType(r),
       });
     }
@@ -424,17 +523,21 @@ export class Monster {
   }
 
   /**
-   * Hurts it by `amount`, less or more if it resists or is weak to the damage's type (`opts.type`, see
-   * damage.js). Returns the damage it took. opts: { type, dot, sneak, knockback: {x, z} }.
+   * Hurts it by `amount`, less or more if it resists or is weak to the damage's type (`opts.type`, see damage.js), or
+   * as its statuses make it (see damageTakenMult in status.js). A hit may thaw it, set it alight (`ignite` seconds)
+   * or chill it (`chill` seconds): see hitStatuses. Returns the damage it took.
+   * opts: { type, dot, sneak, ignite, chill, knockback: {x, z}, attacker (a monster that struck it, not you) }.
    */
   takeDamage(game, amount, opts = {}) {
     if (this.dead) return 0;
-    const mult = damageMult(this.def, opts.type);
-    if (mult !== 1) this.revealResist(game, opts.type, mult);
+    const own = damageMult(this.def, opts.type);
+    // (A frozen monster's resistances don't show: they're stripped.)
+    if (own !== 1 && !(own < 1 && this.status.frozen > 0)) this.revealResist(game, opts.type, own);
+    const mult = damageTakenMult(this, opts.type, own);
     if (mult === 0) {
       if (!opts.dot) game.popup(this.headPos(), 'IMMUNE', 'immune');
       if (isPhysical(opts.type)) game.audio.block();
-      this.notice(game, false);
+      if (!opts.attacker) this.notice(game, false);
       return 0;
     }
     if (mult !== 1) amount = Math.max(1, Math.round(amount * mult));
@@ -453,8 +556,11 @@ export class Monster {
       this.z += opts.knockback.z * 0.35;
       game.level.collide(this, this.radius, this.flies);
     }
-    this.notice(game, false); // no-op if it already knows where you are
-    if (game.level.playerInShop) game.level.shopPursuers.add(this); // provoked from the shop: it may come in
+    if (!opts.dot && this.hp > 0) hitStatuses(game, this, opts.type, opts);
+    if (!opts.attacker) {
+      this.notice(game, false); // no-op if it already knows where you are
+      if (game.level.playerInShop) game.level.shopPursuers.add(this); // provoked from the shop: it may come in
+    }
     // Heavy blows stagger a monster out of its windup.
     if (this.attack.phase === 'windup' && !this.boss && amount >= this.maxHp * 0.3) {
       this.attack.phase = 'none';
@@ -473,24 +579,6 @@ export class Monster {
     else game.log(`The ${this.name} is weak to ${noun}!`, 'good');
   }
 
-  /**
-   * Sets a status on it for `secs` (at least), unless it's immune to the damage that status does (see STATUS_TYPES
-   * in damage.js): nothing burns a fire imp. `show` pops up "IMMUNE" when it is (leave it off when a hit of that
-   * type has just said so). Returns whether it took.
-   */
-  afflict(game, key, secs, show = true) {
-    const type = STATUS_TYPES[key];
-    if (type && damageMult(this.def, type) === 0) {
-      if (show && !this.dead) {
-        game.popup(this.headPos(), 'IMMUNE', 'immune');
-        this.revealResist(game, type, 0);
-      }
-      return false;
-    }
-    this.status[key] = Math.max(this.status[key], secs);
-    return true;
-  }
-
   die(game) {
     this.dead = true;
     this.deathT = 0;
@@ -501,14 +589,9 @@ export class Monster {
 
   updateTint(dt) {
     this.hurtT = Math.max(0, this.hurtT - dt);
-    const s = this.status;
-    let key, color;
+    let key = 'none', color;
     if (this.hurtT > 0) { key = 'hurt'; color = 0xa01010; }
-    else if (s.burning > 0) { key = 'burn'; color = 0x802000; }
-    else if (s.paralyzed > 0) { key = 'para'; color = 0x103060; }
-    else if (s.poison > 0) { key = 'poison'; color = 0x105010; }
-    else if (s.slowed > 0) { key = 'slow'; color = 0x202040; }
-    else key = 'none';
+    else for (const [k, def] of TINTS) if (this.status[k] > 0) { key = k; color = def.tint; break; }
     if (key === this.tintKey) return;
     this.tintKey = key;
     for (const m of this.model.materials) m.emissive.setHex(key === 'none' ? m.userData.baseEmissive : color);

@@ -3,12 +3,13 @@ import { KIND_GLYPH, ARTEFACTS, WEAPONS, ARMORS } from '../items/defs.js';
 import { equipSlotFor } from '../items/use.js';
 import { T } from '../dungeon/tiles.js';
 import { TRAP_COLORS } from '../world/level.js';
-import { HUNGER_HUNGRY, HUNGER_WEAK, INVENTORY_SIZE, TILE, HOTBAR_SIZE, PLAYER_SPEED, MAX_DEPTH, THEMES, FLOORS_PER_THEME, themeForDepth } from '../config.js';
+import { HUNGER_HUNGRY, HUNGER_FAMISHED, INVENTORY_SIZE, TILE, HOTBAR_SIZE, PLAYER_SPEED, MAX_DEPTH, THEMES, FLOORS_PER_THEME, themeForDepth } from '../config.js';
 import { canHotbar, slotItem, slotHolds, slotAction, assignSlot, clearSlot } from '../hotbar.js';
 import { stackable } from '../items/generate.js';
 import { DAMAGE_TYPES } from '../damage.js';
 import { Logo } from './logo.js';
 import { readSave } from '../save.js';
+import { STATUSES } from '../status.js';
 
 const $ = (id) => document.getElementById(id);
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
@@ -31,6 +32,7 @@ const POPUPS = {
   immune: { life: 1.1, punch: 0.4 },
   alert: { life: 1.1, rise: 0.35, punch: 0.6 },
   zzz: { life: 1.6, rise: 1.1 },
+  status: { life: 1.2, rise: 0.45, punch: 0.4 },
   weak: { life: 1.4, punch: 1 },
   resist: { life: 1.2, punch: 0.2 },
 };
@@ -318,14 +320,15 @@ export class UI {
     document.body.classList.toggle('blind', p.status.blind > 0);
 
     const st = [];
-    const s = p.status;
-    const lab = { haste: 'Hasted', poison: 'Poisoned', confusion: 'Confused', blind: 'Blind', paralysis: 'Paralysed', mindvision: 'Mind vision', invisible: 'Invisible', burning: 'Burning' };
-    for (const key in lab) if (s[key] > 0) st.push(`<span class="st-${key}">${lab[key]} ${Math.ceil(s[key])}</span>`);
+    if (g.hunted) st.push('<span class="st-hunted">Hunted</span>');
+    for (const [key, def] of Object.entries(STATUSES)) {
+      if (p.status[key] > 0) st.push(`<span style="color:${def.color}">${def.label} ${Math.ceil(p.status[key])}</span>`);
+    }
     if (p.winded) st.push('<span class="st-winded">Winded</span>');
     else if (p.mode === 'sneak') st.push('<span class="st-sneak">Sneaking</span>');
     else if (p.mode === 'sprint' && p.moving) st.push('<span class="st-sprint">Sprinting</span>');
     if (p.hunger <= 0) st.push('<span class="st-starving">Starving</span>');
-    else if (p.hunger < HUNGER_WEAK) st.push('<span class="st-weak">Weak</span>');
+    else if (p.hunger < HUNGER_FAMISHED) st.push('<span class="st-famished">Famished</span>');
     else if (p.hunger < HUNGER_HUNGRY) st.push('<span class="st-hungry">Hungry</span>');
     this.setHtml('status-line', st.join(' '));
 
@@ -348,7 +351,9 @@ export class UI {
     $('target').hidden = !t;
     if (t) {
       const tag = t.state === 'sleep' ? ' (asleep)' : t.state !== 'hunt' ? ' (unaware)' : !t.seen ? ' (searching)' : '';
-      this.set('target-name', t.name + tag);
+      const sts = Object.entries(STATUSES).filter(([key]) => t.status[key] > 0)
+        .map(([, def]) => `<span style="color:${def.color}">${def.label}</span>`).join(' ');
+      this.setHtml('target-name', `${t.name}${tag}${sts ? ` <span class="target-st">${sts}</span>` : ''}`);
       $('target-fill').style.width = `${Math.max(0, t.hp / t.maxHp) * 100}%`;
     }
 
@@ -690,7 +695,7 @@ export class UI {
     const res = a.fn();
     if (g.over || g.menu === 'dialog') return;
     // Close on request, or if that action just paralysed you (a potion of paralysis drunk from the pack).
-    if (res === true || p.status.paralysis > 0) g.closeMenu();
+    if (res === true || p.held()) g.closeMenu();
     else this.renderInventory();
   }
 

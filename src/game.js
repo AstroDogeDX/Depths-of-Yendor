@@ -19,6 +19,7 @@ import { loadProps } from './dungeon/props.js';
 import { loadTraps } from './world/trapModels.js';
 import { TitleScene } from './ui/titleScene.js';
 import { SAVE_VERSION, writeSave, deleteSave, fingerprint } from './save.js';
+import { damageTakenMult, hitStatuses } from './status.js';
 
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, matches stair `dir`
 
@@ -59,6 +60,7 @@ export class Game {
     this.loading = false; // waiting for a floor's props to download (see enterLevel)
     this.dev = null; // the dev tools (ui/devTools.js), when main.js loads them
     this.running = false; // a run is under way (not over, not quit): what save() saves
+    this.hunted = false; // carrying the Amulet: every monster on the floor knows where you are (see Monster.update)
     this.saveT = 0;
 
     this.input.onLockChange = (locked) => {
@@ -286,10 +288,14 @@ export class Game {
       for (const pr of this.level.projectiles) this.level.group.remove(pr.mesh);
       this.level.projectiles.length = 0;
       this.scene.remove(this.level.group);
+      this.level.leftAt = this.time;
     }
     const firstVisit = !this.levels.has(depth) && !this.savedLevels.has(depth);
     const level = this.getLevel(depth);
     this.level = level;
+    // Only the floor you're on runs, so one you come back to catches up on the time you were away: statuses wear off.
+    if (level.leftAt != null) level.catchUp(this, this.time - level.leftAt);
+    level.leftAt = null;
     this.scene.add(level.group);
 
     const th = level.theme;
@@ -395,7 +401,7 @@ export class Game {
 
   /** False while paralysed: no item use, pickups, stairs or powers. Says so, at most every 0.6s. */
   canAct() {
-    if (this.player.status.paralysis <= 0) return true;
+    if (!this.player.held()) return true;
     if (this.time - this.paraMsgT >= 0.6) {
       this.paraMsgT = this.time;
       this.log('You cannot move a muscle!', 'warn');
@@ -422,6 +428,7 @@ export class Game {
 
   update(dt) {
     this.time += dt;
+    this.hunted = this.player.hasAmulet();
     if ((this.saveT -= dt) <= 0) {
       this.saveT = 60;
       this.save(); // a minute's play is the most a crash can cost
@@ -447,7 +454,7 @@ export class Game {
     const bobAmp = p.mode === 'sprint' ? 0.05 : p.mode === 'sneak' ? 0.015 : 0.03;
     const bobY = p.moving ? Math.sin(p.bob * 2) * bobAmp : 0;
     cam.position.set(p.x, eye + bobY, p.z);
-    let roll = p.status.confusion > 0 ? Math.sin(this.time * 1.7) * 0.12 : 0;
+    let roll = p.status.confused > 0 ? Math.sin(this.time * 1.7) * 0.12 : 0;
     let pitch = p.pitch, yaw = p.yaw;
     if (this.shakeT > 0) {
       this.shakeT -= dt;
@@ -709,13 +716,14 @@ export class Game {
 
   /**
    * Hurts the player by `amount`: less their armour's defense unless opts.ignoreArmor, then more or less as what
-   * they wear resists or is weak to its damage type (see Player.resistMult). opts: { source (what killed them),
-   * type (see damage.js; fire sets them burning too), monster, dot, ranged, ignoreArmor }.
+   * they wear resists or is weak to its damage type (see Player.resistMult), and as their statuses make it (see
+   * status.js). opts: { source (what killed them), type (see damage.js: fire sets them alight, for `ignite` seconds,
+   * 3 by default), chill (seconds of chill it brings), monster, dot, ranged, ignoreArmor }.
    */
   hurtPlayer(amount, opts = {}) {
     if (this.over || this.dev?.god) return;
     const p = this.player;
-    const mult = p.resistMult(opts.type);
+    const mult = damageTakenMult(p, opts.type, p.resistMult(opts.type));
     if (mult === 0) {
       if (!opts.dot) this.popup(playerPopupPos(p), 'IMMUNE', 'immune');
       return;
@@ -746,8 +754,12 @@ export class Game {
       this.shake(0.1 + Math.min(0.3, dmg / p.maxHp));
       this.audio.hurt();
     }
-    if (opts.type === 'fire' && !opts.dot) p.addStatus('burning', 3, this);
-    if (p.hp <= 0) this.playerDied(opts.source || 'something');
+    if (p.hp <= 0) {
+      this.playerDied(opts.source || 'something');
+      return;
+    }
+    // Fire thaws you or sets you alight; ice chills you (see status.js).
+    if (!opts.dot) hitStatuses(this, p, opts.type, { ignite: opts.type === 'fire' ? opts.ignite ?? 3 : 0, chill: opts.chill });
   }
 
   onMonsterKilled(m) {
@@ -794,8 +806,9 @@ export class Game {
       case 'alarm':
         this.log('A bell clangs out, ringing through the halls!', 'danger');
         this.audio.bell();
+        // Everything within earshot comes to see what set it off.
         for (const m of level.monsters) {
-          if (!m.dead && Math.hypot(m.x - p.x, m.z - p.z) < 30) m.notice(this);
+          if (!m.dead && Math.hypot(m.x - x, m.z - z) < 30) m.hear(this, level, x, z);
         }
         break;
     }

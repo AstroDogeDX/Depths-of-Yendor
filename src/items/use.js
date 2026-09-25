@@ -6,6 +6,7 @@ import { spawnProjectile } from '../fx/projectiles.js';
 import { burst, ring, transient, lightningMesh } from '../fx/particles.js';
 import { spawnTable } from '../monsters/defs.js';
 import { sellPrice } from './generate.js';
+import { cure } from '../status.js';
 
 // --- Inventory actions shown in the pack screen ---
 
@@ -56,7 +57,7 @@ export function drinkPotion(game, item) {
   switch (one.type) {
     case 'healing':
       p.heal(Math.max(12, Math.round(p.maxHp * 0.75)));
-      p.status.poison = 0; p.status.blind = 0; p.status.confusion = 0;
+      for (const key of ['poisoned', 'bleeding', 'blind', 'confused']) cure(game, p, key, { quiet: true });
       game.log('You feel much better.', 'good');
       break;
     case 'strength':
@@ -69,18 +70,18 @@ export function drinkPotion(game, item) {
       p.xp = 0;
       break;
     case 'haste':
-      p.status.haste += 25;
+      p.addStatus('hasted', 25, game);
       game.log('You feel yourself speed up.', 'good');
       break;
     case 'mindvision':
-      p.status.mindvision = Math.max(p.status.mindvision, 45);
+      p.addStatus('mindvision', 45, game);
       game.log(game.level.monsters.some((m) => !m.dead)
         ? 'You can somehow sense the minds of the creatures on this floor!' : 'You sense... nothing. You are alone here.', 'good');
       break;
-    case 'poison': p.addStatus('poison', 10, game); break;
-    case 'confusion': p.addStatus('confusion', 12, game); break;
+    case 'poison': p.addStatus('poisoned', 10, game); break;
+    case 'confusion': p.addStatus('confused', 12, game); break;
     case 'blindness': p.addStatus('blind', 15, game); break;
-    case 'paralysis': p.addStatus('paralysis', 4, game); break;
+    case 'paralysis': p.addStatus('paralysed', 4, game); break;
     case 'flame':
       game.log('The flask bursts into flame in your hands!', 'danger');
       potionSplash(game, 'flame', p.x, p.z, false);
@@ -103,19 +104,24 @@ export function potionSplash(game, type, x, z, thrown = true) {
   for (const m of hit) {
     switch (type) {
       case 'healing': m.hp = Math.min(m.maxHp, m.hp + m.maxHp * 0.5); game.log(`The ${m.name} looks healthier.`, 'warn'); break;
-      case 'poison': m.afflict(game, 'poison', 10); break;
-      case 'confusion': m.status.confused = Math.max(m.status.confused, 10); break;
-      case 'blindness': m.status.blind = Math.max(m.status.blind, 12); if (m.state === 'hunt') { m.state = 'wander'; m.wander = null; } break;
-      case 'paralysis': m.status.paralyzed = Math.max(m.status.paralyzed, 6); break;
-      case 'flame': m.takeDamage(game, rand.int(4, 8), { type: 'fire' }); m.afflict(game, 'burning', 5, false); break;
+      case 'poison': m.afflict(game, 'poisoned', 10); break;
+      case 'confusion': m.afflict(game, 'confused', 10); break;
+      case 'blindness':
+        // Blinded, it hunts by ear: a hunter from where you were, anything else from the sound of the flask.
+        m.afflict(game, 'blind', 12);
+        if (m.state === 'hunt') m.loseTrack(game, level);
+        else m.hear(game, level, x, z);
+        continue;
+      case 'paralysis': m.afflict(game, 'paralysed', 6); break;
+      case 'flame': m.takeDamage(game, rand.int(4, 8), { type: 'fire', ignite: 5 }); break;
       case 'haste': case 'strength': case 'experience': case 'mindvision': obvious = false; break;
     }
     if (type !== 'healing' && type !== 'haste' && !m.dead) m.notice(game);
   }
   if (playerHit && thrown) {
-    if (type === 'poison') p.addStatus('poison', 5, game);
-    if (type === 'confusion') p.addStatus('confusion', 5, game);
-    if (type === 'paralysis') p.addStatus('paralysis', 2, game);
+    if (type === 'poison') p.addStatus('poisoned', 5, game);
+    if (type === 'confusion') p.addStatus('confused', 5, game);
+    if (type === 'paralysis') p.addStatus('paralysed', 2, game);
   }
   if (type === 'flame') {
     obvious = true;
@@ -210,7 +216,8 @@ export function readScroll(game, item) {
       announce();
       return false;
     case 'aggravate':
-      for (const m of level.monsters) if (!m.dead) m.notice(game);
+      // Everything on the floor hears it, and comes to where it rang out.
+      for (const m of level.monsters) if (!m.dead) m.hear(game, level);
       game.log('A piercing shriek echoes through the floor. Everything is awake now.', 'danger');
       announce();
       return false;
@@ -218,7 +225,7 @@ export function readScroll(game, item) {
       let n = 0;
       for (const m of level.monsters) {
         if (m.dead || m.boss) continue;
-        if (Math.hypot(m.x - p.x, m.z - p.z) < 12 && level.los(p.x, p.z, m.x, m.z)) { m.status.feared = 12; n++; }
+        if (Math.hypot(m.x - p.x, m.z - p.z) < 12 && level.los(p.x, p.z, m.x, m.z) && m.afflict(game, 'feared', 12)) n++;
       }
       game.log(n ? 'You hear maniacal laughter. The monsters flee in terror!' : 'You hear maniacal laughter in the distance.', 'good');
       announce();
@@ -305,8 +312,7 @@ export function zapWand(game, item) {
       break;
     case 'fire':
       bolt(0xff6010, 13, (m) => {
-        m.takeDamage(game, rand.int(5, 10) + power * 2, { type });
-        if (!m.dead) m.afflict(game, 'burning', 5, false);
+        m.takeDamage(game, rand.int(5, 10) + power * 2, { type, ignite: 5 });
       });
       learn();
       break;
@@ -328,12 +334,10 @@ export function zapWand(game, item) {
       learn();
       break;
     }
-    case 'slow':
-      bolt(0x4060ff, 12, (m) => {
-        m.status.slowed = 20;
-        game.log(`The ${m.name} slows to a crawl.`, 'good');
+    case 'frost':
+      bolt(0x9ad8ff, 13, (m) => {
+        m.takeDamage(game, rand.int(3, 7) + power * 2, { type, chill: 10 + power * 2 });
         learn();
-        m.notice(game);
       });
       break;
     case 'teleother':
@@ -498,7 +502,7 @@ export function activateArtefact(game, slot) {
       if (m.dead) continue;
       const dx = m.x - p.x, dz = m.z - p.z, d = Math.hypot(dx, dz);
       if (d > 6.5) continue;
-      m.status.paralyzed = Math.max(m.status.paralyzed, m.boss ? 1.5 : 3.5);
+      m.afflict(game, 'paralysed', 3.5); // (a boss shakes it off in half the time)
       m.takeDamage(game, rand.int(2, 6), { type: 'magic' }); // a thunderclap of raw magic
       if (!m.boss) {
         m.x += (dx / (d || 1)) * 1.8;
@@ -508,7 +512,7 @@ export function activateArtefact(game, slot) {
     }
     game.log('You sound the Horn of Thunder. The very stones shudder!', 'good');
   } else if (a.type === 'cloak') {
-    p.status.invisible = 8;
+    p.addStatus('invisible', 8, game);
     for (const m of level.monsters) if (m.state === 'hunt') { m.state = 'wander'; m.wander = null; }
     game.log('You draw the Cloak of Shadows about you and vanish.', 'good');
     game.audio.teleport();

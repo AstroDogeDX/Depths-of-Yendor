@@ -85,7 +85,6 @@ function impact(game, level, pr, target) {
   if (target === 'player') {
     game.hurtPlayer(pr.dmg, { source: pr.source, type: pr.type, ranged: true });
   } else if (target) {
-    target.takeDamage(game, pr.dmg, { type: pr.type, knockback: { x: pr.vx / 20, z: pr.vz / 20 } });
-    if (pr.type === 'fire' && !target.dead) target.afflict(game, 'burning', 4, false);
+    target.takeDamage(game, pr.dmg, { type: pr.type, ignite: pr.type === 'fire' ? 4 : 0, knockback: { x: pr.vx / 20, z: pr.vz / 20 } });
   }
 }
