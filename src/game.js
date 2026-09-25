@@ -6,7 +6,7 @@ import { Level } from './world/level.js';
 import { Player } from './player.js';
 import { Knowledge } from './items/identify.js';
 import { ARTEFACTS, WEAPONS } from './items/defs.js';
-import { makeItem, randomItem } from './items/generate.js';
+import { makeItem, randomItem, nextItemUid, reserveUids } from './items/generate.js';
 import { itemActions, zapWand, drinkPotion, activateArtefact } from './items/use.js';
 import { ViewModel } from './fx/viewmodel.js';
 import { burst, ring, gasCloud, lightColumn } from './fx/particles.js';
@@ -18,6 +18,7 @@ import { disposeGroup, propsForTheme } from './dungeon/levelBuilder.js';
 import { loadProps } from './dungeon/props.js';
 import { loadTraps } from './world/trapModels.js';
 import { TitleScene } from './ui/titleScene.js';
+import { SAVE_VERSION, writeSave, deleteSave, fingerprint } from './save.js';
 
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, matches stair `dir`
 
@@ -57,6 +58,8 @@ export class Game {
     this.level = null;
     this.loading = false; // waiting for a floor's props to download (see enterLevel)
     this.dev = null; // the dev tools (ui/devTools.js), when main.js loads them
+    this.running = false; // a run is under way (not over, not quit): what save() saves
+    this.saveT = 0;
 
     this.input.onLockChange = (locked) => {
       if (this.state !== 'play') return;
@@ -68,14 +71,6 @@ export class Game {
     } catch {
       this.fullscreenPref = true;
     }
-    // Sneak is Ctrl, and outside fullscreen the browser won't let us cancel Ctrl+W / Ctrl+R.
-    // If the page is about to go while Ctrl is down, ask first rather than lose the run.
-    window.addEventListener('beforeunload', (e) => {
-      if (this.state === 'play' && this.input.ctrlRecently()) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    });
     this.input.onLockError = () => {
       if (this.state === 'play' && !this.menu) this.paused = true;
     };
@@ -84,6 +79,10 @@ export class Game {
     });
     window.addEventListener('resize', () => this.resize());
     this.resize();
+    // Leaving the page (closing the tab or window, reloading, going elsewhere) saves the run on the way out.
+    // Being hidden (another tab, minimised) saves it too, since a hidden page can be closed without warning.
+    window.addEventListener('pagehide', () => this.save());
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.save(); });
 
     ui.bind(this);
     this.title.start();
@@ -94,10 +93,11 @@ export class Game {
 
   // --- Run lifecycle ---
 
-  newRun({ seed, name }) {
+  /** What a new run and a continued one both start with: the seed's dungeon, cleared of any last run. */
+  beginRun(seed, name) {
     this.title.stop();
-    this.seed = seed || Math.random().toString(36).slice(2, 8).toUpperCase();
-    this.playerName = name || 'Adventurer';
+    this.seed = seed;
+    this.playerName = name;
     const rng = new RNG(`${this.seed}:run`);
     this.knowledge = new Knowledge(rng);
     this.artefactQueue = rng.shuffle(Object.keys(ARTEFACTS));
@@ -106,13 +106,19 @@ export class Game {
     for (const lvl of this.levels?.values() ?? []) disposeGroup(lvl.group);
     this.level = null;
     this.levels = new Map();
+    this.savedLevels = new Map(); // floors from a save not yet gone back to (see getLevel)
     this.player = new Player();
     this.time = 0;
     this.over = false;
+    this.running = true;
+    this.saveT = 60;
     this.amuletTaken = false;
     this.paraMsgT = -Infinity;
     this.menu = null;
+  }
 
+  newRun({ seed, name }) {
+    this.beginRun(seed || Math.random().toString(36).slice(2, 8).toUpperCase(), name || 'Adventurer');
     const p = this.player;
     const sword = makeItem('weapon', 'shortsword', { identified: true, curseKnown: true, hitsToId: 0 });
     const armor = makeItem('armor', 'leather', { identified: true, curseKnown: true, hitsToId: 0 });
@@ -136,13 +142,69 @@ export class Game {
     });
   }
 
+  /** Picks up a saved run (see save() and save.js) where it was left. */
+  continueRun(s) {
+    this.beginRun(s.seed, s.name);
+    this.knowledge.restore(s.knowledge);
+    this.artefactQueue = s.artefactQueue;
+    this.savedLevels = new Map(s.levels.map((l) => [l.depth, l]));
+    reserveUids(s.nextUid);
+    this.player.restore(s.player);
+    this.time = s.time;
+    this.amuletTaken = s.amuletTaken;
+    const weapon = this.player.equip.weapon;
+    this.viewmodel.setWeapon(weapon ? WEAPONS[weapon.type] : null);
+
+    this.ui.reset();
+    this.audio.init();
+    this.resume();
+    this.enterLevel(s.depth, 'saved', () => {
+      this.state = 'play';
+      this.audio.setDrone(this.level.theme.drone);
+      this.log(`Welcome back, ${this.playerName}. Depth ${this.level.depth}: ${this.level.theme.name}.`, 'info');
+      if (this.dev) this.log('Dev tools: press ` (the key left of 1).', 'info');
+    });
+  }
+
+  /**
+   * Saves the run as it stands (see save.js): what you've learned, you and your things, and every floor you've
+   * been to. False if there's no run to save, or storage refused it.
+   */
+  save() {
+    if (!this.running || this.over || !this.level) return false;
+    const p = this.player;
+    const levels = [...this.levels.values()].map((l) => l.snapshot());
+    for (const s of this.savedLevels.values()) levels.push(s); // (from the save we continued, not yet revisited)
+    return writeSave({
+      version: SAVE_VERSION, savedAt: Date.now(),
+      seed: this.seed, name: this.playerName, depth: this.level.depth, time: Math.round(this.time),
+      level: p.level, amuletTaken: this.amuletTaken, artefactQueue: this.artefactQueue, nextUid: nextItemUid(),
+      knowledge: this.knowledge.snapshot(), player: p.snapshot(), levels,
+    });
+  }
+
+  /** Saves, and leaves the run for the title screen, to be continued from there. */
+  saveAndQuit() {
+    this.save();
+    this.running = false;
+    this.audio.stopDrone();
+    this.showTitle();
+  }
+
   /** Back to the title screen (from the end of a run), its walk starting in the next theme. */
   showTitle() {
     this.state = 'title';
     this.menu = null;
+    this.paused = false;
     this.input.unlock();
     this.title.start();
     this.ui.showTitle();
+  }
+
+  /** Stops play until a click on the pause panel resumes it. */
+  pause() {
+    this.paused = true;
+    this.input.unlock();
   }
 
   resume() {
@@ -152,7 +214,10 @@ export class Game {
     this.paused = false;
   }
 
-  /** Fullscreen plus Keyboard Lock (Chromium) lets Ctrl+W/T/N reach the game, so Ctrl-sneaking is safe. */
+  /**
+   * Fullscreen, plus Keyboard Lock where there is one (Chrome, Edge): browser shortcuts made with the game's keys
+   * don't fire, and a tap of Escape pauses rather than leaving fullscreen (see GAME_KEYS).
+   */
   enterFullscreen() {
     const el = document.documentElement;
     if (!this.fullscreenPref || document.fullscreenElement || !el.requestFullscreen) return;
@@ -181,13 +246,18 @@ export class Game {
   getLevel(depth) {
     if (!this.levels.has(depth)) {
       const data = generateLevel(this.seed, depth, { artefact: this.artefactFor(depth) });
-      this.levels.set(depth, new Level(this, data));
+      // A floor from a save comes back as it was left, unless floors are laid out differently since it was saved
+      // (a newer version of the game): then it starts afresh, rather than with things in its walls.
+      const saved = this.savedLevels.get(depth);
+      this.savedLevels.delete(depth);
+      this.levels.set(depth, new Level(this, data, saved?.layout === fingerprint(data.grid) ? saved : null));
     }
     return this.levels.get(depth);
   }
 
   /**
-   * Goes to floor `depth`, arriving by the stairs `arrive` names, then calls `done`. The first floor of a theme
+   * Goes to floor `depth`, arriving by the stairs `arrive` names ('down' or 'start': the up stairs; 'up': the down
+   * stairs; 'saved': where the save left you), then calls `done`. The first floor of a theme
    * whose props haven't downloaded yet waits for them in the dark (they're usually fetched on the floor before;
    * see arrive()).
    */
@@ -217,7 +287,7 @@ export class Game {
       this.level.projectiles.length = 0;
       this.scene.remove(this.level.group);
     }
-    const firstVisit = !this.levels.has(depth);
+    const firstVisit = !this.levels.has(depth) && !this.savedLevels.has(depth);
     const level = this.getLevel(depth);
     this.level = level;
     this.scene.add(level.group);
@@ -229,13 +299,16 @@ export class Game {
     this.renderer.setClearColor(th.fog);
     this.ambient.color.setHex(th.ambient);
 
-    const stairs = arrive === 'up' ? level.data.down : level.data.up;
-    const [dx, dy] = DIRS[stairs.dir];
     const p = this.player;
-    p.x = (stairs.x + dx + 0.5) * TILE;
-    p.z = (stairs.y + dy + 0.5) * TILE;
-    p.yaw = Math.atan2(-dx, -dy);
-    p.pitch = 0;
+    // Back where a save left you, if the floor came back as it was; else by the stairs.
+    if (!(arrive === 'saved' && level.restored && !level.isSolid(level.toTile(p.x), level.toTile(p.z)))) {
+      const stairs = arrive === 'up' ? level.data.down : level.data.up;
+      const [dx, dy] = DIRS[stairs.dir];
+      p.x = (stairs.x + dx + 0.5) * TILE;
+      p.z = (stairs.y + dy + 0.5) * TILE;
+      p.yaw = Math.atan2(-dx, -dy);
+      p.pitch = 0;
+    }
     p.lastTrapTile = level.idx(level.toTile(p.x), level.toTile(p.z));
     p.maxDepth = Math.max(p.maxDepth, depth);
     level.visT = 0;
@@ -256,6 +329,7 @@ export class Game {
     }
     // Start fetching the next floor's props, so they're here by the time you go down.
     loadProps(propsForTheme(themeForDepth(Math.min(MAX_DEPTH, depth + 1))))?.catch(() => {});
+    this.save(); // every floor you reach
   }
 
   changeLevel(depth, arrive) {
@@ -272,7 +346,6 @@ export class Game {
     requestAnimationFrame(this.loop);
     const dt = Math.min(0.05, (now - this.last) / 1000);
     this.last = now;
-    this.input.captureCtrl = this.state === 'play';
     if (this.state === 'play') {
       if (!this.loading) this.handleKeys();
       if (!this.paused && !this.menu && !this.over && !this.loading) this.update(dt);
@@ -296,6 +369,12 @@ export class Game {
       return;
     }
     if (this.over || this.paused) return;
+    // Escape pauses. Outside fullscreen (or where there's no Keyboard Lock) the browser has let go of the mouse
+    // already, which pauses anyway; in fullscreen with Keyboard Lock, the tap comes to us instead.
+    if (inp.wasPressed('Escape')) {
+      this.pause();
+      return;
+    }
     // The map is memory, not action, so it stays available while paralysed; everything else checks canAct().
     if ((inp.wasPressed('KeyI') || inp.wasPressed('Tab')) && this.canAct()) this.openMenu('inventory');
     else if (inp.wasPressed('KeyM')) this.openMenu('map');
@@ -343,6 +422,10 @@ export class Game {
 
   update(dt) {
     this.time += dt;
+    if ((this.saveT -= dt) <= 0) {
+      this.saveT = 60;
+      this.save(); // a minute's play is the most a crash can cost
+    }
     this.player.update(dt, this, this.input);
     if (this.over) return;
     this.level.update(dt, this);
@@ -751,6 +834,8 @@ export class Game {
 
   endRun(info) {
     this.state = 'over';
+    this.running = false;
+    deleteSave(); // death is permanent, and a won run is done
     this.menu = null;
     this.input.unlock();
     const p = this.player;

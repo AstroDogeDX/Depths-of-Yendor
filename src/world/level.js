@@ -13,6 +13,7 @@ import { rand } from '../rng.js';
 import { glowSprite } from '../fx/glow.js';
 import { Drips } from '../fx/drips.js';
 import { Shopkeeper } from './shopkeeper.js';
+import { fingerprint, packBits, unpackBits, round2 } from '../save.js';
 
 const N8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
@@ -20,7 +21,8 @@ const N8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]
 export const TRAP_COLORS = { spike: 0xa0a0a0, poison: 0x40c040, teleport: 0x3aa0ff, alarm: 0xe0c020 };
 
 export class Level {
-  constructor(game, data) {
+  /** A floor from its generated `data`: as new, or as a save left it (`saved`, from snapshot()). */
+  constructor(game, data, saved = null) {
     this.game = game;
     this.data = data;
     this.depth = data.depth;
@@ -77,17 +79,7 @@ export class Level {
     this.spawnT = 75;
     this.searchT = 0;
 
-    for (const m of data.monsters) {
-      this.addMonster(m.type, (m.x + 0.5) * TILE, (m.y + 0.5) * TILE, { asleep: m.asleep, boss: m.boss, guardian: m.guardian });
-    }
-    for (const it of data.items) {
-      this.addItem(it.item, (it.x + 0.5 + rand.range(-0.2, 0.2)) * TILE, (it.y + 0.5 + rand.range(-0.2, 0.2)) * TILE);
-    }
     for (const t of data.traps) this.traps.push({ ...t, hidden: true, triggered: false, view: null });
-    if (data.shrine) this.addItem(data.shrine.item, (data.shrine.x + 0.5) * TILE, (data.shrine.y + 0.5) * TILE, { onPedestal: true });
-    if (data.amulet) {
-      this.addItem(game.makeAmulet(), (data.amulet.x + 0.5) * TILE, (data.amulet.y + 0.5) * TILE, { onPedestal: true });
-    }
 
     // Where the shop's wares rest: the counter and display tables hold its stock, and things the player sells
     // go in any free spot, filling the rug last.
@@ -95,11 +87,82 @@ export class Level {
     this.resales = 0;
     this.shopkeeper = null;
     if (data.shop) {
-      data.shop.stock.forEach(({ item, price }, i) => this.shelve(item, price, i));
       this.shopkeeper = new Shopkeeper(data.shop.keeper);
       this.group.add(this.shopkeeper.mesh);
       this.obstacles.push({ x: this.shopkeeper.x, z: this.shopkeeper.z, r: 0.35 });
     }
+
+    this.restored = !!saved;
+    if (saved) this.restore(saved);
+    else this.populate();
+  }
+
+  /** A new floor's monsters and things, as generated. */
+  populate() {
+    const data = this.data;
+    for (const m of data.monsters) {
+      this.addMonster(m.type, (m.x + 0.5) * TILE, (m.y + 0.5) * TILE, { asleep: m.asleep, boss: m.boss, guardian: m.guardian });
+    }
+    for (const it of data.items) {
+      this.addItem(it.item, (it.x + 0.5 + rand.range(-0.2, 0.2)) * TILE, (it.y + 0.5 + rand.range(-0.2, 0.2)) * TILE);
+    }
+    if (data.shrine) this.addItem(data.shrine.item, (data.shrine.x + 0.5) * TILE, (data.shrine.y + 0.5) * TILE, { onPedestal: true });
+    if (data.amulet) {
+      this.addItem(this.game.makeAmulet(), (data.amulet.x + 0.5) * TILE, (data.amulet.y + 0.5) * TILE, { onPedestal: true });
+    }
+    data.shop?.stock.forEach(({ item, price }, i) => this.shelve(item, price, i));
+  }
+
+  // --- Saving (see save.js) ---
+
+  /**
+   * What a save keeps of this floor: what's changed since it was made (the rest comes back from the seed), with
+   * its layout's fingerprint to check it against when it's restored. Doors and traps are a digit each, in order:
+   * doors 1 locked + 2 open; traps 1 found + 2 spent.
+   */
+  snapshot() {
+    return {
+      depth: this.depth,
+      layout: fingerprint(this.grid),
+      explored: packBits(this.explored),
+      doors: this.doors.map((d) => (d.locked ? 1 : 0) + (d.open ? 2 : 0)).join(''),
+      traps: this.traps.map((t) => (t.hidden ? 0 : 1) + (t.triggered ? 2 : 0)).join(''),
+      monsters: this.monsters.filter((m) => !m.dead).map((m) => m.snapshot()),
+      items: this.items.map((e) => ({
+        item: e.item, x: round2(e.x), z: round2(e.z), y0: round2(e.y0), onPedestal: e.onPedestal || undefined,
+        price: e.price || undefined, spot: e.spot, resale: e.resale, seen: e.seen || undefined,
+      })),
+      spawnT: Math.round(this.spawnT),
+      resales: this.resales,
+    };
+  }
+
+  /** Puts back what snapshot() kept, on a floor made from the same seed. */
+  restore(s) {
+    this.explored = unpackBits(s.explored, this.w * this.h);
+    this.doors.forEach((d, i) => {
+      const v = +s.doors[i] || 0;
+      d.locked = !!(v & 1);
+      d.open = !!(v & 2);
+      d.amt = d.open ? 1 : 0;
+      d.pivot.rotation.y = (d.swing * d.amt * Math.PI) / 2;
+    });
+    this.traps.forEach((t, i) => {
+      const v = +s.traps[i] || 0;
+      t.triggered = !!(v & 2);
+      if (v & 1) this.revealTrap(t);
+    });
+    for (const ms of s.monsters) {
+      this.addMonster(ms.type, ms.x, ms.z, { asleep: ms.state === 'sleep', boss: ms.boss, guardian: ms.guardian }).restore(ms);
+    }
+    for (const e of s.items) {
+      const entry = this.addItem(e.item, e.x, e.z, { onPedestal: !!e.onPedestal, y0: e.y0, price: e.price ?? 0 });
+      if (e.spot !== undefined) entry.spot = e.spot;
+      if (e.resale) entry.resale = e.resale;
+      entry.seen = !!e.seen;
+    }
+    this.spawnT = s.spawnT;
+    this.resales = s.resales;
   }
 
   // --- Grid queries ---

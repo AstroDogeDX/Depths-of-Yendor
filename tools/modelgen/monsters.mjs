@@ -286,8 +286,15 @@ const monsters = {
         m.mesh('hood', loft([half(neckY - 1, S * 0.62, 1), half(neckY + S * 0.6, S * 0.66, 1.1), half(neckY + S * 1.05, S * 0.5, 1.2), apex(5, [0, neckY + S * 1.35, -S * 0.35])], { capStart: false, caps: [[0, 1, 2, 3], [0, 3, 4]] }), { mat: 'hoodCloth' });
       },
       leftHand: (m, x, y, z) => {
-        // Recurve bow held upright in front of the fist.
-        const pts = Array.from({ length: 9 }, (_, i) => { const t = (i / 8) * 2 - 1; return [x, y + t * 17, z + 3 - 4 * (1 - t * t) + (Math.abs(t) > 0.8 ? (Math.abs(t) - 0.8) * 10 : 0)]; });
+        // Recurve bow gripped in the fist, pointing forward out of it like any weapon, so when the arms come up level
+        // to aim (the archer's animation in src/monsters/models.js turns the arm forward 90°), it stands upright in
+        // front of the fist. `ahead` is how far toward the target each point is then: the limbs curve back toward
+        // the archer, and their tips flick forward again.
+        const pts = Array.from({ length: 9 }, (_, i) => {
+          const t = (i / 8) * 2 - 1;
+          const ahead = 1 - 4 * t * t + (Math.abs(t) > 0.8 ? (Math.abs(t) - 0.8) * 10 : 0);
+          return [x, y - ahead, z + t * 17];
+        });
         m.mesh('bow', tube(pts, { half: 0.8 }), { mat: 'wood' });
       },
     });
