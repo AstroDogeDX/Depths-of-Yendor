@@ -44,7 +44,7 @@ For testing by hand, press **`** (the key left of 1) during a run to open the de
 
 ## The pack
 
-The left of the pack shows a paper doll of what you have equipped: weapon in hand, armor on the chest (tinting the figure), two rings and two artefact attunements. A known curse gives the slot a red border. Clicking a filled slot selects that item. Selecting something you haven't equipped highlights the slot it would go into. Underneath are your derived stats (damage, recovery, reach, defense, speed, strength), with anything too heavy for you shown in red. An unidentified weapon's enchantment stays hidden: its damage shows as *(+?)*.
+The left of the pack shows a paper doll of what you have equipped: weapon in hand, armor on the chest (tinting the figure), two rings and two artefact attunements. A known curse gives the slot a red border. Clicking a filled slot selects that item. Selecting something you haven't equipped highlights the slot it would go into. Underneath are your derived stats (damage and its type, recovery, reach, defense, speed, strength), with anything too heavy for you shown in red. An unidentified weapon's enchantment stays hidden: its damage shows as *(+?)*.
 
 ## Hotbar
 
@@ -71,11 +71,17 @@ Potion, scroll and food slots remember the *type*, so a slot whose stack runs ou
 
 - **25 floors in 5 themes** of five floors each: Sewers, Catacombs, Caves, Dwarven Ruins and the Underworld. Seeded layouts with pillared halls, wall sconces, doors and hidden traps (spike, poison gas, teleport, alarm). See *The dungeon* and *Floors and doors* below.
 - **12 monsters:** rat, bat, ooze, goblin, goblin archer, skeleton, orc, wraith, fire imp, troll, stone golem, and the **Warden of Yendor**, who fires bolt volleys and raises the dead at half health.
-- **Items:** 7 weapons with different reach and speed (spears out-reach swords, hammers hit hard but recover slowly), 5 armours with strength requirements, 10 potions, 9 scrolls, 5 wands, 6 rings, food.
+- **Items:** 7 weapons with different reach, speed and damage types (spears out-reach swords, hammers hit hard but recover slowly), 5 armours with strength requirements, 10 potions, 9 scrolls, 5 wands, 6 rings, food.
 - **A shop** on the first floor of each theme after the first (floors 6, 11, 16 and 21). See *The shop* below.
 - **6 artefacts**, 5 per run in guarded shrines on the third floor of each theme (3, 8, 13, 18 and 23): Chalice of Crimson Thirst (lifesteal), Eye of the Deep (see all monsters and traps), Horn of Thunder (stun blast), Cloak of Shadows (invisibility), Boots of the Wind (speed), Emberheart (burning strikes, fire immunity). You have two attunement slots.
 - A title screen that walks you through a floor of each theme in turn, down the stairs from one to the next.
 - A Rogue tombstone when you die. Seeds are shareable.
+
+## Damage types
+
+Every melee blow deals one of three kinds of physical damage: **slash** (the swords and the battle axe), **stab** (the dagger and the spear, which thrust rather than swing) or **bash** (the mace, the war hammer and your fists). A weapon's description and the pack's stats say which. Monsters' blows work the same way. A weapon or monster that doesn't give a type deals generic physical damage; for now, that's every monster.
+
+A monster can resist a type or be weak to it: `resist` in its entry in `monsters/defs.js` maps types to multipliers on the damage that gets through. For example, `{ slash: 0.5, bash: 1.5 }` takes half from blades and half as much again from hammers, and 0 makes it immune. A resisted blow always does at least 1 unless the monster is immune. Damage that isn't a blow (fire, poison, wands, arrows, traps) has no type and ignores resistances. No monster has any yet. The types are in `damage.js`. A weapon's is its `dmgType` in `items/defs.js`, and a monster's is its `dmgType` in `monsters/defs.js`.
 
 ## Stamina, sprinting and sneaking
 
@@ -198,6 +204,7 @@ src/
   game.js              run lifecycle, level transitions, rendering, interaction, traps, endings
   player.js            movement, attack meter, stats, statuses, hunger/regen, inventory
   combat.js            player melee resolution
+  damage.js            damage types (slash, stab, bash, generic) and monsters' resistances to them
   hotbar.js            hotbar bindings and what each slot does when pressed
   input.js / audio.js  pointer-lock input; WebAudio synth sfx + ambient drone
   dungeon/generator.js pure data: plans the loop and branches, lays out rooms, routes corridors, populates (seeded)

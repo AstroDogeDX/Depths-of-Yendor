@@ -1,5 +1,7 @@
 // Monster catalog. Speeds in m/s, ranges in metres, times in seconds.
 // depth: [first floor it appears, last floor it appears]. freq: spawn weight.
+// dmgType: the kind of damage its melee blows deal (slash, stab or bash; generic if not given). resist: damage
+// multipliers by type, e.g. { slash: 0.5, bash: 1.5 }. See damage.js.
 
 export const MONSTERS = {
   rat: {

@@ -41,12 +41,12 @@ export function playerStrike(game, power) {
 
   if (sneak) game.log(`You strike the unsuspecting ${m.name}!`, 'good');
   const dist = Math.max(0.01, bestD);
-  m.takeDamage(game, dmg, { knockback: { x: (m.x - p.x) / dist, z: (m.z - p.z) / dist }, sneak });
-  game.audio.hit();
+  const dealt = m.takeDamage(game, dmg, { type: w.dmgType, knockback: { x: (m.x - p.x) / dist, z: (m.z - p.z) / dist }, sneak });
+  if (dealt > 0) game.audio.hit();
   game.shake(0.06);
 
-  if (p.hasArtefact('chalice')) {
-    const heal = Math.max(1, Math.round(dmg * 0.25));
+  if (dealt > 0 && p.hasArtefact('chalice')) {
+    const heal = Math.max(1, Math.round(dealt * 0.25));
     p.heal(heal);
   }
   if (p.hasArtefact('ember') && !m.dead && !m.def.fireImmune) m.status.burning = Math.max(m.status.burning, 3);

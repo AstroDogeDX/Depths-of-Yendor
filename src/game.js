@@ -121,7 +121,7 @@ export class Game {
     p.addItem(makeItem('food', 'ration'));
     p.equip.weapon = sword;
     p.equip.armor = armor;
-    this.viewmodel.setWeapon(WEAPONS.shortsword.model);
+    this.viewmodel.setWeapon(WEAPONS.shortsword);
 
     this.ui.reset();
     // Sound, fullscreen and the mouse now, while the click that started the run still counts for them.
@@ -624,6 +624,10 @@ export class Game {
 
   // --- Combat & events ---
 
+  /**
+   * Hurts the player by `amount`, less their armour unless opts.ignoreArmor. opts: { source (what killed them),
+   * type (a physical blow's damage type, see damage.js), monster, fire, dot, ranged, ignoreArmor }.
+   */
   hurtPlayer(amount, opts = {}) {
     if (this.over || this.dev?.god) return;
     const p = this.player;

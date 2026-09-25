@@ -5,9 +5,10 @@ import {
 import { WEAPONS, ARMORS, ARTEFACTS } from './items/defs.js';
 import { stackable } from './items/generate.js';
 import { playerStrike } from './combat.js';
+import { damageType } from './damage.js';
 import { rand } from './rng.js';
 
-const FISTS = { dmg: [1, 3], recharge: 0.6, reach: 1.4, str: 0, model: null };
+const FISTS = { name: 'fists', dmgType: 'bash', dmg: [1, 3], recharge: 0.6, reach: 1.4, str: 0, model: null };
 
 export class Player {
   constructor() {
@@ -61,7 +62,7 @@ export class Player {
     const ench = it ? it.ench : 0;
     const short = Math.max(0, d.str - this.str);
     return {
-      dmg: d.dmg, ench, reach: d.reach, model: d.model,
+      dmg: d.dmg, dmgType: damageType(d), ench, reach: d.reach, model: d.model,
       recharge: (d.recharge * (1 + short * 0.15)) / (this.status.haste > 0 ? 1.35 : 1),
       accuracy: ench * 0.03 - short * 0.08,
       excess: Math.max(0, this.str - d.str),

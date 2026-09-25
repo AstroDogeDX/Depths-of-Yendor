@@ -6,6 +6,7 @@ import { TRAP_COLORS } from '../world/level.js';
 import { HUNGER_HUNGRY, HUNGER_WEAK, INVENTORY_SIZE, TILE, HOTBAR_SIZE, PLAYER_SPEED, MAX_DEPTH, THEMES, FLOORS_PER_THEME } from '../config.js';
 import { canHotbar, slotItem, slotHolds, slotAction, assignSlot, clearSlot } from '../hotbar.js';
 import { stackable } from '../items/generate.js';
+import { DAMAGE_TYPES } from '../damage.js';
 import { Logo } from './logo.js';
 
 const $ = (id) => document.getElementById(id);
@@ -578,7 +579,7 @@ export class UI {
     const hi = Math.max(1, w.dmg[1] + (known ? w.ench : 0) + w.excess);
     // Two label/value pairs per row: wide values on the left, short ones on the right.
     const rows = [
-      ['Damage', `${lo}–${hi}${known ? '' : ' (+?)'}`, heavy], ['Reach', `${w.reach}m`],
+      ['Damage', `${lo}–${hi}${known ? '' : ' (+?)'} ${DAMAGE_TYPES[w.dmgType].name}`, heavy], ['Reach', `${w.reach}m`],
       ['Recovery', `${w.recharge.toFixed(2)}s`, heavy], ['Defense', String(p.defense)],
       ['Speed', `${Math.round((p.moveSpeed() / PLAYER_SPEED) * 100)}%`, slow], ['Strength', String(p.str)],
     ];

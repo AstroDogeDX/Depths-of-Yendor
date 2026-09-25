@@ -1,19 +1,20 @@
 // Static item catalog. Instances are plain objects created in items/generate.js.
+// A weapon's dmgType is the kind of damage it deals: slash, stab or bash (see damage.js).
 
 export const WEAPONS = {
-  dagger:     { name: 'dagger',      dmg: [2, 5],   recharge: 0.55, reach: 1.8, str: 10, tier: 1, model: 'dagger',
+  dagger:     { name: 'dagger',      dmgType: 'stab',  dmg: [2, 5],   recharge: 0.55, reach: 1.8, str: 10, tier: 1, model: 'dagger',
                 desc: 'A short, quick blade. Little reach, but it recovers almost instantly.' },
-  shortsword: { name: 'short sword', dmg: [3, 8],   recharge: 0.85, reach: 2.0, str: 12, tier: 1, model: 'sword',
+  shortsword: { name: 'short sword', dmgType: 'slash', dmg: [3, 8],   recharge: 0.85, reach: 2.0, str: 12, tier: 1, model: 'sword',
                 desc: 'A dependable sidearm of plain steel.' },
-  mace:       { name: 'mace',        dmg: [4, 11],  recharge: 1.15, reach: 2.0, str: 13, tier: 2, model: 'mace',
+  mace:       { name: 'mace',        dmgType: 'bash',  dmg: [4, 11],  recharge: 1.15, reach: 2.0, str: 13, tier: 2, model: 'mace',
                 desc: 'A flanged iron head on an oak haft.' },
-  spear:      { name: 'spear',       dmg: [4, 10],  recharge: 1.05, reach: 2.8, str: 13, tier: 2, model: 'spear',
+  spear:      { name: 'spear',       dmgType: 'stab',  dmg: [4, 10],  recharge: 1.05, reach: 2.8, str: 13, tier: 2, model: 'spear',
                 desc: 'Long reach lets you strike before most foes can reach you.' },
-  longsword:  { name: 'long sword',  dmg: [6, 14],  recharge: 1.15, reach: 2.3, str: 14, tier: 3, model: 'longsword',
+  longsword:  { name: 'long sword',  dmgType: 'slash', dmg: [6, 14],  recharge: 1.15, reach: 2.3, str: 14, tier: 3, model: 'longsword',
                 desc: 'A knightly blade, balanced and keen.' },
-  battleaxe:  { name: 'battle axe',  dmg: [8, 18],  recharge: 1.45, reach: 2.3, str: 15, tier: 4, model: 'axe',
+  battleaxe:  { name: 'battle axe',  dmgType: 'slash', dmg: [8, 18],  recharge: 1.45, reach: 2.3, str: 15, tier: 4, model: 'axe',
                 desc: 'A broad bearded axe. Slow to recover, brutal on impact.' },
-  warhammer:  { name: 'war hammer',  dmg: [11, 24], recharge: 1.85, reach: 2.2, str: 17, tier: 5, model: 'hammer',
+  warhammer:  { name: 'war hammer',  dmgType: 'bash',  dmg: [11, 24], recharge: 1.85, reach: 2.2, str: 17, tier: 5, model: 'hammer',
                 desc: 'A crushing maul that only the strong can swing well.' },
 };
 

@@ -2,6 +2,7 @@ import {
   WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD,
   POTION_COLORS, SCROLL_SYLLABLES, WAND_MATERIALS, RING_GEMS,
 } from './defs.js';
+import { DAMAGE_TYPES, damageType } from '../damage.js';
 
 // Per-run knowledge: which unidentified appearance maps to which item type, and what the player knows.
 export class Knowledge {
@@ -135,7 +136,7 @@ export class Knowledge {
     switch (item.kind) {
       case 'weapon': {
         const d = WEAPONS[item.type];
-        let s = `${d.desc}\n\nDamage ${d.dmg[0]}–${d.dmg[1]}, recovery ${d.recharge.toFixed(2)}s, reach ${d.reach}m. Requires ${d.str} strength.`;
+        let s = `${d.desc}\n\nDamage ${d.dmg[0]}–${d.dmg[1]} (${DAMAGE_TYPES[damageType(d)].name}), recovery ${d.recharge.toFixed(2)}s, reach ${d.reach}m. Requires ${d.str} strength.`;
         if (!item.identified) s += '\n\nYou do not know its enchantment. Fight with it for a while to learn more.';
         if (item.curseKnown && item.cursed) s += '\n\nA malevolent curse clings to it.';
         return s;

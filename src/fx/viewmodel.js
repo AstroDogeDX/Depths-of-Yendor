@@ -86,10 +86,11 @@ export class ViewModel {
     this.scene.add(this.torch);
   }
 
-  setWeapon(model) {
+  /** Holds the weapon with this def (items/defs.js WEAPONS), or nothing. Stabbing weapons thrust. */
+  setWeapon(def) {
     if (this.weapon) this.weaponArc.remove(this.weapon);
-    this.weapon = model ? buildWeaponMesh(model) : null;
-    this.keys = model === 'spear' || model === 'dagger' ? THRUST : SLASH;
+    this.weapon = def ? buildWeaponMesh(def.model) : null;
+    this.keys = def?.dmgType === 'stab' ? THRUST : SLASH;
     if (this.weapon) this.weaponArc.add(this.weapon);
   }
 

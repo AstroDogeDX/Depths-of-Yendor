@@ -4,6 +4,7 @@ import { rand } from '../rng.js';
 import { PLAYER_RADIUS, EYE_H, TILE, danger } from '../config.js';
 import { spawnProjectile } from '../fx/projectiles.js';
 import { burst } from '../fx/particles.js';
+import { damageType, damageMult } from '../damage.js';
 
 const BLOOD = {
   rat: 0x901010, bat: 0x901010, slime: 0x40c040, goblin: 0x902010, archer: 0x902010, skeleton: 0xe0d8c0,
@@ -364,7 +365,7 @@ export class Monster {
         level.los(this.x, this.z, p.x, p.z)) {
       if (rand.chance(Math.max(0.3, 0.9 - p.evasion()))) {
         const dmg = Math.round(rand.int(this.def.dmg[0], this.def.dmg[1]) * this.dmgMult);
-        game.hurtPlayer(dmg, { source: this.name, monster: this });
+        game.hurtPlayer(dmg, { source: this.name, monster: this, type: damageType(this.def) });
         if (this.def.poisonHit && rand.chance(this.def.poisonHit)) p.addStatus('poison', 6, game);
       } else {
         game.popup({ x: p.x - Math.sin(p.yaw) * 0.8, y: EYE_H, z: p.z - Math.cos(p.yaw) * 0.8 }, 'dodge', 'miss');
@@ -396,12 +397,24 @@ export class Monster {
     game.audio.shoot(r.kind);
   }
 
+  /**
+   * Hurts it by `amount`, less or more if it resists or is weak to the blow's damage type (`opts.type`, see
+   * damage.js). Returns the damage it took. opts: { type, fire, dot, sneak, knockback: {x, z} }.
+   */
   takeDamage(game, amount, opts = {}) {
     if (this.dead) return 0;
     if (opts.fire && this.def.fireImmune) {
       game.popup(this.headPos(), 'immune', 'miss');
       return 0;
     }
+    const mult = damageMult(this.def, opts.type);
+    if (mult === 0) {
+      game.popup(this.headPos(), 'immune', 'miss');
+      game.audio.block();
+      this.notice(game);
+      return 0;
+    }
+    if (mult !== 1) amount = Math.max(1, Math.round(amount * mult));
     this.hp -= amount;
     this.hurtT = 0.18;
     game.popup(this.headPos(), String(amount), opts.dot ? 'dot' : opts.sneak ? 'crit' : 'dmg');

@@ -401,7 +401,7 @@ export function equipItem(game, item) {
     case 'weapon':
       if (e.weapon?.cursed) return cursedStuck(game, e.weapon);
       e.weapon = item;
-      game.viewmodel.setWeapon(WEAPONS[item.type].model);
+      game.viewmodel.setWeapon(WEAPONS[item.type]);
       game.log(`You wield the ${name()}.`);
       if (p.str < WEAPONS[item.type].str) game.log('It is too heavy for you to use well.', 'warn');
       bind();
