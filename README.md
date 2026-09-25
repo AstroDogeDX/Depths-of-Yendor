@@ -2,7 +2,7 @@
 
 A first-person, real-time roguelike for the browser, in the spirit of **King's Field** (slow, deliberate first-person melee in dark stone corridors) crossed with **Rogue / Pixel Dungeon** (procedural floors, unidentified items, curses, permadeath). Built with three.js and plain ES modules. The dungeon, its textures and the sound are generated in code. The monsters, the shopkeeper, the weapons, the torch, the lights on the walls, the shop's furniture and the items you find are Blockbench models (see [Blockbench models](#blockbench-models)).
 
-Descend ten floors and take the **Amulet of Yendor** from its Warden. Then choose: invoke the Amulet and escape at once, or carry it back up through every floor to the surface for double score while the dungeon throws everything it has at you.
+Descend 25 floors and take the **Amulet of Yendor** from its Warden. Then choose: invoke the Amulet and escape at once, or carry it back up through every floor to the surface for double score while the dungeon throws everything it has at you.
 
 ## Running
 
@@ -11,6 +11,8 @@ npm install
 npm run dev        # http://localhost:5173
 npm run build      # static build in dist/, deployable anywhere
 ```
+
+The build is plain static files with relative paths (`base: './'` in `vite.config.js`), so it works from any folder on any static host. Pushing to `master` publishes it to GitHub Pages (`.github/workflows/deploy.yml`) at https://astrodogedx.github.io/Depths-of-Yendor/. For that, the repo's Settings → Pages → Build and deployment → Source must be set to **GitHub Actions**. The workflow can also be run by hand from the Actions tab. Add `?dev` to the address to get the dev tools in a published build.
 
 ## Controls
 
