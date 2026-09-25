@@ -45,6 +45,8 @@
         <h2>Paused</h2>
         <p>Click anywhere to take up your torch again.</p>
         <label class="check" id="pause-fs"><input type="checkbox" id="fs-pause" /> Fullscreen</label>
+        <div class="pause-actions"><button id="quit-btn" class="alt">Save and quit to title</button></div>
+        <p class="pause-note">Your run saves on every floor you reach, and when you close the page.</p>
       </div>
     </div>
 
@@ -120,13 +122,17 @@
         <h1 class="sr-only">Depths of Yendor</h1>
         <canvas id="logo" aria-hidden="true"></canvas>
         <p class="sub" id="title-sub"></p>
+        <div id="continue" hidden>
+          <button id="continue-btn">Continue</button>
+          <p id="continue-info"></p>
+        </div>
         <div class="form">
           <label>Name <input id="name-in" maxlength="16" value="Adventurer" autocomplete="off" /></label>
           <button id="start-btn">Descend</button>
         </div>
         <div class="title-options">
           <label class="seed">Seed <input id="seed-in" maxlength="12" placeholder="random" autocomplete="off" /></label>
-          <label class="check" title="Recommended: in fullscreen, Ctrl+W sneaks forward instead of closing the tab"><input type="checkbox" id="fs-in" /> Fullscreen</label>
+          <label class="check" title="Recommended: in Chrome and Edge, Esc then pauses without leaving fullscreen (hold it to leave)"><input type="checkbox" id="fs-in" /> Fullscreen</label>
           <button id="howto-btn" class="link">How to play</button>
         </div>
       </div>
@@ -141,7 +147,7 @@
             <h3>Moving</h3>
             <p><b>WASD</b> move · <b>Mouse</b> look · <b>← →</b> turn</p>
             <p><b>Shift</b> sprint: fast, but loud.</p>
-            <p><b>Ctrl</b> or <b>C</b> sneak: slow and near-silent, for striking sleepers unaware, and for creeping over traps you've found without setting them off.</p>
+            <p><b>C</b> sneak on or off: slow and near-silent, for striking sleepers unaware, and for creeping over traps you've found without setting them off. Sprinting stands you back up.</p>
           </section>
           <section>
             <h3>Fighting</h3>
@@ -151,7 +157,7 @@
           <section>
             <h3>Everything else</h3>
             <p><b>E</b> pick up, open, buy, use stairs · <b>I</b> pack · <b>M</b> map</p>
-            <p><b>1–6</b> hotbar (assign from your pack) · <b>P</b> pixel size · <b>Esc</b> pause</p>
+            <p><b>1–6</b> hotbar (assign from your pack) · <b>P</b> pixel size · <b>Esc</b> pause, or save and quit</p>
           </section>
         </div>
         <h3>The descent</h3>
@@ -161,7 +167,8 @@
           Drink, read and wear at your own risk. Some equipment is cursed and will not come off.
           Monsters sleep until they notice you. Strike first, and strike hard.
         </p>
-        <p class="lore">Play fullscreen if you can: outside it, the browser keeps Ctrl+W (sneak forward) for closing the tab.</p>
+        <p class="lore">Your run saves on every floor you reach, when you save and quit, and when you close the page: Continue picks it up from the title screen. Dying ends it for good.</p>
+        <p class="lore">Play fullscreen if you can. In Chrome and Edge, Esc then pauses without leaving fullscreen: hold it down to leave.</p>
         <button id="howto-close">Close</button>
       </div>
     </div>

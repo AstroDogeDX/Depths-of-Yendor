@@ -20,7 +20,7 @@ The build is plain static files with relative paths (`base: './'` in `vite.confi
 | --- | --- |
 | WASD / arrows | Move; ← → turn (King's Field style) |
 | Shift | Sprint: 1.6× speed, but loud (uses stamina) |
-| Ctrl or C | Sneak: half speed, crouched and near-silent (uses stamina); creeps over found traps without setting them off |
+| C | Sneak on/off: half speed, crouched and near-silent (uses stamina); creeps over found traps without setting them off. Sprinting, or running out of stamina, ends it |
 | Mouse | Look (click the view to capture the pointer) |
 | Click / Space | Attack. Click swings once the meter is past 20%; holding re-swings only at full charge |
 | E | Pick up / use stairs |
@@ -31,7 +31,7 @@ The build is plain static files with relative paths (`base: './'` in `vite.confi
 | Q | Drink a potion you *know* is healing |
 | R / T | Active power of artefact slot 1 / 2 |
 | P | Cycle internal render resolution (270p → 360p → 540p → native) |
-| Esc | Pause |
+| Esc | Pause (the pause panel can also save and quit to the title) |
 | ` | Dev tools (see below; only in development, or with `?dev` in the address) |
 
 ## Dev tools
@@ -67,7 +67,7 @@ Potion, scroll and food slots remember the *type*, so a slot whose stack runs ou
 - **Paralysis means paralysis.** While paralysed you can't use items (from the pack or the hotbar), pick things up, take stairs or invoke artefacts. Only the map stays available.
 - **Identification is per run.** Potion colours, scroll labels, wand woods and ring gems are reshuffled from the seed. Potions reveal themselves when drunk, and throwing a potion identifies it if the splash does something visible. Weapons and armour reveal their enchantment after enough hits. Rings reveal themselves after about 100 s of wear.
 - **Curses.** About 16% of equipment is cursed with a negative enchantment and binds to you when equipped. Scrolls of remove curse or enchanting break the curse.
-- **Persistent floors.** Levels are kept when you leave, so you can go back up. The dungeon also restocks itself slowly, and fast and angrily once you carry the Amulet.
+- **Persistent floors.** Levels are kept when you leave, so you can go back up, and they're saved with the run (see *Saving*). The dungeon also restocks itself slowly, and fast and angrily once you carry the Amulet.
 
 ## What's in it
 
@@ -133,18 +133,40 @@ You can see when a type matters. A hit on a monster's weakness shows a bigger nu
 
 ## Stamina, sprinting and sneaking
 
-Stamina is a separate bar from the attack meter and is never spent on swings. It drains only while you're *moving* in a mode: sprinting uses 22 a second, sneaking 9. Holding the key while standing still is free. It refills (18 a second, half as fast again standing still) after a short pause. Run it dry and you're *Winded*: no sprinting or sneaking until it's back to 30%. You start with 100, and gain 10 more per level.
+Stamina is a separate bar from the attack meter and is never spent on swings. It drains only while you're *moving* in a mode: sprinting uses 22 a second, sneaking 9. Sprinting or sneaking while standing still is free. It refills (18 a second, half as fast again standing still) after a short pause. Run it dry and you're *Winded*: no sprinting or sneaking until it's back to 30%. It stands you up out of a sneak too, so tap C again once you've got your breath back. You start with 100, and gain 10 more per level.
 
 - **Noise.** Your footsteps carry by walking distance, round corners but not through walls: about 6 m walking, 16 m sprinting, 1.5 m sneaking, and nothing standing still. Heavy armour is a quarter louder. A sprint can wake monsters in neighbouring rooms.
 - **Hearing and searching.** A monster that hears you comes *searching* (a **?**). Only when it actually sees you does it become fully aware (a **!**). Until then it can still be struck unaware.
 - **Sneaking up on sleepers.** Sleepers wake mostly to footsteps, or to someone standing right over them, and sneaking cuts both. In testing, sneaking up to within 2 m of a sleeper woke it about 14% of the time, against about 75% for walking up.
 
-**Ctrl and the browser:** Ctrl+W, Ctrl+T and Ctrl+N are reserved by browsers, and Ctrl+W is also "sneak forward". So:
+**Esc and fullscreen:** fullscreen is on by default (see the title screen or pause panel). In Chrome and Edge it also uses Keyboard Lock for the game's keys (`GAME_KEYS` in `input.js`), Esc included, which has two effects:
 
-- **Fullscreen** (on by default; see the title screen or pause panel) uses Keyboard Lock in Chrome and Edge, so those keys go to the game.
-- **Outside fullscreen**, the game asks before the tab closes or reloads while Ctrl is held.
-- Other Ctrl shortcuts are suppressed during play.
-- **C** is an alternative sneak key with no conflicts at all.
+- A browser shortcut made with one of those keys can't fire by accident (a slip onto Ctrl+W can't close the tab).
+- A tap of Esc pauses the game and stays in fullscreen. Holding Esc down leaves fullscreen, as the browser says when fullscreen starts.
+
+Firefox and Safari have no Keyboard Lock, so there Esc pauses and leaves fullscreen together, as it did before. No browser lets a page stop Esc from giving the mouse back, fullscreen or not: that's what pauses the game there.
+
+## Saving
+
+There's one run saved at a time, in the browser's local storage (`save.js`). It's saved:
+
+- on reaching every floor,
+- when you choose **Save and quit to title** on the pause panel,
+- every minute of play,
+- when the page is closed, reloaded or left, or hidden (another tab, minimised).
+
+Writing to local storage is synchronous, so the save is done before the page is gone. There's no warning prompt on closing. **Continue** on the title screen picks the run up where it was left, down to the monsters mid-hunt. A new run while one is saved takes a second click, since it ends the saved one. Dying or winning deletes the save, so death is still permanent.
+
+Floors are made from the seed, so a save keeps only what's changed on each floor you've been to:
+
+- its monsters,
+- the things lying in it or for sale,
+- its doors and traps,
+- how much of it you've mapped (`Level.snapshot`).
+
+With you, your things and what you've learned, a run through all 25 floors saves as about 90 KB, in about 3 ms.
+
+A save whose format is out of date (`SAVE_VERSION`) can't be continued. A floor saved before a change to how floors are laid out starts afresh rather than with things in its walls: each saved floor keeps a fingerprint of its layout to check against.
 
 ## The dungeon
 
@@ -184,7 +206,7 @@ A doorway is either an open arch or a wooden door. Doors swing open when anyone 
 
 **Locked doors** are fully working but not placed yet. They can only go on a branch, never the loop. Each needs an iron key, which is always placed somewhere on that floor's loop so it can never be locked away. Keys don't take pack slots: they show as *Keys* on the stat line and are used up when you walk into (or use) the locked door. Monsters can't path through a locked door, and teleports never drop you inside a locked room.
 
-**Traps** lie hidden in rooms and corridors (never near the entrance, in the shop or behind a locked door). You notice one now and then when you pass within a couple of tiles of it; the Eye of the Deep and a scroll of magic mapping reveal them all. Step on one and it goes off, whether you'd found it or not, and it's spent afterwards. **Sneak** onto one you've found and you creep over it without setting it off (it stays armed): stop sneaking before you're off its tile (let go of the key, or run out of stamina) and your weight comes down on it. Sneaking is no help with a trap you haven't found. Each kind has its own model (`world/trapModels.js`), told apart at a glance by shape and colour, with three states: **armed** (found, waiting), **active** (going off) and **used** (spent):
+**Traps** lie hidden in rooms and corridors (never near the entrance, in the shop or behind a locked door). You notice one now and then when you pass within a couple of tiles of it; the Eye of the Deep and a scroll of magic mapping reveal them all. Step on one and it goes off, whether you'd found it or not, and it's spent afterwards. **Sneak** onto one you've found and you creep over it without setting it off (it stays armed): stop sneaking before you're off its tile (tap C, sprint, or run out of stamina) and your weight comes down on it. Sneaking is no help with a trap you haven't found. Each kind has its own model (`world/trapModels.js`), told apart at a glance by shape and colour, with three states: **armed** (found, waiting), **active** (going off) and **used** (spent):
 
 | Trap | Looks like | Goes off | Spent |
 | --- | --- | --- | --- |
@@ -255,6 +277,7 @@ src/
   damage.js            damage types (physical, magic and the elements) and the resistances to them
   hotbar.js            hotbar bindings and what each slot does when pressed
   input.js / audio.js  pointer-lock input; WebAudio synth sfx + ambient drone
+  save.js              the saved run in local storage, and the helpers floors are saved with
   dungeon/generator.js pure data: plans the loop and branches, lays out rooms, routes corridors, populates (seeded)
   dungeon/rooms.js     room types (entrance, exit, standard, vault, shrine, shop): sizes, door style, furnishing
   dungeon/tiles.js     tile types
@@ -295,7 +318,6 @@ Balance numbers live in `monsters/defs.js`, `items/defs.js` and `config.js`. `wi
 
 ## Possible next steps
 
-- Save on exit (serialise the level map and player to localStorage) for proper roguelike permadeath-with-resume
 - Specialist side rooms behind locked doors (treasuries, libraries, armouries), secret doors
 - More furniture for other room types
 - More level shapes: caves via cellular automata, flooded rooms, chasms that drop you a floor

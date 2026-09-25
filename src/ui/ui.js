@@ -3,11 +3,12 @@ import { KIND_GLYPH, ARTEFACTS, WEAPONS, ARMORS } from '../items/defs.js';
 import { equipSlotFor } from '../items/use.js';
 import { T } from '../dungeon/tiles.js';
 import { TRAP_COLORS } from '../world/level.js';
-import { HUNGER_HUNGRY, HUNGER_WEAK, INVENTORY_SIZE, TILE, HOTBAR_SIZE, PLAYER_SPEED, MAX_DEPTH, THEMES, FLOORS_PER_THEME } from '../config.js';
+import { HUNGER_HUNGRY, HUNGER_WEAK, INVENTORY_SIZE, TILE, HOTBAR_SIZE, PLAYER_SPEED, MAX_DEPTH, THEMES, FLOORS_PER_THEME, themeForDepth } from '../config.js';
 import { canHotbar, slotItem, slotHolds, slotAction, assignSlot, clearSlot } from '../hotbar.js';
 import { stackable } from '../items/generate.js';
 import { DAMAGE_TYPES } from '../damage.js';
 import { Logo } from './logo.js';
+import { readSave } from '../save.js';
 
 const $ = (id) => document.getElementById(id);
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
@@ -80,11 +81,40 @@ export class UI {
     $('howto').addEventListener('click', (e) => { if (e.target === $('howto')) $('howto').hidden = true; });
 
     const start = () => {
+      // With a run saved, a new one takes a second click: it ends the saved one.
+      if (readSave() && !this.confirmNew) {
+        this.confirmNew = true;
+        $('start-btn').textContent = 'Abandon saved run?';
+        $('start-btn').classList.add('warn');
+        clearTimeout(this.confirmT);
+        this.confirmT = setTimeout(() => this.refreshContinue(), 4000);
+        return;
+      }
+      clearTimeout(this.confirmT);
       $('title').hidden = true;
       $('howto').hidden = true;
       this.fadeTransition();
       game.newRun({ seed: $('seed-in').value.trim().toUpperCase(), name: $('name-in').value.trim() });
     };
+    $('continue-btn').addEventListener('click', () => {
+      const save = readSave();
+      if (!save) {
+        this.refreshContinue();
+        return;
+      }
+      $('title').hidden = true;
+      $('howto').hidden = true;
+      this.fadeTransition();
+      try {
+        game.continueRun(save);
+      } catch (err) {
+        console.error('Loading the save failed:', err);
+        game.running = false;
+        game.showTitle();
+        $('continue-info').textContent = "That saved run couldn't be loaded.";
+      }
+    });
+    this.refreshContinue();
     $('start-btn').addEventListener('click', start);
     for (const id of ['seed-in', 'name-in']) {
       $(id).addEventListener('keydown', (e) => { if (e.key === 'Enter') start(); });
@@ -109,6 +139,10 @@ export class UI {
       });
     }
     $('pause-fs').addEventListener('click', (e) => e.stopPropagation());
+    $('quit-btn').addEventListener('click', (e) => {
+      e.stopPropagation(); // (not a click to resume)
+      game.saveAndQuit();
+    });
     // The pause overlay covers the canvas, so it has to take the resume click itself.
     $('pause').addEventListener('click', () => {
       if (game.state === 'play' && !game.menu) game.resume();
@@ -238,7 +272,24 @@ export class UI {
     this.closeMenus();
     $('end').hidden = true;
     $('hud').hidden = true;
+    $('pause').hidden = true;
     $('title').hidden = false;
+    this.refreshContinue();
+  }
+
+  /** Offers Continue on the title screen when there's a run saved, and says whose and how far down. */
+  refreshContinue() {
+    const save = readSave();
+    this.confirmNew = false;
+    $('continue').hidden = !save;
+    $('start-btn').textContent = save ? 'New run' : 'Descend';
+    $('start-btn').classList.toggle('alt', !!save);
+    $('start-btn').classList.remove('warn');
+    if (!save) return;
+    const mins = Math.round((Date.now() - save.savedAt) / 60000);
+    const ago = mins < 1 ? 'just now' : mins < 60 ? `${mins} min ago` : mins < 48 * 60 ? `${Math.round(mins / 60)} h ago` : `${Math.round(mins / 1440)} days ago`;
+    $('continue-info').textContent =
+      `${save.name}, level ${save.level} · depth ${save.depth}, ${themeForDepth(save.depth).name} · saved ${ago}`;
   }
 
   update(dt) {

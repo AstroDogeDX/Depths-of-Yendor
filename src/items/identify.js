@@ -54,6 +54,19 @@ export class Knowledge {
     return false;
   }
 
+  /** What a save keeps of what you know (the appearances come back from the seed). */
+  snapshot() {
+    const lists = (sets) => Object.fromEntries(Object.entries(sets).map(([k, set]) => [k, [...set]]));
+    return { known: lists(this.known), tried: lists(this.tried), resists: [...this.resists] };
+  }
+
+  /** Takes up what snapshot() kept. */
+  restore(s) {
+    for (const k in this.known) this.known[k] = new Set(s.known[k] ?? []);
+    for (const k in this.tried) this.tried[k] = new Set(s.tried[k] ?? []);
+    this.resists = new Set(s.resists ?? []);
+  }
+
   /** Notes that you've seen a kind of monster resist a damage type or be weak to it. True the first time. */
   learnResist(monster, dmgType) {
     const key = `${monster}:${dmgType}`;

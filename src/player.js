@@ -7,6 +7,13 @@ import { stackable } from './items/generate.js';
 import { playerStrike } from './combat.js';
 import { STATUS_TYPES, damageType, damageMult } from './damage.js';
 import { rand } from './rng.js';
+import { round2 } from './save.js';
+
+// What a save keeps of you as it is (see snapshot): the rest is either rebuilt or not worth keeping.
+const SAVED = [
+  'x', 'z', 'yaw', 'pitch', 'maxHp', 'hp', 'baseStr', 'level', 'xp', 'gold', 'hunger', 'hungerState', 'charge',
+  'maxStamina', 'stamina', 'winded', 'sneaking', 'artefactCD', 'teleT', 'kills', 'maxDepth', 'keys', 'hotbar', 'inventory',
+];
 
 const FISTS = { name: 'fists', dmgType: 'bash', dmg: [1, 3], recharge: 0.6, reach: 1.4, str: 0, model: null };
 
@@ -28,6 +35,7 @@ export class Player {
     this.winded = false; // ran dry: no sprinting or sneaking until it recovers
     this.staminaRestT = 0;
     this.mode = 'walk'; // walk | sprint | sneak
+    this.sneaking = false; // toggled with C (see update)
     this.crouch = 0; // 0..1, eases the camera down while sneaking
     this.noise = 0; // metres of walking distance at which monsters can hear you this frame
     this.swingT = -1; this.swingDur = 0.3; this.swingHit = false; this.swingPower = 1;
@@ -41,6 +49,33 @@ export class Player {
     this.hungerState = 0;
     this.lastTrapTile = -1;
     this.creeping = null; // a found trap you're sneaking over (see update)
+  }
+
+  // --- Saving (see Game.save) ---
+
+  /** What a save keeps of you. Your things go as they are; what's equipped (and your last wand) by uid. */
+  snapshot() {
+    const s = {};
+    for (const k of SAVED) s[k] = typeof this[k] === 'number' ? round2(this[k]) : this[k];
+    const uid = (item) => item?.uid ?? null;
+    const e = this.equip;
+    s.equip = { weapon: uid(e.weapon), armor: uid(e.armor), rings: e.rings.map(uid), artefacts: e.artefacts.map(uid) };
+    s.lastWand = uid(this.lastWand);
+    s.status = {};
+    for (const k in this.status) if (this.status[k] > 0) s.status[k] = round2(this.status[k]);
+    return s;
+  }
+
+  /** Takes up where snapshot() left you. */
+  restore(s) {
+    for (const k of SAVED) if (k in s) this[k] = s[k];
+    const byUid = (uid) => (uid == null ? null : this.inventory.find((it) => it.uid === uid) ?? null);
+    this.equip = {
+      weapon: byUid(s.equip.weapon), armor: byUid(s.equip.armor),
+      rings: s.equip.rings.map(byUid), artefacts: s.equip.artefacts.map(byUid),
+    };
+    this.lastWand = byUid(s.lastWand);
+    Object.assign(this.status, s.status);
   }
 
   // --- Derived stats ---
@@ -213,8 +248,11 @@ export class Player {
     let mx = fx * f + rx * s, mz = fz * f + rz * s;
     const ml = Math.hypot(mx, mz);
     this.moving = ml > 0;
-    // Sneak wins if both are held. Holding either while standing still costs nothing.
-    let mode = !para && input.sneak ? 'sneak' : !para && input.sprint ? 'sprint' : 'walk';
+    // C toggles sneaking. Sprinting stands you back up, and so does running out of breath (else you'd drop back
+    // into a crouch the moment it came back). Neither costs anything while standing still.
+    if (!para && input.wasPressed('KeyC')) this.sneaking = !this.sneaking;
+    if (input.sprint || this.winded) this.sneaking = false;
+    let mode = para ? 'walk' : this.sneaking ? 'sneak' : input.sprint ? 'sprint' : 'walk';
     if (this.winded) mode = 'walk';
     this.mode = mode;
     this.crouch += ((mode === 'sneak' ? 1 : 0) - this.crouch) * Math.min(1, dt * 8);
@@ -276,8 +314,8 @@ export class Player {
     this.updateGear(dt, game);
 
     // Traps trigger when you step onto their tile, unless you sneak onto one you've found: then you creep over it,
-    // and it goes off only if you stop sneaking (let go, or get winded) before you're off it. Sneaking doesn't
-    // disarm it, and it's no help with a trap you don't know is there.
+    // and it goes off only if you stop sneaking (tap C, sprint, or get winded) before you're off it. Sneaking
+    // doesn't disarm it, and it's no help with a trap you don't know is there.
     const tx = level.toTile(this.x), ty = level.toTile(this.z);
     const tileIdx = level.idx(tx, ty);
     if (tileIdx !== this.lastTrapTile) {

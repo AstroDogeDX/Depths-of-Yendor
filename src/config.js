@@ -16,7 +16,7 @@ export const PLAYER_SPEED = 3.1; // m/s — King's Field is deliberately unhurri
 export const TURN_SPEED = 2.2; // rad/s for keyboard turning
 export const MOUSE_SENS = 0.0022;
 
-// Stamina: spent while *moving* and sprinting (Shift) or sneaking (Ctrl / C). Never used by attacks.
+// Stamina: spent while *moving* and sprinting (Shift) or sneaking (C). Never used by attacks.
 export const STAMINA_BASE = 100;
 export const STAMINA_PER_LEVEL = 10;
 export const STAMINA_DRAIN = { sprint: 22, sneak: 9 }; // per second while moving

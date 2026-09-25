@@ -4,6 +4,7 @@ import { rand } from '../rng.js';
 import { PLAYER_RADIUS, EYE_H, TILE, danger } from '../config.js';
 import { spawnProjectile } from '../fx/projectiles.js';
 import { burst } from '../fx/particles.js';
+import { round2 } from '../save.js';
 import { DAMAGE_TYPES, STATUS_TYPES, damageType, damageMult, isPhysical } from '../damage.js';
 
 const BLOOD = {
@@ -63,6 +64,32 @@ export class Monster {
     this.idleT = 0;
     this.zzzT = rand.range(1, 3);
     this.summoned = false;
+  }
+
+  /** What a save keeps of it (see Level.snapshot). Only statuses in effect are kept. */
+  snapshot() {
+    const status = {};
+    for (const k in this.status) if (this.status[k] > 0) status[k] = round2(this.status[k]);
+    return {
+      type: this.type, x: round2(this.x), z: round2(this.z), yaw: round2(this.yaw), hp: round2(this.hp), maxHp: this.maxHp,
+      danger: this.danger, dmgMult: this.dmgMult, state: this.state, seen: this.seen || undefined, status,
+      boss: this.boss || undefined, guardian: this.guardian || undefined, summoned: this.summoned || undefined,
+    };
+  }
+
+  /** Takes up where snapshot() left it. */
+  restore(s) {
+    Object.assign(this.status, s.status);
+    this.yaw = s.yaw;
+    this.hp = s.hp;
+    this.maxHp = s.maxHp;
+    this.danger = s.danger;
+    this.dmgMult = s.dmgMult;
+    this.state = s.state;
+    this.seen = !!s.seen;
+    this.summoned = !!s.summoned;
+    this.mesh.rotation.y = this.yaw;
+    return this;
   }
 
   headPos() {

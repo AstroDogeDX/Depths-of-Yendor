@@ -316,10 +316,17 @@ button.link:hover { background: none; color: #f4dca0; }
   background: #16120c; color: var(--ink); border: 1px solid var(--gold-dim);
 }
 #start-btn { font-size: 20px; padding: 10px 32px; align-self: flex-end; }
+#start-btn.alt { font-size: 16px; padding: 8px 20px; }
+#start-btn.warn { background: linear-gradient(#8a3a28, #5a2418); color: #f4e0d0; }
+#continue { margin: 18px 0 0; }
+#continue-btn { font-size: 20px; padding: 10px 44px; }
+#continue-info { margin: 8px 0 0; font-size: 14px; color: var(--gold-dim); text-shadow: 0 1px 3px #000; }
 .check { display: inline-flex; gap: 8px; align-items: center; font-size: 14px; cursor: pointer; }
 .check span { opacity: 0.55; font-size: 13px; }
 .check input { accent-color: #b08c48; }
 #pause-fs { margin-top: 6px; font-size: 13px; opacity: 0.8; }
+.pause-actions { margin-top: 16px; }
+.pause-note { margin: 10px 0 0; font-size: 13px; opacity: 0.6; }
 .lore { font-size: 14px; opacity: 0.6; line-height: 1.6; margin-top: 22px; }
 
 #tomb { display: inline-block; text-align: left; font-family: var(--mono); font-size: 15px; line-height: 1.25; color: #c8c0b0; margin: 18px auto; }

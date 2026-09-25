@@ -3,6 +3,11 @@ import { danger } from '../config.js';
 
 let nextUid = 1;
 
+/** The uid the next item will get, for a save to keep (see reserveUids). */
+export const nextItemUid = () => nextUid;
+/** Makes sure new items get uids from `uid` on, so none collides with one from a save. */
+export function reserveUids(uid) { nextUid = Math.max(nextUid, uid); }
+
 export function makeItem(kind, type, extra = {}) {
   return {
     uid: nextUid++,
