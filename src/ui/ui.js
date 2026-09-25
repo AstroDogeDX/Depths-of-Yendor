@@ -16,6 +16,8 @@ const KIND_COLOR = {
   food: '#c09060', artefact: '#ffb040', amulet: '#ffd040', gold: '#ffd040',
 };
 const POPUP_LIFE = { alert: 1.1, zzz: 1.6 };
+// Channels on the map by what fills them, [in sight, remembered]; any other fill is a dark pit.
+const CHANNEL_COLORS = { water: ['#2f5f66', '#1f3c40'], lava: ['#a8400e', '#5a2208'] };
 const HOT_HINT = `Press 1–${HOTBAR_SIZE} or click a slot to put the selected item there · right-click a slot to clear it`;
 // Paper-doll slots, positioned over the 240x300 figure in index.html.
 const DOLL_SLOTS = [
@@ -338,7 +340,7 @@ export class UI {
         else if (t === T.STAIRS_DOWN) c = '#5aa0ff';
         else if (t === T.STAIRS_UP) c = '#ffd27a';
         else if (t === T.PEDESTAL) c = '#d0a040';
-        else if (t === T.CHANNEL) c = lvl.theme.channels.fill === 'water' ? (lvl.visible[i] ? '#2f5f66' : '#1f3c40') : (lvl.visible[i] ? '#1c1916' : '#121010');
+        else if (t === T.CHANNEL) c = CHANNEL_COLORS[lvl.theme.channels.fill]?.[lvl.visible[i] ? 0 : 1] ?? (lvl.visible[i] ? '#1c1916' : '#121010');
         else if (t === T.BRIDGE) c = lvl.visible[i] ? '#7a5a36' : '#4e3a24';
         else if (t === T.DOOR) {
           const d = lvl.doorAt(tx, ty);

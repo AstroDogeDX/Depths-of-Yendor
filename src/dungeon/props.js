@@ -6,7 +6,7 @@ import { MODEL_PX, TILE } from '../config.js';
 // decorations (decor.js). A prop's origin sits on the floor at its middle with its front facing +z. Empty
 // groups named slot_1, slot_2... mark where items rest on it, such as a shop's wares; candle_1, candle_2...
 // where candle flames burn; glow_1... where a soft glow shines (see GLOWS in levelBuilder.js); drip_1... where
-// water drips from.
+// water drips from; fire_1... where a full-size fire burns, as on a brazier.
 //
 // Props load on demand, each its own small download, so the game starts without every theme's furniture:
 // loadProps() fetches what a floor needs before it's built (see propsForTheme in levelBuilder.js).
@@ -45,7 +45,7 @@ function template(type) {
       .sort((a, b) => a.slice(prefix.length + 1) - b.slice(prefix.length + 1)).map((n) => anchors[n]);
     templates.set(type, {
       model, bounds: new THREE.Box3().setFromObject(model),
-      slots: numbered('slot'), candles: numbered('candle'), glows: numbered('glow'), drips: numbered('drip'),
+      slots: numbered('slot'), candles: numbered('candle'), glows: numbered('glow'), drips: numbered('drip'), fires: numbered('fire'),
     });
   }
   return templates.get(type);
@@ -56,8 +56,8 @@ export const propTemplate = (type) => template(type).model;
 
 /**
  * Sets out a prop { type, x, y (grid tiles), yaw, solid, round }. Returns its mesh, the world positions of its
- * slots, candles, glows and drips, and an obstacle over its footprint (a box, or a circle for round things) if
- * it's solid.
+ * slots, candles, glows, drips and fires, and an obstacle over its footprint (a box, or a circle for round things)
+ * if it's solid.
  */
 export function placeProp(p) {
   const t = template(p.type);
@@ -74,5 +74,5 @@ export function placeProp(p) {
     obstacle = p.round ? { x: cx, z: cz, r: Math.max(hw, hd) }
       : { x: cx, z: cz, hw: Math.abs(c) * hw + Math.abs(s) * hd, hd: Math.abs(s) * hw + Math.abs(c) * hd };
   }
-  return { mesh, slots: t.slots.map(place), candles: t.candles.map(place), glows: t.glows.map(place), drips: t.drips.map(place), obstacle };
+  return { mesh, slots: t.slots.map(place), candles: t.candles.map(place), glows: t.glows.map(place), drips: t.drips.map(place), fires: t.fires.map(place), obstacle };
 }

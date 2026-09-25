@@ -146,7 +146,7 @@ function pitFloor() {
 }
 
 /** A cobweb: strands from the corner (bottom middle) fanning up to the top edge, with sagging threads across. */
-function cobweb() {
+export function cobweb() {
   const S = 64, c = document.createElement('canvas');
   c.width = c.height = S;
   const ctx = c.getContext('2d'), rng = new RNG('catacombs:cobweb');

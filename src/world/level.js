@@ -34,8 +34,10 @@ export class Level {
     this.lights = built.lights;
     this.obstacles = built.obstacles;
     this.water = built.water;
-    // Channel tiles, for the sound they make as you near them: running water, or wind rising out of a chasm.
-    this.channelSound = { water: 'water', chasm: 'wind' }[this.theme.channels?.fill];
+    this.haze = built.haze; // the haze rising out of the channels
+    // Channel tiles, for the sound they make as you near them: running water, wind rising out of a chasm, the
+    // uneasy hum of a rift, or lava's rumble and bubbling.
+    this.channelSound = { water: 'water', chasm: 'wind', rift: 'rift', lava: 'lava' }[this.theme.channels?.fill];
     this.waterTiles = this.channelSound ? data.channels.flatMap((c) => c.tiles.map((t) => ({ x: this.center(t.x), z: this.center(t.y) }))) : [];
     this.waterT = 0;
     this.drips = built.drips.length ? new Drips(this.group, built.drips) : null;
@@ -447,6 +449,7 @@ export class Level {
       if (f.light) f.light.intensity = f.light.userData.base * k;
     }
     flowWater(this.water, t);
+    this.haze?.update(t);
     this.drips?.update(dt, p, game.audio);
     if (this.waterTiles.length && (this.waterT -= dt) <= 0) {
       this.waterT = 0.25;

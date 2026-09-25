@@ -44,7 +44,8 @@ export const FLOORS_PER_THEME = 5;
 // (dungeon/decor.js); themes without one use plain stone and brick in their colours, as placeholders until
 // they get their own. `channels` runs trenches across some rooms (dungeon/channels.js): `fill` is what's in
 // them and `count` how many ([min, max]) a floor gets. `rough` makes its surfaces rough-hewn rock
-// (dungeon/roughRock.js), and `lights` names its wall lights (see FITTINGS in dungeon/levelBuilder.js).
+// (dungeon/roughRock.js), or with 'tunnels' just its passages, its rooms being masonry below rough vaults;
+// `lights` names its wall lights (see FITTINGS in dungeon/levelBuilder.js), and `fire: 'violet'` burns them violet.
 export const THEMES = [
   {
     // Dank and wet.
@@ -68,18 +69,21 @@ export const THEMES = [
     fog: 0x0a0806, fogNear: 2, fogFar: 20, ambient: 0x52463a, drone: 47,
   },
   {
-    // An ancient civilisation's halls, fallen apart.
-    name: 'Dwarven Ruins',
-    wall: ['#6a6254', '#5a5347', '#4a443a'], mortar: '#221e18', moss: '#4f6e5a',
-    floor: ['#4a4438', '#3d382f'], ceiling: '#24201a',
-    fog: 0x0a0907, fogNear: 2, fogFar: 21, ambient: 0x544a3c, drone: 44,
+    // The red stone and gold of a great dwarven kingdom, fallen into ruin as the evil below broke through.
+    name: 'Dwarven Ruins', style: 'dwarven', channels: { fill: 'rift', count: [1, 2] }, lights: ['wall_brazier', 'hanging_lamp'],
+    wall: ['#6c382b', '#5c2f24', '#4b261d'], mortar: '#1a0d0a', moss: '#4f6e5a',
+    floor: ['#52251d', '#6a5846'], ceiling: '#2a1812',
+    fog: 0x0b0706, fogNear: 2, fogFar: 21, ambient: 0x5a4034, drone: 44,
   },
   {
-    // Hellish, demonic and hot. The last floor is the Amulet's vault, guarded by the Warden of Yendor.
-    name: 'Underworld',
-    wall: ['#6a3e30', '#5a3327', '#47281f'], mortar: '#1f110c', moss: '#7a3a12',
-    floor: ['#3f2a22', '#33221b'], ceiling: '#1e130f',
-    fog: 0x0e0503, fogNear: 2, fogFar: 19, ambient: 0x5e3c30, drone: 41,
+    // A temple to the evil below, dug into caverns in the dark depths: rooms of black brick carved with runes,
+    // rough tunnels between them, violet fire, and lava. The last floor is the Amulet's vault, guarded by the
+    // Warden of Yendor.
+    name: 'Underworld', style: 'underworld', rough: 'tunnels', fire: 'violet',
+    channels: { fill: 'lava', count: [1, 2] }, lights: ['skull_sconce', 'wall_torch'],
+    wall: ['#3a2c46', '#2e2338', '#231a2c'], mortar: '#0c080e', moss: '#7a3a12',
+    floor: ['#2e2634', '#262030'], ceiling: '#1a131f',
+    fog: 0x07050a, fogNear: 2, fogFar: 19, ambient: 0x62507a, drone: 41,
   },
 ];
 

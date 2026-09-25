@@ -168,6 +168,8 @@ export class Sfx {
   stopDrone() {
     this.water(0);
     this.wind(0);
+    this.rift(0);
+    this.lava(0);
     if (!this.drone || !this.ctx) return;
     const { out, oscs } = this.drone;
     const t = this.ctx.currentTime;
@@ -241,5 +243,95 @@ export class Sfx {
       src.start();
     }
     this.windOut.gain.setTargetAtTime(level * 0.5, this.ctx.currentTime, 0.6);
+  }
+
+  /** The voice of a rift, as loud as `level` (0..1): a low, uneasy hum from far below, whispers over it. */
+  rift(level) {
+    if (!this.ctx) return;
+    if (!this.riftOut) {
+      if (level <= 0) return;
+      const c = this.ctx;
+      this.riftOut = c.createGain();
+      this.riftOut.gain.value = 0;
+      this.riftOut.connect(this.master);
+      // Three low tones, two a hair apart so they beat slowly, through a dark filter.
+      const low = c.createBiquadFilter();
+      low.type = 'lowpass';
+      low.frequency.value = 220;
+      const hum = c.createGain();
+      hum.gain.value = 0.045;
+      for (const f of [46, 46.7, 69.2]) {
+        const o = c.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.value = f;
+        o.connect(low);
+        o.start();
+      }
+      low.connect(hum).connect(this.riftOut);
+      // Whispers: noise in a narrow band that wanders up and down, swelling and falling away.
+      const src = c.createBufferSource();
+      src.buffer = this.noiseBuf;
+      src.loop = true;
+      const band = c.createBiquadFilter();
+      band.type = 'bandpass';
+      band.frequency.value = 1100;
+      band.Q.value = 9;
+      const wander = c.createOscillator(), wanderAmount = c.createGain();
+      wander.frequency.value = 0.13;
+      wanderAmount.gain.value = 500;
+      wander.connect(wanderAmount).connect(band.frequency);
+      wander.start();
+      const breath = c.createGain(), swell = c.createOscillator(), swellAmount = c.createGain();
+      breath.gain.value = 0.8;
+      swell.frequency.value = 0.37;
+      swellAmount.gain.value = 0.5;
+      swell.connect(swellAmount).connect(breath.gain);
+      swell.start();
+      src.connect(band).connect(breath).connect(this.riftOut);
+      src.start();
+    }
+    this.riftOut.gain.setTargetAtTime(level * 0.35, this.ctx.currentTime, 0.6);
+  }
+
+  /** Lava, as loud as `level` (0..1): a deep rumble, and thick bubbling over it. */
+  lava(level) {
+    if (!this.ctx) return;
+    if (!this.lavaOut) {
+      if (level <= 0) return;
+      const c = this.ctx;
+      this.lavaOut = c.createGain();
+      this.lavaOut.gain.value = 0;
+      this.lavaOut.connect(this.master);
+      const noise = () => {
+        const src = c.createBufferSource();
+        src.buffer = this.noiseBuf;
+        src.loop = true;
+        src.start();
+        return src;
+      };
+      // The rumble: noise through a low filter.
+      const low = c.createBiquadFilter();
+      low.type = 'lowpass';
+      low.frequency.value = 140;
+      const rumble = c.createGain();
+      rumble.gain.value = 1.1;
+      noise().connect(low).connect(rumble).connect(this.lavaOut);
+      // Bubbling: a band of noise wobbled quickly and slowly, so it gloops rather than hisses.
+      const band = c.createBiquadFilter();
+      band.type = 'bandpass';
+      band.frequency.value = 300;
+      band.Q.value = 4;
+      for (const [rate, depth] of [[4.3, 120], [0.7, 90]]) {
+        const lfo = c.createOscillator(), amount = c.createGain();
+        lfo.frequency.value = rate;
+        amount.gain.value = depth;
+        lfo.connect(amount).connect(band.frequency);
+        lfo.start();
+      }
+      const bubbles = c.createGain();
+      bubbles.gain.value = 0.9;
+      noise().connect(band).connect(bubbles).connect(this.lavaOut);
+    }
+    this.lavaOut.gain.setTargetAtTime(level * 0.3, this.ctx.currentTime, 0.5);
   }
 }

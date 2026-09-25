@@ -26,7 +26,7 @@ uniform float uSeed;
 uniform float uFlick; // height of the flame, ~0.7-1.0 of the quad's lower part
 uniform float uLean;  // sideways lean of the tip, in quad widths
 uniform vec2 uGrid;   // flame pixels across and up
-uniform float uBlue;  // 1 swaps red and blue: the same flame, burning blue
+uniform float uTint;  // 1 swaps red and blue: the same flame burning blue; 2 turns it violet
 varying vec2 vUv;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -78,7 +78,7 @@ void main() {
     }
   }
   if (col.a == 0.0) discard;
-  gl_FragColor = vec4(mix(col.rgb, col.bgr, uBlue), col.a);
+  gl_FragColor = vec4(uTint > 1.5 ? col.gbr : uTint > 0.5 ? col.bgr : col.rgb, col.a);
 }`;
 
 export class Flame extends THREE.Mesh {
@@ -86,8 +86,9 @@ export class Flame extends THREE.Mesh {
    * @param width, height  size of the quad in world units; the flame fills the lower ~3/4, sparks the rest
    * @param pixel          size of one flame pixel in world units
    * @param blue           burn blue instead of orange
+   * @param violet         burn violet
    */
-  constructor({ width, height, pixel, seed = Math.random(), blue = false }) {
+  constructor({ width, height, pixel, seed = Math.random(), blue = false, violet = false }) {
     super(GEO, new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
@@ -95,7 +96,7 @@ export class Flame extends THREE.Mesh {
         uFlick: { value: 1 },
         uLean: { value: 0 },
         uGrid: { value: new THREE.Vector2(Math.round(width / pixel), Math.round(height / pixel)) },
-        uBlue: { value: blue ? 1 : 0 },
+        uTint: { value: blue ? 1 : violet ? 2 : 0 },
       },
       vertexShader, fragmentShader, transparent: true, depthWrite: false,
     }));

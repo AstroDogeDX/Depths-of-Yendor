@@ -5,7 +5,8 @@ import { TILE, WALL_H } from '../config.js';
 // ceiling and channel sides still meet wherever they share an edge. Floors barely move (they're walked on),
 // ceilings bulge and sag, walls lean in and out, and around doorways, stairs and things fixed flat to the wall
 // the rock is calm, so frames and fittings sit true. Collision stays on the tile grid: the walls never lean in
-// far enough to reach you.
+// far enough to reach you. With `builtRooms` (a temple dug into the rock), the rooms are masonry, flat but for
+// the rough vaults above them, and only the passages between them are rough all over.
 
 const PIECE = 0.7; // metres: the size surfaces are split into
 const REACH = 0.2; // metres: how far walls lean in or out
@@ -43,12 +44,13 @@ const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 
 /**
  * The rock of a level. `calm` lists extra spots to keep flat ({ x, z } in metres, radius `r`) besides its
- * doorways and stairs, which are always calm. Returns { split, move, offset }:
+ * doorways and stairs, which are always calm; `builtRooms` keeps the rooms flat below their vaults (see above).
+ * Returns { split, move, offset }:
  *   split(corners)  how many pieces a quad is cut into along each side
  *   move(p)         where the vertex at [x, y, z] ends up
  *   offset(p, n)    how far the rock at point p has moved along direction n (to set fittings flush with it)
  */
-export function roughRock(data, calm = []) {
+export function roughRock(data, calm = [], { builtRooms = false } = {}) {
   const spots = [...calm];
   for (const d of data.doors) spots.push({ x: (d.x + 0.5) * TILE, z: (d.y + 0.5) * TILE, r: 2.2 });
   for (const s of [data.up, data.down].filter(Boolean)) spots.push({ x: (s.x + 0.5) * TILE, z: (s.y + 0.5) * TILE, r: 2.6 });
@@ -71,12 +73,26 @@ export function roughRock(data, calm = []) {
     }
     return k;
   };
+  // How much a point is in a room (1 inside, falling to 0 a metre outside), and how far up into its vault (0 up
+  // to the last 0.7 m below the vault, then rising to 1).
+  const rooms = builtRooms ? data.rooms.map((r) => ({ x0: r.x * TILE, z0: r.y * TILE, x1: (r.x + r.w) * TILE, z1: (r.y + r.h) * TILE })) : [];
+  const roomness = (x, z) => {
+    let k = 0;
+    for (const r of rooms) {
+      const d = Math.hypot(Math.max(r.x0 - x, 0, x - r.x1), Math.max(r.z0 - z, 0, z - r.z1));
+      if (d < 1) k = Math.max(k, 1 - smooth(d));
+    }
+    return k;
+  };
+  const vault = (y) => smooth((y - (WALL_H - 0.7)) / 0.7);
   const seed = data.depth * 31;
   const lift = (y) => (Math.abs(y) < 1e-3 ? LIFT.floor : Math.abs(y - WALL_H) < 1e-3 ? LIFT.ceiling : LIFT.wall);
+  // How far the rock at [x, y, z] may move (0..1).
+  const freedom = ([x, y, z]) => calmness(x, z) * (rooms.length ? 1 - roomness(x, z) * (1 - vault(y)) : 1);
   // How far the rock at [x, y, z] moves: -1..1 on each axis (a broad swell 0.9 m across with finer knobbles, 0.35
   // m, on top), scaled by how far it may.
   const shift = ([x, y, z]) => {
-    const k = calmness(x, z);
+    const k = freedom([x, y, z]);
     if (!k) return [0, 0, 0];
     const d = [0, 0, 0];
     noise3(x / 0.9, y / 0.9, z / 0.9, seed, 1.6, d);
@@ -87,6 +103,9 @@ export function roughRock(data, calm = []) {
   const moved = new Map();
   return {
     split(p) {
+      // A surface that won't move at all (a temple's floor, a doorway) needn't be split.
+      const mid = [0, 1, 2].map((k) => (p[0][k] + p[2][k]) / 2);
+      if ([...p, mid].every((q) => freedom(q) === 0)) return [1, 1];
       const len = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
       return [Math.max(1, Math.round(len(p[0], p[1]) / PIECE)), Math.max(1, Math.round(len(p[0], p[3]) / PIECE))];
     },

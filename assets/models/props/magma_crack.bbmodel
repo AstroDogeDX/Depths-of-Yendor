@@ -1,0 +1,305 @@
+{
+	"meta": {
+		"format_version": "5.0",
+		"model_format": "free",
+		"box_uv": false
+	},
+	"name": "magma_crack",
+	"model_identifier": "",
+	"visible_box": [1, 1, 0],
+	"resolution": {
+		"width": 128,
+		"height": 256
+	},
+	"elements": [
+		{
+			"name": "scorch",
+			"box_uv": false,
+			"render_order": "default",
+			"locked": false,
+			"allow_mirror_modeling": true,
+			"from": [-58, 0.15, -58],
+			"to": [58, 0.3, 58],
+			"autouv": 0,
+			"color": 0,
+			"origin": [0, 0.225, 0],
+			"rotation": [0, 0, 0],
+			"faces": {
+				"east": {
+					"uv": [0, 0, 0, 0],
+					"texture": null
+				},
+				"west": {
+					"uv": [0, 0, 0, 0],
+					"texture": null
+				},
+				"up": {
+					"uv": [1, 1, 117, 117],
+					"texture": 0
+				},
+				"down": {
+					"uv": [0, 0, 0, 0],
+					"texture": null
+				},
+				"south": {
+					"uv": [0, 0, 0, 0],
+					"texture": null
+				},
+				"north": {
+					"uv": [0, 0, 0, 0],
+					"texture": null
+				}
+			},
+			"type": "cube",
+			"uuid": "5a66d200-4ec1-4d65-ac42-96be08923b2d"
+		},
+		{
+			"name": "cracks",
+			"box_uv": false,
+			"render_order": "default",
+			"locked": false,
+			"allow_mirror_modeling": true,
+			"from": [-58, 0.35, -58],
+			"to": [58, 0.5, 58],
+			"autouv": 0,
+			"color": 0,
+			"origin": [0, 0.425, 0],
+			"rotation": [0, 0, 0],
+			"faces": {
+				"east": {
+					"uv": [0, 0, 0, 0],
+					"texture": null
+				},
+				"west": {
+					"uv": [0, 0, 0, 0],
+					"texture": null
+				},
+				"up": {
+					"uv": [1, 1, 117, 117],
+					"texture": 1
+				},
+				"down": {
+					"uv": [0, 0, 0, 0],
+					"texture": null
+				},
+				"south": {
+					"uv": [0, 0, 0, 0],
+					"texture": null
+				},
+				"north": {
+					"uv": [0, 0, 0, 0],
+					"texture": null
+				}
+			},
+			"type": "cube",
+			"uuid": "fdf4955c-d99c-4e5d-a410-1e24853ef344"
+		},
+		{
+			"name": "chunk_1",
+			"box_uv": false,
+			"render_order": "default",
+			"locked": false,
+			"allow_mirror_modeling": true,
+			"from": [9, 0, 1],
+			"to": [19, 5, 11],
+			"autouv": 0,
+			"color": 0,
+			"origin": [14, 0, 6],
+			"rotation": [4.063840992748737, 27.407371269073337, 3.6573479464277625],
+			"faces": {
+				"east": {
+					"uv": [63, 119, 73, 124],
+					"texture": 0
+				},
+				"west": {
+					"uv": [75, 119, 85, 124],
+					"texture": 0
+				},
+				"up": {
+					"uv": [1, 119, 11, 129],
+					"texture": 0
+				},
+				"down": {
+					"uv": [13, 119, 23, 129],
+					"texture": 0
+				},
+				"south": {
+					"uv": [87, 119, 97, 124],
+					"texture": 0
+				},
+				"north": {
+					"uv": [99, 119, 109, 124],
+					"texture": 0
+				}
+			},
+			"type": "cube",
+			"uuid": "e4e8d717-fdec-46ae-a0bc-654909ef6758"
+		},
+		{
+			"name": "chunk_2",
+			"box_uv": false,
+			"render_order": "default",
+			"locked": false,
+			"allow_mirror_modeling": true,
+			"from": [-24, 0, -16],
+			"to": [-16, 4, -8],
+			"autouv": 0,
+			"color": 0,
+			"origin": [-20, 0, -12],
+			"rotation": [12.003428149037063, 26.124853037763387, 11.165804620832205],
+			"faces": {
+				"east": {
+					"uv": [111, 119, 119, 123],
+					"texture": 0
+				},
+				"west": {
+					"uv": [1, 131, 9, 135],
+					"texture": 0
+				},
+				"up": {
+					"uv": [25, 119, 33, 127],
+					"texture": 0
+				},
+				"down": {
+					"uv": [35, 119, 43, 127],
+					"texture": 0
+				},
+				"south": {
+					"uv": [11, 131, 19, 135],
+					"texture": 0
+				},
+				"north": {
+					"uv": [21, 131, 29, 135],
+					"texture": 0
+				}
+			},
+			"type": "cube",
+			"uuid": "19dc3a84-482e-424f-acd1-27c3d9820271"
+		},
+		{
+			"name": "chunk_3",
+			"box_uv": false,
+			"render_order": "default",
+			"locked": false,
+			"allow_mirror_modeling": true,
+			"from": [0.5, 0, -27.5],
+			"to": [7.5, 3.5, -20.5],
+			"autouv": 0,
+			"color": 0,
+			"origin": [4, 0, -24],
+			"rotation": [13.175185336731374, 59.53335846075788, 8.04702220018953],
+			"faces": {
+				"east": {
+					"uv": [31, 131, 38, 134.5],
+					"texture": 0
+				},
+				"west": {
+					"uv": [40, 131, 47, 134.5],
+					"texture": 0
+				},
+				"up": {
+					"uv": [45, 119, 52, 126],
+					"texture": 0
+				},
+				"down": {
+					"uv": [54, 119, 61, 126],
+					"texture": 0
+				},
+				"south": {
+					"uv": [49, 131, 56, 134.5],
+					"texture": 0
+				},
+				"north": {
+					"uv": [58, 131, 65, 134.5],
+					"texture": 0
+				}
+			},
+			"type": "cube",
+			"uuid": "091351f7-144e-421f-ad3c-b8f39e097a55"
+		}
+	],
+	"groups": [
+		{
+			"name": "glow_1",
+			"origin": [0, 5, 0],
+			"color": 0,
+			"uuid": "b9a1f15c-57a1-4ca3-ad58-30b8bbe0d97b",
+			"export": true,
+			"mirror_uv": false,
+			"isOpen": true,
+			"locked": false,
+			"visibility": true,
+			"autouv": 0
+		}
+	],
+	"outliner": [
+		"5a66d200-4ec1-4d65-ac42-96be08923b2d",
+		"fdf4955c-d99c-4e5d-a410-1e24853ef344",
+		"e4e8d717-fdec-46ae-a0bc-654909ef6758",
+		"19dc3a84-482e-424f-acd1-27c3d9820271",
+		"091351f7-144e-421f-ad3c-b8f39e097a55",
+		{
+			"uuid": "b9a1f15c-57a1-4ca3-ad58-30b8bbe0d97b",
+			"isOpen": true,
+			"children": []
+		}
+	],
+	"textures": [
+		{
+			"path": "",
+			"name": "magma_crack.png",
+			"folder": "",
+			"namespace": "",
+			"id": "0",
+			"group": "",
+			"width": 128,
+			"height": 256,
+			"uv_width": 128,
+			"uv_height": 256,
+			"particle": false,
+			"use_as_default": false,
+			"layers_enabled": false,
+			"sync_to_project": "",
+			"render_mode": "default",
+			"render_sides": "auto",
+			"pbr_channel": "color",
+			"frame_time": 1,
+			"frame_order_type": "loop",
+			"frame_order": "",
+			"frame_interpolate": false,
+			"visible": true,
+			"internal": true,
+			"saved": true,
+			"uuid": "f8c6aec8-4ca8-403c-a03d-372d17d29d85",
+			"source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAAEACAYAAAB7+X6nAAAFL0lEQVR42u3d24rdNhgG0HmEtpS0tBBIIRe5SN7/7VJyscFsLEuyddZaYCaZPbMP/j9LsmyPPz4AAAAAAABgJN++fv8ZWqydjYsvEIr/eLGWNy28UCi+ICi+ICi+ECi+ACi+ECi+ECxZ/M//fhGCXsVdacsXhMGb8tCWnvr9py2F4g+0xIr5erxG97BVGHoUM/T/49fXEvq54+O1QrB8EGbY8lObeSEYMAC5RTnbsq/+X2sssEUIRtnSz4p71ryHmvvY40IwUACuipq7pIwJanQXAlBxVy+n2K32BpYNQc8BXUofHwrB3aVkWBS/Ut+fOha4U/zSA0QBKLTl115yBpDbhGDWgd+TosdCIACVt/zWy9Xrbt8CtA5B76LXnCwSgE7N/NPuQAAa9vWjheEqALnB0A0M0ueXHCiaE6g0ozdCcWscO9i2FZhpi8+dbNIK3AjDjM19qb2DrUIw8kAvZeDX4syi5VuBFYpfepdw2hCs1Nz3GANMHYKVJn2ejA22O53s6Wh/9pYgJQzLhWDV6d6SIVguAK1O4NQSDBaCFsf5bfmDBmCHo3wtzxiaKgQjnMO3QvGnbAlaXrRhDDBYAHpewaMFWCQAV6dz9Sz+n3986jIgnGZeoNVZvSs39y1bgOED0LvZf23xoa92CTu1ADtM/7YKwRSDwB32BpYZCJr523gM0GJXsOfSei9g6mMC9gbKXkE05TEBY4Cyp49NeVCoRQtgZnCC8wIUf6wQTHsm0MphWKbvLx2CnEu9Vz40vMSVxCtc/z/7mULLXA28y3kCzgpefGaw9lXDSwdg1V3AZZt/B4zyjgZqATYdCyx9eZijhV+a9fnDXh+4a7Of83cCXBy6yXSxO44UCsNqA8Flp4BrThePdAVRy/37aa4MrtkSjNwCtOjjlwlA7+niUiG6cxuZZfv/O29ixauIe5z6Pe2fj2t1eVluWHLHHL36/G3/guidlqBWi7F13z/L5WZ3tuTU+w32aO63//OxOXcMeTpATCl+j1vLfayk5e1j756e1eM2su4tXPHu4TmHantO+nzsYMS7i6c2724gvXEItr8JxI4hsIULgcILgeILQsYYQCU3bhFUb+MQqNrGQVCpzYOgQhsHQVU2DoJKbBwCFdg4CNb65oGwljcOjbW1aRisGQAAAAAAZvfj8z8///v7U3R5/7mz37v63q+vx8dzXve4nH3/7P9Xz5PyOqHPe/a6758n9lqp6zPn8dASDUDui//1+2+33siTDx16/ZznixUk9HyxUJf83LnfPy6huiQF4EnC7ixPQpS7snu//5qfNeW1HrcAoQ+Q+sFaroCU9/x67PjvGq9d63Pnhi8agB4FerLi3h8vsTU+fY5Yq5PynmvVIbkLSHkjLbuJUoW4CtZ7i3D83lkL8f7YWYty/J3Qzz95/uoBCK3sXyv37lZaq4t4+rspvx8KxnuhQ13M0xCE3nOx3cAnA63X15wV+WTP4vh6Z1tarL8//owJgEAAcpr5uwPBs5Yk1vyFtpJY8x56TpW/0QKcNXuxvjbW7F31vWdNq4pVCEBsQBPbAq+2TGt4cKnFjg1SQs9jDS/QBZQc9T/dl6+1O7l9FxDbXSpVpFozcDlhujVlahBYdj+81qRStaNmOwTgapTfasuvNZceez4BaDBXXWIuvtYBp633Aloe1bva22gZpvefszsAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADj+R+mTgO9YWyJJgAAAABJRU5ErkJggg=="
+		},
+		{
+			"path": "",
+			"name": "magma_crack_glow.png",
+			"folder": "",
+			"namespace": "",
+			"id": "1",
+			"group": "",
+			"width": 128,
+			"height": 256,
+			"uv_width": 128,
+			"uv_height": 256,
+			"particle": false,
+			"use_as_default": false,
+			"layers_enabled": false,
+			"sync_to_project": "",
+			"render_mode": "emissive",
+			"render_sides": "auto",
+			"pbr_channel": "color",
+			"frame_time": 1,
+			"frame_order_type": "loop",
+			"frame_order": "",
+			"frame_interpolate": false,
+			"visible": true,
+			"internal": true,
+			"saved": true,
+			"uuid": "5c5854db-330d-4cb1-a760-41338b260f4e",
+			"source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAAEACAYAAAB7+X6nAAACoklEQVR42u3dy23jMBiFUS9TQ6pIXVm5nlTljpxNYvihJyVaou45gDGLyQQD6+NPSjFmTicAAAAA2Kvvz4+rdyH44l9/vq4iEIAA0gP4f3lXggMwDQQggvQtQATBh0ARuAsQgdvAx98TQfBzgOcIhHDwQ6AIBHCaEoF3LjAAEQQHYCs4eABTV7UpIABbwVEv/tSLaSsIXf22AgG8bgWXswhavfi3AC7nogv4/OdFELL6nQcE0Pl9bAUtjv8VAnAgbHj1C0AEAhCAAOIDKL1wAgg/BwhAAAIQgAAOEUDp42ABHCCA0ou3Vkg0ug14FBw8BdaaImwYwJIVbPwHTwGrP3wKWP3Bt4RLtw4a3wYevt5nArOmgNUfPgUc/sKnwFYBiGzDKXAfwsvXTPxI+f33qfVyBSsE0BXC0AQYukB933utlxAqPBPoepO7JsDon/27W7j9KoJ2IxiNYiyCgemy5CWELUOYuMJr7uFC2ME0mHKx3/33dlCsEcLASt/Dm933T9+KoNI02Osq8+TyzbeKew/YFKgYQAury8WvHIARKwBjNukg2BeECEJWf6t3BywN4OmTQGPPCYRw0CnQ91/NmAhh20DXvbYQgg6CQw9elkwFHwBpaBuYE83cnxS++yeLzAyg5GNhtT8UIoiaAXSc8ku2kt4Q7u4ySj4Q4snkzraBOZOhdPXaEhoNgMYDsMoE4OIb/wgAAeAAiAMgxj8CwBaAABAAAkAACAABcKwIBGAKiCA1AFNABAIQgACcA0TgHCAA24AA0gMQgXOAAGwDCIDMCLwLAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAsMwv/81KRN6BVFkAAAAASUVORK5CYII="
+		}
+	]
+}

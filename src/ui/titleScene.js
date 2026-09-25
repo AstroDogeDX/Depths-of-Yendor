@@ -130,6 +130,7 @@ export class TitleScene {
     this.fade = Math.max(1 - this.t / FADE_IN, left < this.descent ? 1 - left / this.descent : 0);
 
     flowWater(this.built.water, this.t);
+    this.built.haze?.update(this.t);
     this.drips.update(dt, this.camera.position);
     for (const f of this.built.flames) {
       const k = 0.85 + Math.sin(this.t * 17 + f.phase) * 0.08 + Math.sin(this.t * 5.3 + f.phase * 2) * 0.07;
