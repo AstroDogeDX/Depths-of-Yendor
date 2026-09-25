@@ -1,8 +1,8 @@
 // Monster catalog. Speeds in m/s, ranges in metres, times in seconds.
 // depth: [first floor it appears, last floor it appears]. freq: spawn weight.
 // dmgType: the kind of damage its melee blows deal (slash, stab or bash; generic if not given). resist: multipliers
-// on the damage each type does to it, e.g. { slash: 0.5, bash: 1.5 }. See damage.js. A ranged attack's shots have
-// no type unless its own dmgType gives one (arrows stab; magic bolts and fire have none).
+// on the damage each type does to it, physical or magical, e.g. { slash: 0.5, fire: 0 }. See damage.js. A ranged
+// attack's shots deal its own dmgType (arrows stab, bolts are magic, the imp's fire is fire).
 
 export const MONSTERS = {
   rat: {
@@ -17,7 +17,8 @@ export const MONSTERS = {
   },
   slime: {
     name: 'green ooze', hp: 16, dmg: [2, 5], speed: 1.5, radius: 0.45, reach: 1.3, windup: 0.6, cooldown: 1.3,
-    dmgType: 'bash', resist: { slash: 1.25, stab: 0.75, bash: 0.5 }, // slams; blades cut it, blows ripple through
+    dmgType: 'bash', resist: { slash: 1.25, stab: 0.75, bash: 0.5, fire: 1.25, poison: 0 }, // slams; blades cut it,
+    // blows ripple through, fire boils it, and it's poison itself
     xp: 3, depth: [4, 14], freq: 6, dodge: 0, def: 1, sleepChance: 0.6, poisonHit: 0.35,
   },
   goblin: {
@@ -33,7 +34,8 @@ export const MONSTERS = {
   },
   skeleton: {
     name: 'skeleton', hp: 20, dmg: [3, 8], speed: 2.6, radius: 0.33, reach: 1.6, windup: 0.5, cooldown: 1.1,
-    dmgType: 'slash', resist: { slash: 0.75, stab: 0.5, bash: 1.5 }, // a sword; nothing to stab, bones that shatter
+    dmgType: 'slash', resist: { slash: 0.75, stab: 0.5, bash: 1.5, poison: 0, holy: 1.5 }, // a sword; nothing to
+    // stab, bones that shatter, no blood to poison, and undead
     xp: 6, depth: [9, 22], freq: 8, dodge: 0.05, def: 2, sleepChance: 0.7,
   },
   orc: {
@@ -43,31 +45,38 @@ export const MONSTERS = {
   },
   wraith: {
     name: 'wraith', hp: 22, dmg: [4, 9], speed: 3.2, radius: 0.35, reach: 1.6, windup: 0.5, cooldown: 1.1,
-    dmgType: 'slash', resist: { stab: 0.5, bash: 0.75 }, // claws; a point finds only robe, a blow little to hit
+    dmgType: 'slash', resist: { stab: 0.5, bash: 0.75, ice: 0.5, poison: 0, holy: 2 }, // claws; a point finds only
+    // robe, a blow little to hit; the grave's own cold, no blood, and a restless spirit that holy light unmakes
     xp: 11, depth: [14, 25], freq: 5, dodge: 0.25, def: 0, sleepChance: 0.2, flying: 0.4,
-    ranged: { speed: 7, keepAway: 0, maxRange: 11, color: 0x8060ff, size: 0.18, kind: 'bolt', chance: 0.5 },
+    ranged: { speed: 7, keepAway: 0, maxRange: 11, color: 0x8060ff, size: 0.18, kind: 'bolt', chance: 0.5,
+              dmgType: 'magic' },
   },
   imp: {
     name: 'fire imp', hp: 17, dmg: [3, 7], speed: 4.0, radius: 0.3, reach: 1.4, windup: 0.4, cooldown: 1.6,
-    dmgType: 'slash', resist: { stab: 1.25 }, // claws; a slight thing, easily run through
-    xp: 10, depth: [17, 25], freq: 5, dodge: 0.2, def: 1, sleepChance: 0.3, fireImmune: true,
-    ranged: { speed: 9, keepAway: 4, maxRange: 12, color: 0xff6010, size: 0.2, kind: 'fire' },
+    dmgType: 'slash', resist: { stab: 1.25, fire: 0, ice: 1.5, holy: 1.5 }, // claws; a slight thing, easily run
+    // through, born of fire, and a devil
+    xp: 10, depth: [17, 25], freq: 5, dodge: 0.2, def: 1, sleepChance: 0.3,
+    ranged: { speed: 9, keepAway: 4, maxRange: 12, color: 0xff6010, size: 0.2, kind: 'fire', dmgType: 'fire' },
   },
   troll: {
     name: 'troll', hp: 48, dmg: [6, 14], speed: 2.6, radius: 0.5, reach: 2.0, windup: 0.7, cooldown: 1.4,
-    dmgType: 'bash', resist: { stab: 1.25, bash: 0.75 }, // a club; its bulk soaks up blows, but a point goes deep
+    dmgType: 'bash', resist: { stab: 1.25, bash: 0.75, fire: 1.5 }, // a club; its bulk soaks up blows, but a point
+    // goes deep, and like all trolls it dreads fire
     xp: 16, depth: [17, 25], freq: 5, dodge: 0, def: 3, sleepChance: 0.6, regen: 1.2,
   },
   golem: {
     name: 'stone golem', hp: 75, dmg: [9, 20], speed: 1.7, radius: 0.55, reach: 2.1, windup: 0.9, cooldown: 1.6,
-    dmgType: 'bash', resist: { slash: 0.5, stab: 0.5, bash: 1.5 }, // stone fists; edges and points glance off it
+    dmgType: 'bash', resist: { slash: 0.5, stab: 0.5, bash: 1.5, fire: 0.5, lightning: 0.5, poison: 0, magic: 1.25 },
+    // stone fists; edges and points glance off it, stone shrugs off fire and lightning, but magic unravels its rune
     xp: 22, depth: [20, 25], freq: 3, dodge: 0, def: 6, sleepChance: 0.8,
   },
   warden: {
     name: 'Warden of Yendor', hp: 230, dmg: [10, 22], speed: 2.9, radius: 0.6, reach: 2.4, windup: 0.75, cooldown: 1.3,
-    dmgType: 'slash', resist: { slash: 0.7, stab: 0.8, bash: 1.25 }, // a halberd; clad in plate
-    xp: 120, depth: [99, 99], freq: 0, dodge: 0.05, def: 5, sleepChance: 1, boss: true, fireImmune: true,
-    ranged: { speed: 8, keepAway: 0, maxRange: 16, color: 0xffc040, size: 0.22, kind: 'bolt', chance: 0.35, volley: 3 },
+    dmgType: 'slash', resist: { slash: 0.7, stab: 0.8, bash: 1.25, fire: 0, holy: 1.25 }, // a halberd; clad in
+    // plate, fire can't touch it, and the dead answer its call
+    xp: 120, depth: [99, 99], freq: 0, dodge: 0.05, def: 5, sleepChance: 1, boss: true,
+    ranged: { speed: 8, keepAway: 0, maxRange: 16, color: 0xffc040, size: 0.22, kind: 'bolt', chance: 0.35, volley: 3,
+              dmgType: 'magic' },
   },
 };
 

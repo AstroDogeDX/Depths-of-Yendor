@@ -1,4 +1,4 @@
-import { WEAPONS, ARMORS, FOOD, ARTEFACTS } from './defs.js';
+import { WEAPONS, ARMORS, FOOD, ARTEFACTS, WANDS } from './defs.js';
 import { buildItemModel } from './models.js';
 import { HUNGER_MAX, EYE_H } from '../config.js';
 import { rand } from '../rng.js';
@@ -103,11 +103,11 @@ export function potionSplash(game, type, x, z, thrown = true) {
   for (const m of hit) {
     switch (type) {
       case 'healing': m.hp = Math.min(m.maxHp, m.hp + m.maxHp * 0.5); game.log(`The ${m.name} looks healthier.`, 'warn'); break;
-      case 'poison': m.status.poison = Math.max(m.status.poison, 10); break;
+      case 'poison': m.afflict(game, 'poison', 10); break;
       case 'confusion': m.status.confused = Math.max(m.status.confused, 10); break;
       case 'blindness': m.status.blind = Math.max(m.status.blind, 12); if (m.state === 'hunt') { m.state = 'wander'; m.wander = null; } break;
       case 'paralysis': m.status.paralyzed = Math.max(m.status.paralyzed, 6); break;
-      case 'flame': m.takeDamage(game, rand.int(4, 8), { fire: true }); if (!m.def.fireImmune) m.status.burning = Math.max(m.status.burning, 5); break;
+      case 'flame': m.takeDamage(game, rand.int(4, 8), { type: 'fire' }); m.afflict(game, 'burning', 5, false); break;
       case 'haste': case 'strength': case 'experience': case 'mindvision': obvious = false; break;
     }
     if (type !== 'healing' && type !== 'haste' && !m.dead) m.notice(game);
@@ -119,8 +119,7 @@ export function potionSplash(game, type, x, z, thrown = true) {
   }
   if (type === 'flame') {
     obvious = true;
-    if (playerHit) game.hurtPlayer(rand.int(3, 7), { source: 'a burst of liquid flame', ignoreArmor: true, fire: true });
-    if (playerHit) p.addStatus('burning', 3, game);
+    if (playerHit) game.hurtPlayer(rand.int(3, 7), { source: 'a burst of liquid flame', ignoreArmor: true, type: 'fire' });
   }
   game.audio.shatter();
   if (thrown) {
@@ -287,6 +286,7 @@ export function zapWand(game, item) {
   const d = lookDir(p);
   const ox = p.x + d.x * 0.5, oy = EYE_H - 0.15 + d.y * 0.5, oz = p.z + d.z * 0.5;
   const power = item.ench || 0;
+  const type = WANDS[item.type].dmgType;
   const bolt = (color, speed, onHit) => spawnProjectile(level, {
     x: ox, y: oy, z: oz, vx: d.x * speed, vy: d.y * speed, vz: d.z * speed,
     owner: 'player', kind: 'bolt', color, size: 0.14, life: 2,
@@ -300,13 +300,13 @@ export function zapWand(game, item) {
 
   switch (item.type) {
     case 'missile':
-      bolt(0xc080ff, 16, (m, pr) => m.takeDamage(game, rand.int(4, 9) + power * 2, { knockback: { x: pr.vx / 16, z: pr.vz / 16 } }));
+      bolt(0xc080ff, 16, (m, pr) => m.takeDamage(game, rand.int(4, 9) + power * 2, { type, knockback: { x: pr.vx / 16, z: pr.vz / 16 } }));
       learn();
       break;
     case 'fire':
       bolt(0xff6010, 13, (m) => {
-        m.takeDamage(game, rand.int(5, 10) + power * 2, { fire: true });
-        if (!m.dead && !m.def.fireImmune) m.status.burning = Math.max(m.status.burning, 5);
+        m.takeDamage(game, rand.int(5, 10) + power * 2, { type });
+        if (!m.dead) m.afflict(game, 'burning', 5, false);
       });
       learn();
       break;
@@ -323,7 +323,7 @@ export function zapWand(game, item) {
       }
       transient(level, lightningMesh(ox, oy - 0.1, oz, ex, ey, ez), 0.18);
       transient(level, lightningMesh(ox, oy - 0.1, oz, ex, ey, ez, 0xffffff), 0.12);
-      for (const m of hitSet) m.takeDamage(game, rand.int(6, 12) + power * 2, {});
+      for (const m of hitSet) m.takeDamage(game, rand.int(6, 12) + power * 2, { type });
       game.flash('#c0e0ff', 0.25);
       learn();
       break;
@@ -499,7 +499,7 @@ export function activateArtefact(game, slot) {
       const dx = m.x - p.x, dz = m.z - p.z, d = Math.hypot(dx, dz);
       if (d > 6.5) continue;
       m.status.paralyzed = Math.max(m.status.paralyzed, m.boss ? 1.5 : 3.5);
-      m.takeDamage(game, rand.int(2, 6), {});
+      m.takeDamage(game, rand.int(2, 6), { type: 'magic' }); // a thunderclap of raw magic
       if (!m.boss) {
         m.x += (dx / (d || 1)) * 1.8;
         m.z += (dz / (d || 1)) * 1.8;

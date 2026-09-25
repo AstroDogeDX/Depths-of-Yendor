@@ -8,7 +8,7 @@ const ORB_GEO = new THREE.IcosahedronGeometry(1, 0);
 
 /**
  * o: { x, y, z, vx, vy, vz, owner: 'monster'|'player', dmg, kind, color, size, source,
- *      type? (its damage type, see damage.js), fire?, gravity?, life?, onImpact?(game, pr, target) }
+ *      type? (its damage type, see damage.js: fire sets what it hits burning), gravity?, life?, onImpact?(game, pr, target) }
  */
 export function spawnProjectile(level, o) {
   let mesh;
@@ -83,9 +83,9 @@ function impact(game, level, pr, target) {
   }
   burst(level, pr.x, pr.y, pr.z, pr.color, pr.kind === 'arrow' ? 3 : 10, 2.5, 0.4);
   if (target === 'player') {
-    game.hurtPlayer(pr.dmg, { source: pr.source, type: pr.type, fire: pr.fire, ranged: true });
+    game.hurtPlayer(pr.dmg, { source: pr.source, type: pr.type, ranged: true });
   } else if (target) {
-    target.takeDamage(game, pr.dmg, { type: pr.type, fire: pr.fire, knockback: { x: pr.vx / 20, z: pr.vz / 20 } });
-    if (pr.fire && !target.dead && !target.def.fireImmune) target.status.burning = Math.max(target.status.burning, 4);
+    target.takeDamage(game, pr.dmg, { type: pr.type, knockback: { x: pr.vx / 20, z: pr.vz / 20 } });
+    if (pr.type === 'fire' && !target.dead) target.afflict(game, 'burning', 4, false);
   }
 }

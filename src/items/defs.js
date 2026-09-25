@@ -58,10 +58,12 @@ export const SCROLLS = {
   recharge:    { name: 'recharging',      freq: 8,  desc: 'Restores all charges to your wands.' },
 };
 
+// dmgType: the damage a wand's bolt deals, for those that hurt (see damage.js).
 export const WANDS = {
-  missile:   { name: 'magic missile', freq: 30, charges: [4, 6], desc: 'Fires a bolt of force.' },
-  lightning: { name: 'lightning',     freq: 18, charges: [3, 5], desc: 'A bolt of lightning that tears through everything in a line.' },
-  fire:      { name: 'firebolt',      freq: 18, charges: [3, 5], desc: 'A gout of flame that sets its target alight.' },
+  missile:   { name: 'magic missile', freq: 30, charges: [4, 6], dmgType: 'magic', desc: 'Fires a bolt of force.' },
+  lightning: { name: 'lightning',     freq: 18, charges: [3, 5], dmgType: 'lightning',
+               desc: 'A bolt of lightning that tears through everything in a line.' },
+  fire:      { name: 'firebolt',      freq: 18, charges: [3, 5], dmgType: 'fire', desc: 'A gout of flame that sets its target alight.' },
   slow:      { name: 'slowness',      freq: 16, charges: [3, 5], desc: 'Drags a creature down to a crawl.' },
   teleother: { name: 'teleport other',freq: 14, charges: [2, 4], desc: 'Sends a creature somewhere else on the floor.' },
 };
@@ -75,7 +77,8 @@ export const RINGS = {
   teleportation: { name: 'teleportation', freq: 8,  desc: 'Teleports you at random. Always cursed.' },
 };
 
-// Unique items of power. Active abilities are triggered with R (slot 1) and T (slot 2).
+// Unique items of power. Active abilities are triggered with R (slot 1) and T (slot 2). `resist` protects you
+// from damage types while you're attuned (see damage.js).
 export const ARTEFACTS = {
   chalice: { name: 'Chalice of Crimson Thirst', color: 0xb01030,
     desc: 'Heals you for a quarter of all melee damage you deal.' },
@@ -87,7 +90,7 @@ export const ARTEFACTS = {
     desc: 'Active: become invisible for 8 seconds. Monsters lose track of you.' },
   boots:   { name: 'Boots of the Wind', color: 0x90c0e0,
     desc: 'You move a third faster.' },
-  ember:   { name: 'Emberheart', color: 0xff5a10,
+  ember:   { name: 'Emberheart', color: 0xff5a10, resist: { fire: 0 },
     desc: 'Your melee strikes set foes alight, and fire cannot harm you.' },
 };
 

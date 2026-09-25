@@ -51,7 +51,7 @@ export function playerStrike(game, power) {
     const heal = Math.max(1, Math.round(dealt * 0.25));
     p.heal(heal);
   }
-  if (p.hasArtefact('ember') && !m.dead && !m.def.fireImmune) m.status.burning = Math.max(m.status.burning, 3);
+  if (p.hasArtefact('ember') && !m.dead) m.afflict(game, 'burning', 3, false);
 
   const weapon = p.equip.weapon;
   if (weapon && !weapon.identified && --weapon.hitsToId <= 0) {

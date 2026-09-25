@@ -5,7 +5,7 @@ import {
 import { WEAPONS, ARMORS, ARTEFACTS } from './items/defs.js';
 import { stackable } from './items/generate.js';
 import { playerStrike } from './combat.js';
-import { damageType } from './damage.js';
+import { STATUS_TYPES, damageType, damageMult } from './damage.js';
 import { rand } from './rng.js';
 
 const FISTS = { name: 'fists', dmgType: 'bash', dmg: [1, 3], recharge: 0.6, reach: 1.4, str: 0, model: null };
@@ -69,6 +69,15 @@ export class Player {
     };
   }
 
+  /** The multiplier on damage of this type you take (see damage.js), from your armour and artefacts' `resist`. */
+  resistMult(type) {
+    let mult = 1;
+    const a = this.equip.armor;
+    if (a) mult *= damageMult(ARMORS[a.type], type);
+    for (const art of this.equip.artefacts) if (art) mult *= damageMult(ARTEFACTS[art.type], type);
+    return mult;
+  }
+
   get defense() {
     const a = this.equip.armor;
     return Math.max(0, (a ? ARMORS[a.type].def + a.ench : 0) + this.ringBonus('protection'));
@@ -101,7 +110,7 @@ export class Player {
   heal(n) { this.hp = Math.min(this.maxHp, this.hp + n); }
 
   addStatus(key, dur, game) {
-    if (key === 'burning' && this.hasArtefact('ember')) return;
+    if (STATUS_TYPES[key] && this.resistMult(STATUS_TYPES[key]) === 0) return; // e.g. no burning with Emberheart
     const fresh = this.status[key] <= 0;
     this.status[key] = Math.max(this.status[key], dur);
     if (fresh && game) {
@@ -304,8 +313,8 @@ export class Player {
       this.dotT += dt;
       if (this.dotT >= 1) {
         this.dotT -= 1;
-        if (s.poison > 0) game.hurtPlayer(1 + Math.floor(danger(game.level.depth) / 4), { source: 'poison', ignoreArmor: true, dot: true });
-        if (s.burning > 0 && !game.over) game.hurtPlayer(rand.int(1, 3), { source: 'flames', ignoreArmor: true, dot: true, fire: true });
+        if (s.poison > 0) game.hurtPlayer(1 + Math.floor(danger(game.level.depth) / 4), { source: 'poison', type: 'poison', ignoreArmor: true, dot: true });
+        if (s.burning > 0 && !game.over) game.hurtPlayer(rand.int(1, 3), { source: 'flames', type: 'fire', ignoreArmor: true, dot: true });
       }
     }
   }

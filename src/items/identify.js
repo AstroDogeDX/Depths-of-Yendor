@@ -163,9 +163,14 @@ export class Knowledge {
           (this.tried.potion.has(item.type) ? ' (tried)' : '');
       case 'scroll': return known ? SCROLLS[item.type].desc
         : 'The words are in no language you can read aloud safely... or can you?';
-      case 'wand': return known ? WANDS[item.type].desc + ' Wands slowly recharge over time.'
-        : `A slender ${this.appearance.wand[item.type].name} wand humming with unknown power.` +
-          (this.tried.wand.has(item.type) ? ' (tried)' : '');
+      case 'wand': {
+        if (!known) {
+          return `A slender ${this.appearance.wand[item.type].name} wand humming with unknown power.` +
+            (this.tried.wand.has(item.type) ? ' (tried)' : '');
+        }
+        const d = WANDS[item.type];
+        return `${d.desc}${d.dmgType ? ` It deals ${DAMAGE_TYPES[d.dmgType].name} damage.` : ''} Wands slowly recharge over time.`;
+      }
       case 'ring': return known ? RINGS[item.type].desc
         : `A ring set with ${/^[aeiou]/.test(this.appearance.ring[item.type].name) ? 'an' : 'a'} ${this.appearance.ring[item.type].name}. Wear it long enough and you will learn its nature.`;
       case 'food': return FOOD[item.type].desc;

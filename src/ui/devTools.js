@@ -21,6 +21,7 @@ const KINDS = [
   ['special', 'Other', { amulet: { name: 'Amulet of Yendor' }, key: { name: 'iron key (this floor)' } }],
 ];
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
+const SHOTS = { arrow: 'Arrows', bolt: 'Bolts', fire: 'Fireballs' }; // monsters' ranged attacks, by kind
 
 export class DevTools {
   constructor(game) {
@@ -104,8 +105,8 @@ export class DevTools {
     });
     this.$('.dev-monsters').innerHTML = Object.entries(MONSTERS)
       .map(([type, def]) => {
-        const shots = def.ranged?.dmgType ? `, its ${def.ranged.kind}s ${DAMAGE_TYPES[damageType(def.ranged)].name}` : '';
-        const tip = `${cap(def.name)}: its blows ${DAMAGE_TYPES[damageType(def)].name}${shots}. ${describeResist(def)}`;
+        const shots = def.ranged ? ` ${SHOTS[def.ranged.kind]}: ${DAMAGE_TYPES[damageType(def.ranged)].name}.` : '';
+        const tip = `${cap(def.name)}. Melee: ${DAMAGE_TYPES[damageType(def)].name}.${shots} ${describeResist(def)}`;
         return `<button class="alt" data-monster="${type}" title="${tip.trim()}">${cap(def.name)}</button>`;
       }).join('');
     this.$('.dev-traps').innerHTML = ['spike', 'poison', 'teleport', 'alarm']

@@ -79,9 +79,24 @@ Potion, scroll and food slots remember the *type*, so a slot whose stack runs ou
 
 ## Damage types
 
-Every melee blow deals one of three kinds of physical damage: **slash** (the swords and the battle axe), **stab** (the dagger and the spear, which thrust rather than swing) or **bash** (the mace, the war hammer and your fists). A weapon's description and the pack's stats say which. Monsters' blows work the same way, and a goblin archer's arrows stab. A weapon or monster that doesn't give a type deals generic physical damage.
+Every source of damage has a type (`damage.js`), physical or magical. Only starvation has none.
 
-Monsters and armour can resist a type or be weak to it. `resist` in a monster's entry in `monsters/defs.js`, or an armour's in `items/defs.js`, maps types to multipliers on the damage that gets through (after armour's defense has taken its share). For example, `{ slash: 0.5, bash: 1.5 }` takes half from blades and half as much again from hammers, and 0 makes it immune. A resisted blow always does at least 1 unless it's immune. Damage that isn't a blow (fire, poison, wands, magic bolts, traps) has no type and ignores resistances. The types are in `damage.js`. A weapon's type is its `dmgType` in `items/defs.js`, and a monster's is its `dmgType` in `monsters/defs.js` (and its `ranged` attack's `dmgType`, for shots that have one).
+**Physical.** Every melee blow deals one of three kinds of physical damage: **slash** (the swords and the battle axe), **stab** (the dagger and the spear, which thrust rather than swing) or **bash** (the mace, the war hammer and your fists). A weapon's description and the pack's stats say which. Monsters' blows work the same way. Goblin archers' arrows stab, as do spike traps. A weapon or monster that doesn't give a type deals generic physical damage.
+
+**Magical.** There's raw **magic** and five elements:
+
+| Type | Comes from now | Notes |
+| --- | --- | --- |
+| Magic | the wand of magic missile, wraiths' and the Warden's bolts, the Horn of Thunder's blast | non-elemental magic |
+| Fire | the wand of firebolt, liquid flame, fire imps' fireballs, burning | fire hits set you burning; being immune to fire means you can't burn |
+| Ice | nothing yet | for future wands, enchantments and monsters |
+| Lightning | the wand of lightning | |
+| Poison | being poisoned (potions, gas traps, oozes) | being immune to poison means you can't be poisoned |
+| Holy | nothing yet | holy light, for use against the undead and the cursed |
+
+A wand's description says which type it deals. Magical damage numbers take the type's colour: violet magic, orange fire, blue ice, yellow lightning, green poison, and white holy light with a golden glow.
+
+**Resistances.** Monsters, armour and artefacts can resist a type or be weak to it. `resist` in a monster's entry in `monsters/defs.js`, or an armour's or artefact's in `items/defs.js`, maps types to multipliers on the damage that gets through (after armour's defense has taken its share). For example, `{ slash: 0.5, fire: 1.5 }` takes half from blades and half as much again from fire, and 0 makes it immune. A resisted hit always does at least 1 unless it's immune. Your resistances multiply together from your armour and the artefacts you're attuned to: Emberheart's `{ fire: 0 }` is how it makes fire harmless. A weapon's type is its `dmgType` in `items/defs.js`, as is a wand's. A monster's is its `dmgType` in `monsters/defs.js`, and its `ranged` attack has its own.
 
 Each armour turns some blows better than others, as its description says. The table gives the damage you take:
 
@@ -93,26 +108,26 @@ Each armour turns some blows better than others, as its description says. The ta
 | Splint mail | −20% | +15% | −10% |
 | Plate | −30% | −20% | +25% |
 
-Each monster's blows fit what it fights with, and most resist some weapons or are weak to others. The table gives the damage it takes:
+Each monster's blows fit what it fights with, and most resist some kinds of damage or are weak to others. The table gives the damage it takes:
 
-| Monster | Its blows | Slash | Stab | Bash |
-| --- | --- | --- | --- | --- |
-| Giant rat | stab (bite) | | | |
-| Cave bat | stab (bite) | +25% | | |
-| Green ooze | bash | +25% | −25% | −50% |
-| Goblin | slash (short blade) | | | |
-| Goblin archer | stab (arrows), bash (its bow, up close) | | | |
-| Skeleton | slash (sword) | −25% | −50% | +50% |
-| Orc | slash (axe) | | +25% | |
-| Wraith | slash (claws) | | −50% | −25% |
-| Fire imp | slash (claws) | | +25% | |
-| Troll | bash (club) | | +25% | −25% |
-| Stone golem | bash (fists) | −50% | −50% | +50% |
-| Warden of Yendor | slash (halberd) | −30% | −20% | +25% |
+| Monster | Attacks | Slash | Stab | Bash | Magic and elements |
+| --- | --- | --- | --- | --- | --- |
+| Giant rat | stab (bite) | | | | |
+| Cave bat | stab (bite) | +25% | | | |
+| Green ooze | bash | +25% | −25% | −50% | fire +25%, poison immune |
+| Goblin | slash (short blade) | | | | |
+| Goblin archer | stab (arrows), bash (its bow, up close) | | | | |
+| Skeleton | slash (sword) | −25% | −50% | +50% | holy +50%, poison immune |
+| Orc | slash (axe) | | +25% | | |
+| Wraith | slash (claws), magic (bolts) | | −50% | −25% | holy +100%, ice −50%, poison immune |
+| Fire imp | slash (claws), fire (fireballs) | | +25% | | ice +50%, holy +50%, fire immune |
+| Troll | bash (club) | | +25% | −25% | fire +50% |
+| Stone golem | bash (fists) | −50% | −50% | +50% | magic +25%, fire −50%, lightning −50%, poison immune |
+| Warden of Yendor | slash (halberd), magic (bolts) | −30% | −20% | +25% | holy +25%, fire immune |
 
-So a mace is the answer to skeletons, golems and the Warden but little use against oozes, wraiths and trolls. A spear or dagger runs through orcs, imps and trolls, but not the undead. Carrying a second weapon pays. The dev tools' monster buttons list these as tooltips.
+So a mace is the answer to skeletons, golems and the Warden but little use against oozes, wraiths and trolls. A spear or dagger runs through orcs, imps and trolls, but not the undead. Fire is the troll's bane, and magic is the golem's. Carrying a second weapon, and the right wand, pays. The dev tools' monster buttons list these as tooltips.
 
-You can see when a type matters. A hit on a monster's weakness shows a bigger orange number tagged **WEAK!** and lands with a crunch. A resisted hit shows a smaller grey number tagged **RESISTED** and lands with a dull clank. A monster immune to the blow shows **IMMUNE**. The first time in a run you see a kind of monster resist a type or be weak to it, the log says so, e.g. "The skeleton is weak to bashing blows!". A blow that hits your armour's weakness is tagged **WEAK SPOT**, and one it resists is tagged **RESISTED**.
+You can see when a type matters. A hit on a monster's weakness shows a bigger number tagged **WEAK!**, and a melee hit on a weakness lands with a crunch. A resisted hit shows a smaller number tagged **RESISTED**, and a resisted melee hit lands with a dull clank. For physical hits the number itself turns orange or grey. A monster immune to the damage shows **IMMUNE**, including when you try to poison or burn it. Burning and poison ticks aren't tagged; the hit that started them was. The first time in a run you see a kind of monster resist a type or be weak to it, the log says so, e.g. "The troll is weak to fire!" or "Poison can't harm the skeleton!". A hit on one of your armour's weaknesses is tagged **WEAK SPOT**, and one it resists is tagged **RESISTED**.
 
 ## Stamina, sprinting and sneaking
 
@@ -235,7 +250,7 @@ src/
   game.js              run lifecycle, level transitions, rendering, interaction, traps, endings
   player.js            movement, attack meter, stats, statuses, hunger/regen, inventory
   combat.js            player melee resolution
-  damage.js            damage types (slash, stab, bash, generic) and monsters' and armour's resistances to them
+  damage.js            damage types (physical, magic and the elements) and the resistances to them
   hotbar.js            hotbar bindings and what each slot does when pressed
   input.js / audio.js  pointer-lock input; WebAudio synth sfx + ambient drone
   dungeon/generator.js pure data: plans the loop and branches, lays out rooms, routes corridors, populates (seeded)

@@ -145,6 +145,15 @@ body.lowhp #hurt { animation: pulse 1.2s infinite; }
 .popup.resist { color: #98a8bc; font-size: 0.85em; }
 .popup.hurt.weak { color: #ff2a1a; }
 .popup.hurt.resist { color: #d88a78; }
+.popup.weak small { color: #ff8a24; }
+.popup.resist small { color: #98a8bc; }
+/* Magic and the elements (see damage.js) colour the number; its tag still says weak or resisted. */
+.popup.el-magic { color: #c49aff; }
+.popup.el-fire { color: #ff6a2a; }
+.popup.el-ice { color: #7fd4ff; }
+.popup.el-lightning { color: #f6f060; }
+.popup.el-poison { color: #9ee070; }
+.popup.el-holy { color: #fffbe8; filter: drop-shadow(0 0 0.2em rgba(255, 214, 90, 0.9)); }
 
 /* --- Panels & overlays --- */
 .overlay {
