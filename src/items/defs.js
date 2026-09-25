@@ -18,12 +18,19 @@ export const WEAPONS = {
                 desc: 'A crushing maul that only the strong can swing well.' },
 };
 
+// resist: how much of each kind of blow gets through the armour (see damage.js). Each turns some kinds of blow
+// better than others.
 export const ARMORS = {
-  leather: { name: 'leather armor',   def: 2, str: 10, tier: 1, color: 0x7a5230, desc: 'Boiled leather. Light and quiet.' },
-  studded: { name: 'studded leather', def: 3, str: 12, tier: 2, color: 0x6b4a2b, desc: 'Leather reinforced with iron rivets.' },
-  chain:   { name: 'chain mail',      def: 5, str: 13, tier: 3, color: 0x9aa0a8, desc: 'Interlocking iron rings.' },
-  splint:  { name: 'splint mail',     def: 7, str: 15, tier: 4, color: 0x7d8590, desc: 'Metal strips riveted over mail.' },
-  plate:   { name: 'plate armor',     def: 9, str: 17, tier: 5, color: 0xc0c6cc, desc: 'Full plate. Heavy, and very hard to get through.' },
+  leather: { name: 'leather armor',   def: 2, str: 10, tier: 1, color: 0x7a5230, resist: { bash: 0.85, slash: 1.15 },
+             desc: 'Boiled leather. Light and quiet, and it softens a blow, but a blade cuts through it.' },
+  studded: { name: 'studded leather', def: 3, str: 12, tier: 2, color: 0x6b4a2b, resist: { slash: 0.85, stab: 1.15 },
+             desc: 'Leather reinforced with iron rivets, which turn an edge. A point slips in between them.' },
+  chain:   { name: 'chain mail',      def: 5, str: 13, tier: 3, color: 0x9aa0a8, resist: { slash: 0.7, stab: 1.2, bash: 1.2 },
+             desc: 'Interlocking iron rings. Proof against a blade, but a point can burst the links, and it does nothing to soften a blow.' },
+  splint:  { name: 'splint mail',     def: 7, str: 15, tier: 4, color: 0x7d8590, resist: { slash: 0.8, bash: 0.9, stab: 1.15 },
+             desc: 'Metal strips riveted over mail. They turn edges and spread a blow, but a point finds the gaps between them.' },
+  plate:   { name: 'plate armor',     def: 9, str: 17, tier: 5, color: 0xc0c6cc, resist: { slash: 0.7, stab: 0.8, bash: 1.25 },
+             desc: 'Full plate. Heavy, and very hard to get through with an edge or a point, but a hammer blow rings right through it.' },
 };
 
 export const POTIONS = {

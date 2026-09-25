@@ -16,7 +16,23 @@ const KIND_COLOR = {
   weapon: '#c8ccd4', armor: '#c0a880', scroll: '#e8dcb0', wand: '#a0c8ff', ring: '#e0a0ff',
   food: '#c09060', artefact: '#ffb040', amulet: '#ffd040', gold: '#ffd040',
 };
-const POPUP_LIFE = { alert: 1.1, zzz: 1.6 };
+// Floating text over the world, by class (see .popup in style.css): how many seconds it lasts, how far it rises
+// (metres), how much bigger it starts before it settles (a punch in), and whether it's scattered to one side so a
+// flurry of hits doesn't stack up in one column. Later classes override earlier ones, so the modifiers for a blow
+// the target is weak to or resists ('dmg weak', 'hurt resist'...) change the look of the number they're on.
+const POPUP_BASE = { life: 1, rise: 0.6, punch: 0, scatter: false };
+const POPUPS = {
+  dmg: { life: 1.1, punch: 0.7, scatter: true },
+  crit: { life: 1.4, punch: 1, scatter: true },
+  dot: { life: 0.9, scatter: true },
+  hurt: { life: 1.1, punch: 0.5, scatter: true },
+  miss: { life: 0.9, scatter: true },
+  immune: { life: 1.1, punch: 0.4 },
+  alert: { life: 1.1, rise: 0.35, punch: 0.6 },
+  zzz: { life: 1.6, rise: 1.1 },
+  weak: { life: 1.4, punch: 1 },
+  resist: { life: 1.2, punch: 0.2 },
+};
 // Channels on the map by what fills them, [in sight, remembered]; any other fill is a dark pit.
 const CHANNEL_COLORS = { water: ['#2f5f66', '#1f3c40'], lava: ['#a8400e', '#5a2208'] };
 const HOT_HINT = `Press 1–${HOTBAR_SIZE} or click a slot to put the selected item there · right-click a slot to clear it`;
@@ -151,12 +167,18 @@ export class UI {
     while (this.logEntries.length > 7) this.logEntries.shift().el.remove();
   }
 
-  popup(pos, text, cls = '') {
+  /** Floating text at a point in the world, in one or more classes (see POPUPS), with a smaller `tag` under it. */
+  popup(pos, text, cls = '', tag = '') {
     const el = document.createElement('div');
     el.className = `popup ${cls}`;
     el.textContent = text;
+    if (tag) el.appendChild(document.createElement('small')).textContent = tag;
     $('popups').appendChild(el);
-    this.popups.push({ el, x: pos.x, y: pos.y, z: pos.z, t: 0, life: POPUP_LIFE[cls] ?? 0.9 });
+    const look = Object.assign({}, POPUP_BASE, ...cls.split(' ').map((c) => POPUPS[c]));
+    // Scattered ones go to alternate sides, so one hit's number moves away from the last one's.
+    if (look.scatter) this.popupSide = -(this.popupSide || 1);
+    const drift = look.scatter ? this.popupSide * (0.35 + Math.random() * 0.65) : 0;
+    this.popups.push({ el, x: pos.x, y: pos.y, z: pos.z, t: 0, ...look, drift });
     while (this.popups.length > 40) this.popups.shift().el.remove();
   }
 
@@ -297,8 +319,10 @@ export class UI {
   }
 
   updatePopups(dt) {
+    if (!this.popups.length) return;
     const cam = this.game.camera;
     const W = window.innerWidth, H = window.innerHeight;
+    const em = parseFloat(getComputedStyle($('popups')).fontSize); // their size, which scales with the window
     for (let i = this.popups.length - 1; i >= 0; i--) {
       const pp = this.popups[i];
       pp.t += dt;
@@ -307,15 +331,19 @@ export class UI {
         this.popups.splice(i, 1);
         continue;
       }
-      this.v.set(pp.x, pp.y + pp.t * 0.7, pp.z).project(cam);
+      // Punching in, then rising (quickly at first) and drifting out to its side, fading over its last 40%.
+      const k = pp.t / pp.life;
+      this.v.set(pp.x, pp.y + pp.rise * (1 - (1 - k) ** 2), pp.z).project(cam);
       if (this.v.z > 1 || this.v.z < -1) {
         pp.el.style.display = 'none';
         continue;
       }
       pp.el.style.display = '';
-      const x = (this.v.x * 0.5 + 0.5) * W, y = (-this.v.y * 0.5 + 0.5) * H;
-      pp.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%)`;
-      pp.el.style.opacity = 1 - (pp.t / pp.life) ** 2;
+      const x = (this.v.x * 0.5 + 0.5) * W + pp.drift * em * (0.35 + 0.65 * Math.min(1, k * 3));
+      const y = (-this.v.y * 0.5 + 0.5) * H;
+      const scale = 1 + pp.punch * Math.max(0, 1 - pp.t / 0.15) ** 2;
+      pp.el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%) scale(${scale.toFixed(3)})`;
+      pp.el.style.opacity = k < 0.6 ? 1 : 1 - ((k - 0.6) / 0.4) ** 2;
     }
   }
 

@@ -1,5 +1,6 @@
 import { rand } from './rng.js';
 import { EYE_H } from './config.js';
+import { damageMult } from './damage.js';
 
 const CONE = Math.cos(0.75); // ~43° either side of the crosshair
 
@@ -42,7 +43,8 @@ export function playerStrike(game, power) {
   if (sneak) game.log(`You strike the unsuspecting ${m.name}!`, 'good');
   const dist = Math.max(0.01, bestD);
   const dealt = m.takeDamage(game, dmg, { type: w.dmgType, knockback: { x: (m.x - p.x) / dist, z: (m.z - p.z) / dist }, sneak });
-  if (dealt > 0) game.audio.hit();
+  const mult = damageMult(m.def, w.dmgType);
+  if (dealt > 0) game.audio.hit(mult > 1 ? 'weak' : mult < 1 ? 'resist' : null);
   game.shake(0.06);
 
   if (dealt > 0 && p.hasArtefact('chalice')) {

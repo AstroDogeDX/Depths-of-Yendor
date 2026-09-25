@@ -5,6 +5,7 @@
   --panel: rgba(12, 10, 8, 0.92);
   --serif: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, 'Times New Roman', serif;
   --mono: 'Consolas', 'Courier New', monospace;
+  --pop: 'Arial Black', 'Segoe UI Black', Impact, 'Helvetica Neue', Arial, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -118,17 +119,32 @@ body.lowhp #hurt { animation: pulse 1.2s infinite; }
 #hotbar .act.attune { color: #a09080; }
 #hotbar .cd { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); }
 
-#popups { position: absolute; inset: 0; overflow: hidden; }
+/* Floating text (see ui.js POPUPS). Sized to the window, in a heavy face with a hard dark outline, so it reads
+   against lit walls and black corridors alike. Classes size it in em. */
+#popups { position: absolute; inset: 0; overflow: hidden; font-size: clamp(22px, 3.6vh, 44px); }
 .popup {
-  position: absolute; left: 0; top: 0; font-size: 20px; font-weight: bold; color: #fff;
-  font-family: var(--mono); white-space: nowrap; will-change: transform;
+  --ol: max(2px, 0.07em);
+  position: absolute; left: 0; top: 0; font: 900 1em/1 var(--pop); color: #fff4dc; text-align: center;
+  white-space: nowrap; will-change: transform, opacity;
+  text-shadow:
+    calc(-1 * var(--ol)) 0 #000, var(--ol) 0 #000, 0 calc(-1 * var(--ol)) #000, 0 var(--ol) #000,
+    calc(-1 * var(--ol)) calc(-1 * var(--ol)) #000, var(--ol) calc(-1 * var(--ol)) #000,
+    calc(-1 * var(--ol)) var(--ol) #000, var(--ol) var(--ol) #000, 0 calc(2.5 * var(--ol)) 2px rgba(0, 0, 0, 0.6);
 }
-.popup.crit { color: #ffd040; font-size: 26px; }
-.popup.dot { color: #90e070; font-size: 15px; }
-.popup.miss { color: #b0b0b0; font-size: 15px; font-style: italic; }
-.popup.hurt { color: #ff5040; font-size: 22px; }
-.popup.alert { color: #ffd040; font-size: 30px; }
-.popup.zzz { color: #a0c0ff; font-size: 16px; font-style: italic; }
+.popup small { display: block; margin-top: 0.15em; font-size: 0.42em; letter-spacing: 0.12em; }
+.popup.crit { color: #ffd040; font-size: 1.35em; }
+.popup.dot { color: #9ee070; font-size: 0.7em; }
+.popup.miss { color: #d0c8b8; font-size: 0.65em; font-style: italic; font-weight: bold; }
+.popup.immune { color: #b8c4d0; font-size: 0.7em; letter-spacing: 0.08em; }
+.popup.hurt { color: #ff4a3a; font-size: 1.05em; }
+.popup.alert { color: #ffd040; font-size: 1.3em; }
+.popup.zzz { color: #a0c0ff; font-size: 0.65em; font-style: italic; }
+/* A blow the target is weak to, or resists (see damage.js). After the others, so their colours win. */
+.popup.weak { color: #ff8a24; font-size: 1.25em; }
+.popup.crit.weak { font-size: 1.5em; }
+.popup.resist { color: #98a8bc; font-size: 0.85em; }
+.popup.hurt.weak { color: #ff2a1a; }
+.popup.hurt.resist { color: #d88a78; }
 
 /* --- Panels & overlays --- */
 .overlay {

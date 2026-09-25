@@ -5,12 +5,13 @@ import { generateLevel } from './dungeon/generator.js';
 import { Level } from './world/level.js';
 import { Player } from './player.js';
 import { Knowledge } from './items/identify.js';
-import { ARTEFACTS, WEAPONS } from './items/defs.js';
+import { ARTEFACTS, WEAPONS, ARMORS } from './items/defs.js';
 import { makeItem, randomItem } from './items/generate.js';
 import { itemActions, zapWand, drinkPotion, activateArtefact } from './items/use.js';
 import { ViewModel } from './fx/viewmodel.js';
 import { burst, ring, gasCloud, lightColumn } from './fx/particles.js';
 import { playerPopupPos } from './combat.js';
+import { damageMult } from './damage.js';
 import { Input, GAME_KEYS } from './input.js';
 import { Sfx } from './audio.js';
 import { useSlot } from './hotbar.js';
@@ -412,7 +413,7 @@ export class Game {
   // --- Feedback helpers used across systems ---
 
   log(text, cls = '') { this.ui.log(text, cls); }
-  popup(pos, text, cls) { this.ui.popup(pos, text, cls); }
+  popup(pos, text, cls, tag) { this.ui.popup(pos, text, cls, tag); }
   flash(color, strength) { this.ui.flash(color, strength); }
   shake(amount) {
     this.shakeAmt = Math.max(this.shakeT > 0 ? this.shakeAmt : 0, amount);
@@ -625,27 +626,30 @@ export class Game {
   // --- Combat & events ---
 
   /**
-   * Hurts the player by `amount`, less their armour unless opts.ignoreArmor. opts: { source (what killed them),
-   * type (a physical blow's damage type, see damage.js), monster, fire, dot, ranged, ignoreArmor }.
+   * Hurts the player by `amount`, less their armour unless opts.ignoreArmor; what gets through is then more or
+   * less as their armour is weak to or resists the blow's damage type. opts: { source (what killed them), type (a
+   * physical blow's damage type, see damage.js), monster, fire, dot, ranged, ignoreArmor }.
    */
   hurtPlayer(amount, opts = {}) {
     if (this.over || this.dev?.god) return;
     const p = this.player;
     if (opts.fire && p.hasArtefact('ember')) {
-      if (!opts.dot) this.popup(playerPopupPos(p), 'immune', 'miss');
+      if (!opts.dot) this.popup(playerPopupPos(p), 'IMMUNE', 'immune');
       return;
     }
-    let dmg = amount;
+    let dmg = amount, mult = 1;
+    const a = p.equip.armor;
     if (!opts.ignoreArmor) {
       const def = p.defense;
       if (def > 0) dmg -= rand.int(Math.ceil(def * 0.4), def);
-      const a = p.equip.armor;
       if (a && !a.identified && --a.hitsToId <= 0) {
         this.knowledge.identify(a);
         this.log(`You've taken enough hits to know your armor: ${this.knowledge.name(a)}.`, 'info');
       }
+      if (a) mult = damageMult(ARMORS[a.type], opts.type);
     }
     dmg = Math.max(0, dmg);
+    if (dmg > 0 && mult !== 1) dmg = mult > 0 ? Math.max(1, Math.round(dmg * mult)) : 0;
     if (dmg === 0) {
       this.popup(playerPopupPos(p), 'blocked', 'miss');
       this.audio.block();
@@ -653,7 +657,9 @@ export class Game {
     }
     p.hp -= dmg;
     this.ui.hurtFlash(Math.min(1, (dmg / p.maxHp) * 3));
-    this.popup(playerPopupPos(p), `-${dmg}`, 'hurt');
+    if (mult > 1) this.popup(playerPopupPos(p), `-${dmg}`, 'hurt weak', 'WEAK SPOT');
+    else if (mult < 1) this.popup(playerPopupPos(p), `-${dmg}`, 'hurt resist', 'RESISTED');
+    else this.popup(playerPopupPos(p), `-${dmg}`, 'hurt');
     if (!opts.dot) {
       this.shake(0.1 + Math.min(0.3, dmg / p.maxHp));
       this.audio.hurt();

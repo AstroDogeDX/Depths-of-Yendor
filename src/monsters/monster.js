@@ -4,7 +4,7 @@ import { rand } from '../rng.js';
 import { PLAYER_RADIUS, EYE_H, TILE, danger } from '../config.js';
 import { spawnProjectile } from '../fx/projectiles.js';
 import { burst } from '../fx/particles.js';
-import { damageType, damageMult } from '../damage.js';
+import { DAMAGE_TYPES, damageType, damageMult } from '../damage.js';
 
 const BLOOD = {
   rat: 0x901010, bat: 0x901010, slime: 0x40c040, goblin: 0x902010, archer: 0x902010, skeleton: 0xe0d8c0,
@@ -199,12 +199,13 @@ export class Monster {
     if (level.isVisibleWorld(this.x, this.z)) game.popup(this.headPos(), '?', 'alert');
   }
 
-  notice(game) {
+  /** Knows where you are now, and hunts you. `mark` shows a "!" over it (not when a hit woke it: that has its own). */
+  notice(game, mark = true) {
     if (this.state === 'hunt' && this.seen) return;
     this.state = 'hunt';
     this.seen = true;
     this.lostT = 0;
-    if (game.level.isVisibleWorld(this.x, this.z)) game.popup(this.headPos(), '!', 'alert');
+    if (mark && game.level.isVisibleWorld(this.x, this.z)) game.popup(this.headPos(), '!', 'alert');
     game.audio.alert(this.boss ? 0.4 : 1 + (1.2 - this.height) * 0.4);
     if (this.boss) game.log(`The ${this.name} awakens. "You shall not take it."`, 'danger');
   }
@@ -391,7 +392,7 @@ export class Monster {
         x: ox, y: oy, z: oz, vx: vx * r.speed, vy: (ty / len) * r.speed, vz: vz * r.speed,
         owner: 'monster', kind: r.kind, color: r.color, size: r.size, source: this.name,
         dmg: Math.round(rand.int(this.def.dmg[0], this.def.dmg[1]) * this.dmgMult * 0.85),
-        fire: r.kind === 'fire',
+        type: r.dmgType && damageType(r), fire: r.kind === 'fire',
       });
     }
     game.audio.shoot(r.kind);
@@ -404,27 +405,31 @@ export class Monster {
   takeDamage(game, amount, opts = {}) {
     if (this.dead) return 0;
     if (opts.fire && this.def.fireImmune) {
-      game.popup(this.headPos(), 'immune', 'miss');
+      game.popup(this.headPos(), 'IMMUNE', 'immune');
       return 0;
     }
     const mult = damageMult(this.def, opts.type);
+    if (mult !== 1) this.revealResist(game, opts.type, mult);
     if (mult === 0) {
-      game.popup(this.headPos(), 'immune', 'miss');
+      game.popup(this.headPos(), 'IMMUNE', 'immune');
       game.audio.block();
-      this.notice(game);
+      this.notice(game, false);
       return 0;
     }
     if (mult !== 1) amount = Math.max(1, Math.round(amount * mult));
     this.hp -= amount;
     this.hurtT = 0.18;
-    game.popup(this.headPos(), String(amount), opts.dot ? 'dot' : opts.sneak ? 'crit' : 'dmg');
+    const cls = opts.dot ? 'dot' : opts.sneak ? 'crit' : 'dmg';
+    if (mult > 1) game.popup(this.headPos(), String(amount), `${cls} weak`, 'WEAK!');
+    else if (mult < 1) game.popup(this.headPos(), String(amount), `${cls} resist`, 'RESISTED');
+    else game.popup(this.headPos(), String(amount), cls);
     if (!opts.dot) burst(game.level, this.x, this.baseY + this.height * 0.6, this.z, BLOOD[this.type], 8, 2.5, 0.6);
     if (opts.knockback && !this.boss && this.type !== 'golem' && this.type !== 'troll') {
       this.x += opts.knockback.x * 0.35;
       this.z += opts.knockback.z * 0.35;
       game.level.collide(this, this.radius, this.flies);
     }
-    this.notice(game); // no-op if it already knows where you are
+    this.notice(game, false); // no-op if it already knows where you are
     if (game.level.playerInShop) game.level.shopPursuers.add(this); // provoked from the shop: it may come in
     // Heavy blows stagger a monster out of its windup.
     if (this.attack.phase === 'windup' && !this.boss && amount >= this.maxHp * 0.3) {
@@ -433,6 +438,15 @@ export class Monster {
     }
     if (this.hp <= 0) this.die(game);
     return amount;
+  }
+
+  /** The first time in a run you see its kind resist a damage type (or be weak to it), the log says so. */
+  revealResist(game, type, mult) {
+    if (!game.knowledge.learnResist(this.type, type)) return;
+    const blows = DAMAGE_TYPES[type].blows;
+    if (mult === 0) game.log(`${blows[0].toUpperCase()}${blows.slice(1)} can't harm the ${this.name}!`, 'warn');
+    else if (mult < 1) game.log(`The ${this.name} resists ${blows}.`, 'warn');
+    else game.log(`The ${this.name} is weak to ${blows}!`, 'good');
   }
 
   die(game) {

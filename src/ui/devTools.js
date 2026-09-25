@@ -6,6 +6,7 @@ import { generateLevel } from '../dungeon/generator.js';
 import { disposeGroup } from '../dungeon/levelBuilder.js';
 import { Level } from '../world/level.js';
 import { T } from '../dungeon/tiles.js';
+import { DAMAGE_TYPES, damageType, describeResist } from '../damage.js';
 import './devTools.css';
 
 // Dev tools, for testing by hand: jump to any floor, give yourself items, change your stats, spawn monsters, lay
@@ -102,7 +103,11 @@ export class DevTools {
       }
     });
     this.$('.dev-monsters').innerHTML = Object.entries(MONSTERS)
-      .map(([type, def]) => `<button class="alt" data-monster="${type}" title="${def.name}">${cap(def.name)}</button>`).join('');
+      .map(([type, def]) => {
+        const shots = def.ranged?.dmgType ? `, its ${def.ranged.kind}s ${DAMAGE_TYPES[damageType(def.ranged)].name}` : '';
+        const tip = `${cap(def.name)}: its blows ${DAMAGE_TYPES[damageType(def)].name}${shots}. ${describeResist(def)}`;
+        return `<button class="alt" data-monster="${type}" title="${tip.trim()}">${cap(def.name)}</button>`;
+      }).join('');
     this.$('.dev-traps').innerHTML = ['spike', 'poison', 'teleport', 'alarm']
       .map((type) => `<button class="alt" data-trap="${type}">${cap(type)}</button>`).join('');
     this.$('.dev-tabs').innerHTML = KINDS.map(([kind, label]) => `<button class="alt" data-kind="${kind}">${label}</button>`).join('');

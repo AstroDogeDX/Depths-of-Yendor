@@ -2,7 +2,7 @@ import {
   WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD,
   POTION_COLORS, SCROLL_SYLLABLES, WAND_MATERIALS, RING_GEMS,
 } from './defs.js';
-import { DAMAGE_TYPES, damageType } from '../damage.js';
+import { DAMAGE_TYPES, damageType, describeResist } from '../damage.js';
 
 // Per-run knowledge: which unidentified appearance maps to which item type, and what the player knows.
 export class Knowledge {
@@ -10,6 +10,7 @@ export class Knowledge {
     this.appearance = { potion: {}, scroll: {}, wand: {}, ring: {} };
     this.known = { potion: new Set(), scroll: new Set(), wand: new Set(), ring: new Set() };
     this.tried = { potion: new Set(), scroll: new Set(), wand: new Set(), ring: new Set() };
+    this.resists = new Set(); // "monster:damage type" pairs you've seen it resist or be weak to (see learnResist)
 
     const colors = rng.shuffle([...POTION_COLORS]);
     Object.keys(POTIONS).forEach((k, i) => (this.appearance.potion[k] = colors[i]));
@@ -51,6 +52,14 @@ export class Knowledge {
       return true;
     }
     return false;
+  }
+
+  /** Notes that you've seen a kind of monster resist a damage type or be weak to it. True the first time. */
+  learnResist(monster, dmgType) {
+    const key = `${monster}:${dmgType}`;
+    if (this.resists.has(key)) return false;
+    this.resists.add(key);
+    return true;
   }
 
   /** Fully identify an item: its type and, for equipment, its enchantment and curse. */
@@ -143,7 +152,8 @@ export class Knowledge {
       }
       case 'armor': {
         const d = ARMORS[item.type];
-        let s = `${d.desc}\n\nDefense ${d.def}. Requires ${d.str} strength; each point short slows you.`;
+        const stats = [`Defense ${d.def}.`, describeResist(d), `Requires ${d.str} strength; each point short slows you.`];
+        let s = `${d.desc}\n\n${stats.filter(Boolean).join(' ')}`;
         if (!item.identified) s += '\n\nYou do not know its enchantment. Wear it into a few fights to learn more.';
         if (item.curseKnown && item.cursed) s += '\n\nA malevolent curse clings to it.';
         return s;

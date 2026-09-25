@@ -79,9 +79,40 @@ Potion, scroll and food slots remember the *type*, so a slot whose stack runs ou
 
 ## Damage types
 
-Every melee blow deals one of three kinds of physical damage: **slash** (the swords and the battle axe), **stab** (the dagger and the spear, which thrust rather than swing) or **bash** (the mace, the war hammer and your fists). A weapon's description and the pack's stats say which. Monsters' blows work the same way. A weapon or monster that doesn't give a type deals generic physical damage; for now, that's every monster.
+Every melee blow deals one of three kinds of physical damage: **slash** (the swords and the battle axe), **stab** (the dagger and the spear, which thrust rather than swing) or **bash** (the mace, the war hammer and your fists). A weapon's description and the pack's stats say which. Monsters' blows work the same way, and a goblin archer's arrows stab. A weapon or monster that doesn't give a type deals generic physical damage.
 
-A monster can resist a type or be weak to it: `resist` in its entry in `monsters/defs.js` maps types to multipliers on the damage that gets through. For example, `{ slash: 0.5, bash: 1.5 }` takes half from blades and half as much again from hammers, and 0 makes it immune. A resisted blow always does at least 1 unless the monster is immune. Damage that isn't a blow (fire, poison, wands, arrows, traps) has no type and ignores resistances. No monster has any yet. The types are in `damage.js`. A weapon's is its `dmgType` in `items/defs.js`, and a monster's is its `dmgType` in `monsters/defs.js`.
+Monsters and armour can resist a type or be weak to it. `resist` in a monster's entry in `monsters/defs.js`, or an armour's in `items/defs.js`, maps types to multipliers on the damage that gets through (after armour's defense has taken its share). For example, `{ slash: 0.5, bash: 1.5 }` takes half from blades and half as much again from hammers, and 0 makes it immune. A resisted blow always does at least 1 unless it's immune. Damage that isn't a blow (fire, poison, wands, magic bolts, traps) has no type and ignores resistances. The types are in `damage.js`. A weapon's type is its `dmgType` in `items/defs.js`, and a monster's is its `dmgType` in `monsters/defs.js` (and its `ranged` attack's `dmgType`, for shots that have one).
+
+Each armour turns some blows better than others, as its description says. The table gives the damage you take:
+
+| Armour | Slash | Stab | Bash |
+| --- | --- | --- | --- |
+| Leather | +15% | | −15% |
+| Studded leather | −15% | +15% | |
+| Chain mail | −30% | +20% | +20% |
+| Splint mail | −20% | +15% | −10% |
+| Plate | −30% | −20% | +25% |
+
+Each monster's blows fit what it fights with, and most resist some weapons or are weak to others. The table gives the damage it takes:
+
+| Monster | Its blows | Slash | Stab | Bash |
+| --- | --- | --- | --- | --- |
+| Giant rat | stab (bite) | | | |
+| Cave bat | stab (bite) | +25% | | |
+| Green ooze | bash | +25% | −25% | −50% |
+| Goblin | slash (short blade) | | | |
+| Goblin archer | stab (arrows), bash (its bow, up close) | | | |
+| Skeleton | slash (sword) | −25% | −50% | +50% |
+| Orc | slash (axe) | | +25% | |
+| Wraith | slash (claws) | | −50% | −25% |
+| Fire imp | slash (claws) | | +25% | |
+| Troll | bash (club) | | +25% | −25% |
+| Stone golem | bash (fists) | −50% | −50% | +50% |
+| Warden of Yendor | slash (halberd) | −30% | −20% | +25% |
+
+So a mace is the answer to skeletons, golems and the Warden but little use against oozes, wraiths and trolls. A spear or dagger runs through orcs, imps and trolls, but not the undead. Carrying a second weapon pays. The dev tools' monster buttons list these as tooltips.
+
+You can see when a type matters. A hit on a monster's weakness shows a bigger orange number tagged **WEAK!** and lands with a crunch. A resisted hit shows a smaller grey number tagged **RESISTED** and lands with a dull clank. A monster immune to the blow shows **IMMUNE**. The first time in a run you see a kind of monster resist a type or be weak to it, the log says so, e.g. "The skeleton is weak to bashing blows!". A blow that hits your armour's weakness is tagged **WEAK SPOT**, and one it resists is tagged **RESISTED**.
 
 ## Stamina, sprinting and sneaking
 
@@ -204,7 +235,7 @@ src/
   game.js              run lifecycle, level transitions, rendering, interaction, traps, endings
   player.js            movement, attack meter, stats, statuses, hunger/regen, inventory
   combat.js            player melee resolution
-  damage.js            damage types (slash, stab, bash, generic) and monsters' resistances to them
+  damage.js            damage types (slash, stab, bash, generic) and monsters' and armour's resistances to them
   hotbar.js            hotbar bindings and what each slot does when pressed
   input.js / audio.js  pointer-lock input; WebAudio synth sfx + ambient drone
   dungeon/generator.js pure data: plans the loop and branches, lays out rooms, routes corridors, populates (seeded)

@@ -67,9 +67,20 @@ export class Sfx {
   }
   swing() { this.noise({ dur: 0.18, vol: 0.22, freq: 700, freq2: 2600, q: 0.9 }); }
   whiff() { this.noise({ dur: 0.14, vol: 0.1, freq: 2000, freq2: 800, q: 0.7 }); }
-  hit() {
-    this.tone({ f: 150, f2: 55, dur: 0.14, type: 'square', vol: 0.22 });
-    this.noise({ dur: 0.09, vol: 0.3, freq: 500, q: 0.5 });
+  /** A melee blow landing: 'weak' (on a weakness) crunches, 'resist' (resisted) lands dull with a clank. */
+  hit(effect) {
+    if (effect === 'weak') {
+      this.tone({ f: 130, f2: 40, dur: 0.2, type: 'square', vol: 0.28 });
+      this.noise({ dur: 0.14, vol: 0.4, freq: 380, q: 0.5 });
+      this.noise({ dur: 0.05, vol: 0.18, freq: 2600, q: 1.2 });
+    } else if (effect === 'resist') {
+      this.tone({ f: 110, f2: 70, dur: 0.1, type: 'triangle', vol: 0.18 });
+      this.tone({ f: 620, f2: 560, dur: 0.12, type: 'triangle', vol: 0.07 });
+      this.noise({ dur: 0.06, vol: 0.14, freq: 300, q: 0.5, type: 'lowpass' });
+    } else {
+      this.tone({ f: 150, f2: 55, dur: 0.14, type: 'square', vol: 0.22 });
+      this.noise({ dur: 0.09, vol: 0.3, freq: 500, q: 0.5 });
+    }
   }
   block() { this.tone({ f: 1000, f2: 750, dur: 0.09, type: 'triangle', vol: 0.15 }); }
   hurt() {
