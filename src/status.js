@@ -171,7 +171,11 @@ export function immuneTo(who, key) {
  */
 export function afflict(game, who, key, secs, { show = true } = {}) {
   const def = STATUSES[key], s = who.status;
-  if (!def || !(key in s) || secs <= 0) return false;
+  if (!def) {
+    console.warn(`afflict: no status called '${key}'`); // (ALIASES are only for old saves)
+    return false;
+  }
+  if (!(key in s) || secs <= 0) return false;
   if (immuneTo(who, key)) {
     if (show) who.statusNote(game, key, 'immune');
     return false;

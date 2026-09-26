@@ -815,7 +815,7 @@ export class Game {
         this.audio.hiss();
         ring(level, x, z, 0x40c040, 3, 1);
         gasCloud(level, x, z, 0x6ac03a);
-        p.addStatus('poison', 8, this);
+        p.addStatus('poisoned', 8, this);
         break;
       case 'teleport':
         this.log('The glyph flares and the world lurches!', 'warn');
