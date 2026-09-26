@@ -522,7 +522,7 @@ export class Monster {
     dz /= d;
     // Monsters open unlocked doors in their way; locked ones are already walls to their pathfinding.
     const door = level.doorAhead(this.x, this.z, dx, dz, this.radius);
-    if (door) level.openDoor(door);
+    if (door) level.openDoor(door, this);
     let jitter = 0;
     if (this.def.erratic) jitter += Math.sin(this.t * 3.1) * 0.9;
     if (this.status.confused > 0) jitter += Math.sin(this.t * 2.3) * 2.4;

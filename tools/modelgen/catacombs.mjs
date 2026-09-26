@@ -4,7 +4,8 @@
 // floors lie 1.5 m below the floor (96 px); the vault is 2.8 m up (179 px).
 import * as THREE from 'three';
 import { defineModel, revolve, tube, noise3, rand, fract, ramp } from './lib.mjs';
-import { MAT, P, patches, bevel } from './materials.mjs';
+import { MAT, PAL, P, patches, bevel } from './materials.mjs';
+import { HALF, VAULT as TOP, prism, archPts, archSlices, bothFaces } from './doorkit.mjs';
 
 const CAT_PAL = {
   bone: P('#3a3428', '#5a5140', '#7a705a', '#9a9076', '#b8ae94', '#d4ccb2'),
@@ -13,6 +14,7 @@ const CAT_PAL = {
   wax: P('#5a5040', '#857a5e', '#aea380', '#cdc29e', '#e6dcb8'),
   void: P('#030303', '#08080a', '#0e0e10'),
   blood: P('#1a0806', '#2e0e0a', '#44150f'),
+  oak: P('#0e0a07', '#17110b', '#211810', '#2c2016', '#382a1c', '#453423', '#53402c'), // old oak, near black
 };
 const PIT = -96; // the floor of a spike pit
 const VAULT = 179; // the ceiling
@@ -58,6 +60,58 @@ const MATS = {
     if (Math.abs(n.y) < 0.5 || Math.abs(p.x) > info.hw - 4 || Math.abs(p.z) > info.hl - 4) return MAT.rustyIron(c);
     if (fract((p.x + 200) / 9) < 0.34 || fract((p.z + 200) / 9) < 0.34) return MAT.rustyIron(c);
     return [0, 0, 0, 0];
+  },
+  // --- The door (door_catacombs)
+  // Old oak boards up the door, near black with age: dark seams between them, grain and the odd knot.
+  oak(c) {
+    const { p, n } = c;
+    if (Math.abs(n.z) < 0.5) return ramp(CAT_PAL.oak, 0.34 + 0.12 * patches(p, 940, 0.5), c.ax, c.ay);
+    const k = Math.floor((p.x + 52) / 17.34), f = fract((p.x + 52) / 17.34);
+    if (f < 0.06) return ramp(CAT_PAL.oak, 0.02, c.ax, c.ay);
+    let v = 0.44 + 0.16 * (rand(k, 941) - 0.5) + 0.1 * patches(p, 942, 0.3) + bevel(c, 0.1);
+    if (fract(p.y * 0.07 + noise3(p.x * 0.4, p.y * 0.03, k, 943) * 0.9) < 0.14) v -= 0.14;
+    if (rand(k, Math.floor(p.y / 13), 944) > 0.93 && fract(p.y / 13) < 0.3) v -= 0.2;
+    return ramp(CAT_PAL.oak, v - Math.max(0, 22 - p.y) * 0.008, c.ax, c.ay);
+  },
+  // Black iron strap, rivets every 9 px along its middle (`info.y`).
+  strap(c) {
+    const { p, n, info } = c;
+    if (Math.abs(n.z) > 0.5 && info.y !== undefined && Math.abs(p.y - info.y) < 1.1 && Math.abs(fract(p.x / 9) - 0.5) < 0.14) {
+      return ramp(PAL.iron, p.y > info.y ? 0.75 : 0.55, c.ax, c.ay);
+    }
+    return ramp(PAL.iron, 0.2 + 0.14 * patches(p, 945, 0.4) + bevel(c, 0.2) - (rand(c.ax, c.ay, 946) > 0.96 ? 0.1 : 0), c.ax, c.ay);
+  },
+  // Dressed tomb stone, the blocks' own edges its joints.
+  voussoir(c) {
+    if (c.edge < 0.8 && Math.min(c.W, c.H) > 4) return ramp(CAT_PAL.stone, 0.12, c.ax, c.ay);
+    return ramp(CAT_PAL.stone, 0.48 + 0.14 * patches(c.p, 947, 0.35) + 0.1 * (rand(c.info.block ?? 0, 948) - 0.5) + bevel(c, 0.15), c.ax, c.ay);
+  },
+  // Stone blocks laid in courses 21 px high, a block 32 px long, each course half a block along from the last.
+  ashlar(c) {
+    const { p, n } = c;
+    const u = Math.abs(n.x) > 0.5 ? p.z : p.x;
+    const row = Math.floor((p.y + 210) / 21), off = row % 2 ? 16 : 0;
+    if (Math.abs(n.y) < 0.5 && (fract((p.y + 210) / 21) < 0.05 || fract((u + 320 + off) / 32) < 0.03)) return ramp(CAT_PAL.stone, 0.12, c.ax, c.ay);
+    return ramp(CAT_PAL.stone, 0.46 + 0.12 * (rand(Math.floor((u + 320 + off) / 32), row, 949) - 0.5) + 0.12 * patches(p, 950, 0.35), c.ax, c.ay);
+  },
+  // A padlock's body: dark iron, a keyhole on its face at (`info.kx`, `info.ky`).
+  lockIron(c) {
+    const { p, n, info } = c;
+    if (Math.abs(n.z) > 0.5 && (Math.hypot(p.x - info.kx, p.y - info.ky) < 1.3 || (Math.abs(p.x - info.kx) < 0.6 && p.y < info.ky && p.y > info.ky - 3.5))) {
+      return ramp(CAT_PAL.void, 0.3, c.ax, c.ay);
+    }
+    return ramp(PAL.iron, 0.28 + 0.12 * patches(p, 951, 0.5) + bevel(c, 0.25), c.ax, c.ay);
+  },
+  // A chain lying across a face, painted on a strip facing ±z along a straight run (`info`: the run's start `a`
+  // [x, y], its direction `d`, the strip's half-width `w`, and `off`, how far along the chain the run begins):
+  // links alternate between a ring seen flat, open in the middle, and one seen edge-on, a bar (cut out).
+  chainRun(c) {
+    const { p, info } = c;
+    const rx = p.x - info.a[0], ry = p.y - info.a[1];
+    const v = rx * info.d[0] + ry * info.d[1] + info.off, u = Math.abs(ry * info.d[0] - rx * info.d[1]) / info.w;
+    const k = Math.floor(v / 5), f = v / 5 - k;
+    const iron = k % 2 === 0 ? u < 0.95 && (u > 0.42 || f < 0.2 || f > 0.8) : u < 0.32;
+    return iron ? MAT.rustyIron(c) : [0, 0, 0, 0];
   },
   // A hanging chain, painted on two crossed strips: its links alternate between one seen flat (an open oval)
   // and one seen edge-on (a bar), the other way round on each strip.
@@ -287,5 +341,65 @@ export const catacombs = {
       return [8, 16, 24, 32].some((row) => Math.abs(p.z - row) < 1 && Math.abs(p.x) < 18 - (row === 32 ? 8 : 0) && fract((p.x + 40) / 4.5) < 0.6);
     };
     m.cube('slab', [-28, 0, -48], [28, 1.2, 48], { mat: 'tomb', info: { carve: (p) => carve(p) && Math.abs(p.x) < 26.5 && Math.abs(p.z) < 46.5 }, faces: ['up', 'north', 'south', 'east', 'west'] });
+  }, { density: 1 }),
+
+  door_catacombs: defineModel('door_catacombs', MATS, (m) => {
+    // A tall door of old oak boards under a round stone arch, a skull carved on the keystone either side (see
+    // doorkit.mjs for how doors go together). Three black iron straps cross it from the hinges, ending in spear
+    // points, with studs between them and a heavy ring to pull it by. Locked, a chain sags across it from a
+    // staple in the jamb to a hasp over the latch, padlocked, on both sides.
+    const OW = 53, SPRING = 124, RISE = 28, BACK = 40; // the opening, where its arch springs, and the arch's rise inside and out
+    const zs = (s, a, b) => (s > 0 ? [a, b] : [-b, -a]); // a to b out from the middle, on the side s faces
+    m.group('frame', () => {
+      for (const s of [-1, 1]) m.cube(`jamb_${s < 0 ? 'left' : 'right'}`, [s < 0 ? -HALF : OW, 0, -18], [s < 0 ? -OW : HALF, SPRING, 18], { mat: 'ashlar' });
+      m.cube('step', [-OW, 0, -18], [OW, 2, 18], { mat: 'voussoir', info: { block: 40 } });
+      // Nine voussoirs between the curve over the opening and the arch's back, the keystone standing proud; the
+      // wall above them, up to the vault.
+      const N = 9, inner = archPts(OW, SPRING, RISE, N), outer = archPts(HALF, SPRING, BACK, N);
+      for (let i = 0; i < N; i++) {
+        const key = i === (N - 1) / 2, lift = key ? 6 : 0, d = key ? 21 : 18;
+        const block = [inner[i], [outer[i][0], outer[i][1] + lift], [outer[i + 1][0], outer[i + 1][1] + lift], inner[i + 1]];
+        m.mesh(`voussoir_${i + 1}`, prism(block, -d, d), { mat: 'voussoir', info: { block: i } });
+        m.mesh(`spandrel_${i + 1}`, prism([outer[i], [outer[i][0], TOP], [outer[i + 1][0], TOP], outer[i + 1]], -16, 16), { mat: 'ashlar' });
+      }
+      bothFaces((s) => skull(m, `keystone_skull_${s > 0 ? 'front' : 'back'}`, [0, SPRING + RISE + 8, s * 21.5], { s: 10, rot: s > 0 ? [0, 0, 0] : [0, 180, 0] }));
+    });
+    m.group('leaf', () => {
+      m.cube('boards', [-OW + 1, 1.5, -4], [OW - 1, SPRING, 4], { mat: 'oak' });
+      archSlices(OW - 1, SPRING, RISE - 1, 12, SPRING).forEach((slice, i) => m.mesh(`boards_top_${i + 1}`, prism(slice, -4, 4), { mat: 'oak' }));
+      bothFaces((s) => {
+        const side = s > 0 ? 'front' : 'back', [z0, z1] = zs(s, 4, 5.6), [t0, t1] = zs(s, 4, 5.2);
+        [18, 62, 106].forEach((y, i) => m.mesh(`strap_${i + 1}_${side}`,
+          prism([[-OW + 1, y], [26, y], [34, y + 3.5], [26, y + 7], [-OW + 1, y + 7]], z0, z1), { mat: 'strap', info: { y: y + 3.5 } }));
+        for (const y of [42, 86]) for (let k = 0; k < 6; k++) {
+          const x = -OW + 1 + 17.33 * (k + 0.5);
+          m.cube(`stud_${y}_${k + 1}_${side}`, [x - 1.3, y - 1.3, t0], [x + 1.3, y + 1.3, t1], { mat: 'strap' });
+        }
+        const [b0, b1] = zs(s, 4, 6.2);
+        m.cube(`ring_boss_${side}`, [33, 73, b0], [39, 79, b1], { mat: 'strap' });
+        ring(m, `ring_${side}`, [36, 67, s * 6.6], 6.5, { n: 10, half: 1.2, normal: 'z' });
+      });
+      for (const y of [16, 60, 104]) m.mesh(`pintle_${y}`, revolve([[0, 0], [2.6, 0], [2.6, 11], [0, 11]], { sides: 6 }), { mat: 'strap', origin: [-OW, y, 0] });
+    }, { origin: [-OW, 0, 0] });
+    m.group('lock', () => {
+      bothFaces((s) => {
+        const side = s > 0 ? 'front' : 'back', [h0, h1] = zs(s, 5.6, 7.4), [b0, b1] = zs(s, 7.4, 12);
+        m.cube(`hasp_${side}`, [34, 76, h0], [62, 82, h1], { mat: 'strap' });
+        m.cube(`padlock_${side}`, [40, 58, b0], [51, 70, b1], { mat: 'lockIron', info: { kx: 45.5, ky: 64 } });
+        m.mesh(`shackle_${side}`, tube([[42, 69, s * 9.6], [42, 75, s * 9.6], [45.5, 78, s * 9.6], [49, 75, s * 9.6], [49, 69, s * 9.6]], { half: 1, side: [0, 0, 1] }), { mat: 'rustyIron' });
+        m.mesh(`staple_${side}`, tube([[-61, 77, s * 18], [-61, 83, s * 20], [-55, 83, s * 20], [-55, 77, s * 18]], { half: 1, side: [0, 0, 1] }), { mat: 'rustyIron' });
+        // The chain, sagging from the staple to the shackle in straight runs.
+        const A = [-58, 80, 19], B = [45.5, 76, 9.6], runs = 10, w = 2.2;
+        const pt = (t) => [A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t - 22 * 4 * t * (1 - t), s * (A[2] + (B[2] - A[2]) * t)];
+        let off = 0;
+        for (let j = 0; j < runs; j++) {
+          const a = pt(j / runs), b = pt((j + 1) / runs), len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+          const d = [(b[0] - a[0]) / len, (b[1] - a[1]) / len], nx = -d[1] * w, ny = d[0] * w;
+          const quad = [[a[0] - nx, a[1] - ny, a[2]], [b[0] - nx, b[1] - ny, b[2]], [b[0] + nx, b[1] + ny, b[2]], [a[0] + nx, a[1] + ny, a[2]]];
+          m.mesh(`chain_${j + 1}_${side}`, [facing(quad, [0, 0, s])], { mat: 'chainRun', info: { a: [a[0], a[1]], d, w, off } });
+          off += len;
+        }
+      });
+    });
   }, { density: 1 }),
 };

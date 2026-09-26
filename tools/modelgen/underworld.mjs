@@ -6,6 +6,7 @@
 // empty "flame" group where the fire burns. The lava lies 0.7 m below the floor (45 px).
 import { defineModel, loft, revolve, tube, noise3, rand, fract, ramp } from './lib.mjs';
 import { MAT, PAL, P, patches, bevel } from './materials.mjs';
+import { HALF, VAULT as TOP, bothFaces } from './doorkit.mjs';
 
 const UW = {
   basalt: P('#16121c', '#221b2a', '#2e2438', '#3b2f47', '#4a3b58', '#5c4a6c'),
@@ -146,6 +147,33 @@ const MATS = {
   scorch(c) {
     const r = Math.hypot(c.p.x, c.p.z) / (c.info.R * (0.75 + 0.35 * noise3(c.p.x * 0.08, 0, c.p.z * 0.08, 3081)));
     return r > 1 ? clear : ramp(UW.ash, 0.2 + 0.5 * r + 0.12 * patches(c.p, 3082, 0.6), c.ax, c.ay);
+  },
+
+  // --- The door (door_underworld)
+  // Obsidian: black, glassy, a sheen running across it in long diagonal glints.
+  obsidian(c) {
+    const { p, n } = c;
+    let v = 0.28 + 0.12 * patches(p, 3090, 0.3) + bevel(c, 0.25) + 0.08 * n.y;
+    if (fract((p.x * 0.7 + p.y * 0.35 + p.z * 0.2) / 23) < 0.05) v += 0.22;
+    return ramp(UW.basalt, v, c.ax, c.ay);
+  },
+  // Emissive, cut out, over the door's two halves: a ring of runes round the middle, split between them, the seam
+  // itself glowing above and below it, and a column of runes down each half.
+  doorGlyphs(c) {
+    const { p } = c, x = p.x, y = p.y - 84, r = Math.hypot(x, y), ax = Math.abs(x);
+    if (Math.abs(r - 26.4) < 0.8 || Math.abs(r - 17.6) < 0.8) return glowV(c);
+    if (r > 18.4 && r < 25.6) return runeAt((Math.atan2(y, x) + Math.PI) * 22, r - 18.8, 5) ? glowV(c) : clear;
+    if (ax < 1.05 && r > 27.2) return glowV(c, 0.62);
+    if (ax > 22.5 && ax < 27.5 && ((p.y > 12 && p.y < 48) || (p.y > 120 && p.y < 138))) return runeAt(ax - 22.5, p.y - 12, x < 0 ? 12 : 13) ? glowV(c) : clear;
+    return clear;
+  },
+  // Emissive, cut out: the seal on a locked door, across its seam: a ring of runes, a bar of light, the cult's eye.
+  seal(c) {
+    const { p } = c, x = p.x, y = p.y - 84, r = Math.hypot(x, y);
+    if (Math.abs(r - 34.8) < 0.9 || Math.abs(r - 26) < 0.8) return glowV(c, 0.86);
+    if (r > 26.8 && r < 33.8) return runeAt((Math.atan2(y, x) + Math.PI) * 31, r - 26.9, 21) ? glowV(c, 0.86) : clear;
+    if (Math.abs(y) < 1.3 && Math.abs(x) < 36 && r > 12) return glowV(c, 0.9);
+    return MATS.sigil({ ...c, info: { cx: 0, cy: 84, R: 7 } });
   },
 };
 
@@ -409,4 +437,43 @@ export const underworld = {
     for (const s of [-1, 1]) horn(m, `horn_${s}`, [[s * 6, 2, 16], [s * 11, 4, 15], [s * 14, 10, 14], [s * 12, 15, 13]], 1.8, 'bone');
     m.group('flame', undefined, { origin: [0, 0, 16] });
   }, { density: 2, glow: ['violetGlow', 'violetEmbers'] }),
+
+  door_underworld: defineModel('door_underworld', MATS, (m) => {
+    // A door in two halves of obsidian that slide apart into the walls (see doorkit.mjs for how doors go
+    // together): a ring of runes round its middle, split between them, the seam glowing violet above and below
+    // it, a column of runes down each half. Its frame is basalt, runes shining up the jambs, a band of them along
+    // the lintel under the cult's eye. Locked, a seal burns across the seam: a greater ring of runes, a bar of
+    // light, the eye, on both sides.
+    const OW = 50, OH = 144; // the opening
+    m.group('frame', () => {
+      for (const s of [-1, 1]) m.cube(`jamb_${s < 0 ? 'left' : 'right'}`, [s < 0 ? -HALF : OW, 0, -20], [s < 0 ? -OW : HALF, OH, 20], { mat: 'basalt' });
+      m.cube('lintel', [-HALF, OH, -20], [HALF, TOP, 20], { mat: 'basalt' });
+      m.cube('sill', [-OW, 0, -20], [OW, 1.5, 20], { mat: 'basalt' });
+      bothFaces((s) => {
+        const side = s > 0 ? 'front' : 'back', z = s * 20.3;
+        for (const k of [-1, 1]) {
+          const x0 = k * 57 - 2.5;
+          overlay(m, `jamb_runes_${k < 0 ? 'left' : 'right'}_${side}`, [[x0, 12, z], [x0 + 5, 12, z], [x0 + 5, 132, z], [x0, 132, z]], [0, 0, s], 'runes', { u: 'x', u0: x0, v0: 12, seed: k + 2 * s });
+        }
+        overlay(m, `lintel_runes_${side}`, [[-60, 146.5, z], [60, 146.5, z], [60, 153.5, z], [-60, 153.5, z]], [0, 0, s], 'runes', { u: 'x', u0: -60, v0: 146.5, seed: 5 + s });
+        overlay(m, `eye_${side}`, [[-13, 154, z], [13, 154, z], [13, 179, z], [-13, 179, z]], [0, 0, s], 'sigil', { cx: 0, cy: 166.5, R: 6 });
+      });
+    });
+    for (const k of [-1, 1]) {
+      const name = k < 0 ? 'leaf_left' : 'leaf_right', [x0, x1] = k < 0 ? [-OW, -0.3] : [0.3, OW];
+      m.group(name, () => {
+        m.cube(`${name}_slab`, [x0, 0.5, -5], [x1, OH - 0.5, 5], { mat: 'obsidian' });
+        bothFaces((s) => {
+          const z = s * 5.15, [a, b] = k < 0 ? [x0 + 2, x1] : [x0, x1 - 2];
+          overlay(m, `${name}_glyphs_${s > 0 ? 'front' : 'back'}`, [[a, 2, z], [b, 2, z], [b, OH - 2, z], [a, OH - 2, z]], [0, 0, s], 'doorGlyphs');
+        });
+      }, { origin: [(x0 + x1) / 2, 0, 0] });
+    }
+    m.group('lock', () => {
+      bothFaces((s) => {
+        const z = s * 6.9;
+        overlay(m, `seal_${s > 0 ? 'front' : 'back'}`, [[-37, 47, z], [37, 47, z], [37, 121, z], [-37, 121, z]], [0, 0, s], 'seal');
+      });
+    });
+  }, { density: 1, glow: ['runes', 'sigil', 'doorGlyphs', 'seal'] }),
 };

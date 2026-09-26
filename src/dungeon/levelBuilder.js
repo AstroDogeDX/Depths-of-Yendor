@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { TILE, WALL_H, MODEL_PX, THEMES } from '../config.js';
 import { T } from './tiles.js';
-import { getTextures, getDoorTexture } from './textures.js';
+import { getTextures } from './textures.js';
 import { RNG } from '../rng.js';
 import { glowSprite } from '../fx/glow.js';
 import { Flame } from '../fx/flame.js';
 import { buildBBModel } from '../items/bbmodel.js';
-import { placeProp, propTemplate } from './props.js';
+import { placeProp, propTemplate, propRig } from './props.js';
 import { roughRock } from './roughRock.js';
 import { Haze } from '../fx/haze.js';
 import { faceKey, wallFace, decorProps } from './decor.js';
@@ -147,13 +147,17 @@ class GeoBuilder {
 
 const DIR_ANGLE = [Math.PI, Math.PI / 2, 0, -Math.PI / 2]; // N, E, S, W: rotate local +z to face that way
 
+/** A theme's door: a prop with moving parts (see tools/modelgen/doorkit.mjs, and buildDoor). */
+const doorModel = (theme) => `door_${theme.style}`;
+
 /**
- * Every prop a floor of `theme` might use: its decorations', its channels', its wall lights and, in every theme
- * after the first, the shop's. They must be loaded (loadProps) before one of its floors is built.
+ * Every prop a floor of `theme` might use: its doors', its decorations', its channels', its wall lights and, in
+ * every theme after the first, the shop's. They must be loaded (loadProps) before one of its floors is built.
  */
 export function propsForTheme(theme) {
   const fill = FILLS[theme.channels?.fill];
   return [...new Set([
+    doorModel(theme),
     ...decorProps(theme.style),
     ...(fill ? [fill.bridge, fill.end, fill.bed, ...(fill.lips ?? [])].filter(Boolean) : []),
     ...(THEMES.indexOf(theme) > 0 ? SHOP_PROPS : []),
@@ -372,14 +376,8 @@ export function buildLevelMeshes(data) {
     flames.push({ flame, halo, phase: rng.next() * 10 });
   }
 
-  const frameMat = new THREE.MeshLambertMaterial({ map: tex.wall, color: 0x8a8070 });
-  const doorMats = {
-    plain: new THREE.MeshLambertMaterial({ map: getDoorTexture(false) }),
-    locked: new THREE.MeshLambertMaterial({ map: getDoorTexture(true) }),
-    lock: new THREE.MeshLambertMaterial({ color: 0xc8a030, emissive: 0x302000 }),
-  };
   const doors = data.doors.map((d) => {
-    const built = buildDoor(d, frameMat, doorMats);
+    const built = buildDoor(d, doorModel(theme));
     group.add(built.group);
     return built;
   });
@@ -457,43 +455,38 @@ export function disposeGroup(group) {
   });
 }
 
-export const DOOR_HEIGHT = 2.35;
+/**
+ * A door in a wall-ring tile: the theme's door model (see tools/modelgen/doorkit.mjs), its passage along local z,
+ * turned for east/west walls. Its moving parts (`parts`: a swinging `leaf`, or `leaf_left` and `leaf_right`
+ * that slide apart, and the `lock` shown while it's locked) are moved by Level.poseDoor. `slide`: how far each
+ * sliding half goes, its own width.
+ */
+function buildDoor(d, type) {
+  const group = propRig(type).clone();
+  const parts = {};
+  group.traverse((o) => {
+    if (!o.isGroup || !o.name) return;
+    parts[o.name] = o;
+    o.userData.rest = o.position.clone();
+  });
+  if (parts.lock) parts.lock.visible = !!d.locked;
+  const slide = parts.leaf_left ? new THREE.Box3().setFromObject(parts.leaf_left).getSize(new THREE.Vector3()).x : 0;
+  const alongZ = d.side === 'N' || d.side === 'S';
+  group.rotation.y = alongZ ? 0 : Math.PI / 2;
+  group.position.set((d.x + 0.5) * TILE, 0, (d.y + 0.5) * TILE);
+  return { group, parts, alongZ, slide };
+}
 
 /**
- * A door in a wall-ring tile: lintel, jambs and a leaf hinged on one side. Built with the passage along
- * local z, then turned for east/west walls. The leaf swings into the room (see Level.update for `swing`).
+ * Puts a door's moving parts where being `amt` open (0..1, eased) has them: its leaf swung round, `swing` (±1)
+ * saying which way (toward +z for -1), or its two halves slid apart.
  */
-function buildDoor(d, frameMat, mats) {
-  const g = new THREE.Group();
-  const half = TILE / 2, DH = DOOR_HEIGHT, depth = 0.5;
-  const lintel = new THREE.Mesh(new THREE.BoxGeometry(TILE, WALL_H - DH, depth), frameMat);
-  lintel.position.set(0, DH + (WALL_H - DH) / 2, 0);
-  g.add(lintel);
-  for (const s of [-1, 1]) {
-    const post = new THREE.Mesh(new THREE.BoxGeometry(0.16, DH, depth), frameMat);
-    post.position.set(s * (half - 0.08), DH / 2, 0);
-    g.add(post);
-  }
-  const pivot = new THREE.Group();
-  pivot.position.set(-half + 0.16, 0, 0);
-  const leafW = TILE - 0.32;
-  const leaf = new THREE.Mesh(new THREE.BoxGeometry(leafW, DH - 0.03, 0.1), d.locked ? mats.locked : mats.plain);
-  leaf.position.set(leafW / 2, DH / 2, 0);
-  pivot.add(leaf);
-  if (d.locked) {
-    for (const z of [-0.07, 0.07]) {
-      const lock = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.18, 0.05), mats.lock);
-      lock.position.set(leafW - 0.25, 1.1, z);
-      pivot.add(lock);
-    }
-  }
-  g.add(pivot);
-  const alongZ = d.side === 'N' || d.side === 'S';
-  g.rotation.y = alongZ ? 0 : Math.PI / 2;
-  g.position.set((d.x + 0.5) * TILE, 0, (d.y + 0.5) * TILE);
-  // The room lies on local +z for north/west doors, -z for south/east; a negative turn swings toward +z.
-  const swing = d.side === 'N' || d.side === 'W' ? -1 : 1;
-  return { group: g, pivot, swing, leaf };
+export function poseDoor(door, amt, swing = 1) {
+  const k = amt * amt * (3 - 2 * amt);
+  const { leaf, leaf_left: l, leaf_right: r } = door.parts;
+  if (leaf) leaf.rotation.y = (swing * k * Math.PI) / 2;
+  if (l) l.position.x = l.userData.rest.x - k * door.slide;
+  if (r) r.position.x = r.userData.rest.x + k * door.slide;
 }
 
 function buildDownStairs(s, stoneMat, pitMat) {

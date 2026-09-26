@@ -169,33 +169,3 @@ export function getTextures(theme) {
   return cache.get(theme.name);
 }
 
-/** Vertical planks with iron bands; locked doors are darker, with more (and rustier) iron. */
-function doorTexture(locked) {
-  const rng = new RNG(`door:${locked}`);
-  const c = canvas();
-  const ctx = c.getContext('2d');
-  const woods = locked ? ['#3a2616', '#33200f', '#2c1b0c'] : ['#6a4526', '#5c3b1f', '#71492a'];
-  for (let b = 0; b < 4; b++) {
-    ctx.fillStyle = rng.pick(woods);
-    ctx.fillRect(b * 16, 0, 16, S);
-    for (let k = 0; k < 14; k++) { // grain
-      ctx.fillStyle = `rgba(0,0,0,${0.08 + rng.next() * 0.12})`;
-      ctx.fillRect(b * 16 + rng.int(1, 14), rng.int(0, S), 1, rng.int(6, 20));
-    }
-    ctx.fillStyle = '#1a0f08';
-    ctx.fillRect(b * 16, 0, 1, S);
-  }
-  const bands = locked ? [8, 30, 52] : [12, 48];
-  for (const y of bands) {
-    ctx.fillStyle = locked ? '#3a3230' : '#2e2e30';
-    ctx.fillRect(0, y, S, 5);
-    ctx.fillStyle = locked ? '#8a6a50' : '#707078';
-    for (let x = 3; x < S; x += 10) ctx.fillRect(x, y + 1, 2, 2);
-  }
-  return toTexture(c);
-}
-
-const doorTex = {};
-export function getDoorTexture(locked) {
-  return (doorTex[locked] ??= doorTexture(locked));
-}

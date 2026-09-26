@@ -3,6 +3,7 @@
 // wall face at floor level, standing out from it along +z. Channels run 0.5 m below the floor (32 px).
 import { defineModel, revolve, tube, noise3, rand, fract, ramp } from './lib.mjs';
 import { MAT, PAL, P, patches, bevel } from './materials.mjs';
+import { HALF, VAULT, bothFaces } from './doorkit.mjs';
 
 const SEWER_PAL = {
   wetWood: P('#121009', '#1b180f', '#252116', '#302b1e', '#3c3627', '#4a4331'),
@@ -12,6 +13,8 @@ const SEWER_PAL = {
   void: P('#030402', '#070906', '#0c0f0a'),
   paint: P('#2a0806', '#480e0a', '#6a1811', '#8a2418', '#a63522'),
   dust: P('#1f1d17', '#2c2921', '#3a362c', '#4a4538'),
+  doorPaint: P('#111813', '#18231b', '#203024', '#293d2e', '#344b39', '#405a44'), // a steel door's old green paint
+  hazard: P('#221a06', '#3e300c', '#5c4814', '#7a611c', '#947826'), // warning stripes, ochre gone brown
 };
 const WATER = -32; // the channel's water surface, in model pixels below the floor
 
@@ -66,6 +69,62 @@ const MATS = {
     if (Math.max(Math.abs(p.x), Math.abs(p.z)) > 17) return ramp(SEWER_PAL.stone, 0.42 + 0.12 * patches(p, 870, 0.4) + (c.edge < 1 ? -0.2 : 0), c.ax, c.ay);
     if (fract((p.x + 17) / 5) < 0.45) return MAT.rustyIron(c);
     return ramp(SEWER_PAL.void, 0.2, c.ax, c.ay);
+  },
+
+  // --- The door (door_sewers)
+  // Steel in old green paint, flaking back to rust, rust running down it in streaks, grime and slime low down.
+  doorSteel(c) {
+    const { p } = c;
+    const chip = noise3(p.x * 0.14, p.y * 0.14, p.z * 0.2, 1100) + 0.15 * noise3(p.x * 0.6, p.y * 0.6, p.z, 1101);
+    const streak = noise3(p.x * 0.5, p.y * 0.025, p.z * 0.2, 1102);
+    if (chip > 0.84 || (streak > 0.8 && p.y > 24)) return ramp(PAL.rust, 0.3 + 0.4 * patches(p, 1103, 0.5) + bevel(c, 0.12), c.ax, c.ay);
+    const v = 0.52 + 0.14 * patches(p, 1104, 0.25) + bevel(c, 0.18) - Math.max(0, 26 - p.y) * 0.01;
+    return algae(c, ramp(SEWER_PAL.doorPaint, v, c.ax, c.ay), 5);
+  },
+  // The door's plate: painted on its faces, bare at its edges, with a barred slot to look through at eye height.
+  doorPlate(c) {
+    const { p, n } = c;
+    if (Math.abs(n.z) < 0.5) return MAT.rustyIron(c);
+    if (Math.abs(p.x) < 13 && p.y > 119 && p.y < 131) {
+      return fract((p.x + 13) / 4.33) < 0.3 ? MAT.rustyIron(c) : ramp(SEWER_PAL.void, 0.2, c.ax, c.ay);
+    }
+    return MATS.doorSteel(c);
+  },
+  // A bar riveted to the door: painted steel, rivets every 8 px along its middle (`info.axis` it runs along, and
+  // `info.mid` its middle across).
+  doorBar(c) {
+    const { p, n, info } = c;
+    if (Math.abs(n.z) > 0.5) {
+      const along = fract(p[info.axis] / 8), across = p[info.axis === 'x' ? 'y' : 'x'] - info.mid;
+      if (Math.abs(along - 0.5) < 0.13 && Math.abs(across) < 1.1) return ramp(PAL.iron, across > 0 ? 0.8 : 0.6, c.ax, c.ay);
+    }
+    return MATS.doorSteel(c);
+  },
+  // The frame: bare steel gone dark and rusty, bolted every 12 px along the middle of its faces (as doorBar).
+  doorFrame(c) {
+    const { p, n, info } = c;
+    if (Math.abs(n.z) > 0.5 && info.mid !== undefined) {
+      const along = fract(p[info.axis] / 12), across = p[info.axis === 'x' ? 'y' : 'x'] - info.mid;
+      if (Math.abs(along - 0.5) < 0.12 && Math.abs(across) < 1.6) return ramp(PAL.iron, across > 0 ? 0.78 : 0.55, c.ax, c.ay);
+    }
+    return MAT.rustyIron(c);
+  },
+  // The lintel: a steel beam with warning stripes painted along its faces, worn through in places.
+  doorLintel(c) {
+    const { p, n } = c;
+    if (Math.abs(n.z) > 0.5 && p.y > 154 && p.y < 162 && noise3(p.x * 0.3, p.y * 0.3, 0, 1110) < 0.72) {
+      if (fract((p.x + p.y + 200) / 9) < 0.5) return ramp(SEWER_PAL.hazard, 0.55 + 0.25 * patches(p, 1111, 0.4), c.ax, c.ay);
+      return ramp(SEWER_PAL.void, 0.6, c.ax, c.ay);
+    }
+    return MATS.doorFrame(c);
+  },
+  // Brickwork in running bond on its faces, filling the wall up to the vault.
+  brickBond(c) {
+    const { p, n } = c;
+    const u = Math.abs(n.x) > 0.5 ? p.z : p.x;
+    const row = Math.floor((p.y + 200) / 6), off = row % 2 ? 8 : 0;
+    if (fract((p.y + 200) / 6) < 0.17 || fract((u + 200 + off) / 16) < 0.07) return ramp(SEWER_PAL.brick, 0.08, c.ax, c.ay);
+    return ramp(SEWER_PAL.brick, 0.45 + 0.25 * (rand(Math.floor((u + 200 + off) / 16), row, 1112) - 0.5) + 0.1 * patches(p, 1113, 0.5), c.ax, c.ay);
   },
 };
 
@@ -193,4 +252,54 @@ export const sewers = {
     // A square grating set in the floor.
     m.cube('drain', [-22, 0, -22], [22, 0.6, 22], { mat: 'drain', faces: ['up'] });
   }, { density: 2 }),
+
+  door_sewers: defineModel('door_sewers', MATS, (m) => {
+    // A steel door in chipped green paint (see doorkit.mjs for how doors go together): riveted round its border
+    // and across two braces, a barred slot at eye height, a lever handle on each side, hung on two barrel hinges.
+    // Its frame is bare steel, bolted, under a lintel painted with warning stripes, with brickwork above.
+    // Locked, a red-painted bar lies across it in brackets bolted to the frame, padlocked, on both sides.
+    const OW = 53, OH = 151;
+    const zs = (s, a, b) => (s > 0 ? [a, b] : [-b, -a]); // a to b out from the middle, on the side s faces
+    m.group('frame', () => {
+      for (const s of [-1, 1]) {
+        const x0 = s < 0 ? -HALF : OW, x1 = s < 0 ? -OW : HALF;
+        m.cube(`jamb_${s < 0 ? 'left' : 'right'}`, [x0, 0, -10], [x1, OH, 10], { mat: 'doorFrame', info: { axis: 'y', mid: (x0 + x1) / 2 } });
+      }
+      m.cube('lintel', [-HALF, OH, -11], [HALF, OH + 13, 11], { mat: 'doorLintel', info: { axis: 'x', mid: OH + 3 } });
+      m.cube('brickwork', [-HALF, OH + 13, -8], [HALF, VAULT, 8], { mat: 'brickBond' });
+      m.cube('sill', [-OW, 0, -10], [OW, 1, 10], { mat: 'rustyIron' });
+    });
+    m.group('leaf', () => {
+      m.cube('plate', [-OW + 1, 1.5, -2.5], [OW - 1, OH - 1, 2.5], { mat: 'doorPlate' });
+      bothFaces((s) => {
+        const side = s > 0 ? 'front' : 'back', [z0, z1] = zs(s, 2.5, 4);
+        const bar = (name, x0, y0, x1, y1, axis) => m.cube(`${name}_${side}`, [x0, y0, z0], [x1, y1, z1],
+          { mat: 'doorBar', info: { axis, mid: axis === 'x' ? (y0 + y1) / 2 : (x0 + x1) / 2 } });
+        bar('border_left', -OW + 1, 1.5, -OW + 7, OH - 1, 'y');
+        bar('border_right', OW - 7, 1.5, OW - 1, OH - 1, 'y');
+        bar('border_top', -OW + 7, OH - 7, OW - 7, OH - 1, 'x');
+        bar('border_bottom', -OW + 7, 1.5, OW - 7, 7.5, 'x');
+        bar('brace_low', -OW + 7, 47, OW - 7, 53, 'x');
+        bar('brace_high', -OW + 7, 95, OW - 7, 101, 'x');
+        [[-15, 117, 15, 119], [-15, 131, 15, 133], [-15, 119, -13, 131], [13, 119, 15, 131]].forEach(([x0, y0, x1, y1], i) =>
+          m.cube(`slot_rim_${i + 1}_${side}`, [x0, y0, z0], [x1, y1, z1], { mat: 'rustyIron' }));
+        // The lever: a boss on a mount, the handle pointing back toward the hinges.
+        const [h0, h1] = zs(s, 2.5, 5.5);
+        m.cube(`handle_mount_${side}`, [37, 66, h0], [44, 80, h1], { mat: 'rustyIron' });
+        m.mesh(`handle_${side}`, tube([[40.5, 75, s * 6.8], [26, 72.5, s * 6.8]], { half: 1.4, side: [0, 0, 1] }), { mat: 'iron' });
+      });
+      // Barrel hinges, on the hinge line itself.
+      for (const y of [16, 116]) m.mesh(`hinge_${y < 60 ? 'low' : 'high'}`, revolve([[0, 0], [3.4, 0], [3.4, 18], [0, 18]], { sides: 8 }), { mat: 'rustyIron', origin: [-OW, y, 0] });
+    }, { origin: [-OW, 0, 0] });
+    m.group('lock', () => {
+      bothFaces((s) => {
+        const side = s > 0 ? 'front' : 'back';
+        const [b0, b1] = zs(s, 5, 9), [k0, k1] = zs(s, 4, 13), [p0, p1] = zs(s, 13, 16.5);
+        m.cube(`bar_${side}`, [-HALF + 2, 70, b0], [HALF - 2, 78, b1], { mat: 'valvePaint' });
+        for (const x of [-HALF + 2, HALF - 12]) m.cube(`bracket_${x < 0 ? 'left' : 'right'}_${side}`, [x, 66, k0], [x + 10, 82, k1], { mat: 'rustyIron' });
+        m.cube(`padlock_${side}`, [50, 54, p0], [60, 65, p1], { mat: 'brass' });
+        m.mesh(`shackle_${side}`, tube([[52, 64, s * 14.8], [52, 70, s * 14.8], [55, 72.5, s * 14.8], [58, 70, s * 14.8], [58, 64, s * 14.8]], { half: 0.9, side: [0, 0, 1] }), { mat: 'iron' });
+      });
+    });
+  }, { density: 1 }),
 };

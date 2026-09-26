@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { defineModel, loft, revolve, tube, latheRing, noise3, rand, fract, ramp } from './lib.mjs';
 import { MAT, PAL, P, patches, bevel } from './materials.mjs';
+import { HALF, VAULT as TOP, prism, bothFaces } from './doorkit.mjs';
 
 const DW = {
   stone: P('#1f1614', '#2e211d', '#3f2e28', '#523b33', '#664a3f', '#7c5b4d'),
@@ -86,6 +87,65 @@ const MATS = {
     let v = 0.45 + 0.18 * (rand(k, 2012) - 0.5) + 0.1 * patches(p, 2013, 0.3);
     if (fract(p.z * 0.09 + noise3(p.x, 0, p.z * 0.1, 2014)) < 0.1) v -= 0.12;
     return ramp(DW.wood, v, c.ax, c.ay);
+  },
+  // --- The door (door_dwarven)
+  // The leaf's faces: a bronze border a gold line within it, then dark planks set with gold-headed studs, crossed
+  // by two bronze bands. Laid out by where a point is on the leaf (see DWARF_LEAF), so the border runs clean round
+  // its chamfered top.
+  dwarfDoor(c) {
+    const { p, n } = c;
+    if (Math.abs(n.z) < 0.5) return MATS.bronze(c);
+    const ax = Math.abs(p.x), d = Math.min(52 - ax, p.y - 1.5, 147 - p.y, (185.6 - ax - p.y) / Math.SQRT2);
+    if (d < 5) return MATS.bronze(c);
+    if (d < 6.2) return gold(c);
+    const band = [38, 116].find((y) => p.y > y && p.y < y + 6);
+    const stud = (y0) => Math.abs(fract((p.x + 100) / 10) - 0.5) < 0.14 && Math.abs(p.y - y0) < 1.2;
+    if (band !== undefined) return stud(band + 3) ? ramp(PAL.gold, 0.78, c.ax, c.ay) : MATS.bronze(c);
+    // Studs in a staggered grid, every other plank, a row every 26 px, clear of the medallion.
+    const row = Math.floor((p.y + 13) / 26), col = Math.floor((p.x + 100) / 10);
+    if ((col + row) % 2 === 0 && Math.hypot(p.x, p.y - 84) > 17 && Math.abs(fract((p.x + 100) / 10) - 0.5) < 0.14 && Math.abs(fract((p.y + 13) / 26) - 0.5) < 0.05) {
+      return ramp(PAL.gold, 0.7, c.ax, c.ay);
+    }
+    if (fract((p.x + 100) / 10) < 0.07) return ramp(DW.wood, 0.05, c.ax, c.ay);
+    return wood(c);
+  },
+  // The doorway's jambs: porphyry, a gold line along the edge of the opening.
+  dwarfJamb(c) {
+    if (Math.abs(c.n.z) > 0.5 && Math.abs(Math.abs(c.p.x) - 54.2) < 0.9) return gold(c);
+    return MATS.porphyry(c);
+  },
+  // The lintel: porphyry, the walls' gold knotwork run along its faces between two gold rules.
+  dwarfLintel(c) {
+    const { p, n } = c;
+    if (Math.abs(n.z) > 0.5) {
+      if (p.y > 156 && p.y < 164) return knots(c, p.x + 64, p.y - 156);
+      if ((p.y > 153.5 && p.y < 155) || (p.y > 165 && p.y < 166.5)) return gold(c);
+    }
+    return MATS.porphyry(c);
+  },
+  // The kingdom's crest over the door: a lozenge of gold, a hammer struck into it.
+  crest(c) {
+    const { p } = c, y = p.y - 163;
+    if ((Math.abs(p.x) < 5.5 && y > 2 && y < 5.5) || (Math.abs(p.x) < 1.1 && y > -7 && y < 3)) return ramp(PAL.gold, 0.25, c.ax, c.ay);
+    return gold(c);
+  },
+  // A medallion on the leaf: gold, a ring cut round its rim, a hammer at its heart.
+  medallion(c) {
+    const { p } = c, x = p.x, y = p.y - 84, r = Math.hypot(x, y);
+    if (Math.abs(r - 9.5) < 0.7 || (Math.abs(x) < 4.5 && y > 1.5 && y < 4.5) || (Math.abs(x) < 1 && y > -6 && y < 2.5)) return ramp(PAL.gold, 0.28, c.ax, c.ay);
+    return gold(c);
+  },
+  // A bar across a locked door: bronze, banded in gold every 24 px.
+  lockBar: (c) => (Math.abs(fract((c.p.x + 12) / 24) - 0.5) < 0.1 ? gold(c) : MATS.bronze(c)),
+  // A lock box: bronze, edged in gold, a keyhole in a gold escutcheon at (`info.kx`, `info.ky`).
+  lockBox(c) {
+    const { p, n, info } = c;
+    if (Math.abs(n.z) > 0.5) {
+      const r = Math.hypot(p.x - info.kx, p.y - info.ky);
+      if (r < 1.3 || (Math.abs(p.x - info.kx) < 0.6 && p.y < info.ky && p.y > info.ky - 4)) return ramp(DW.void, 0.1, c.ax, c.ay);
+      if (r < 4 || c.edge < 1.5) return gold(c);
+    }
+    return MATS.bronze(c);
   },
   // A banner of the kingdom: red cloth, a gold border, the royal sigil (a hammer in a lozenge under a crown) and
   // chevrons down to a hem gone to rags; moth-eaten here and there.
@@ -660,4 +720,52 @@ export const dwarven = {
     m.cube('wick', [-0.6, -19.5, Z - 0.6], [0.6, -18, Z + 0.6], { mat: 'wick' });
     m.group('flame', undefined, { origin: [0, -18.5, Z] });
   }, { density: 2, glow: ['ruby'] }),
+
+  door_dwarven: defineModel('door_dwarven', MATS, (m) => {
+    // A dwarven doorway (see doorkit.mjs for how doors go together): the opening square with its top corners cut
+    // away, in jambs of porphyry lined in gold on bronze plinths and capitals, under a lintel carrying the walls'
+    // gold knotwork and the kingdom's crest. The door: dark planks in a bronze border, studded with gold, banded in
+    // bronze, a gold medallion at its heart, hung on bronze straps, a bronze ring to pull. Locked, it's shut like a
+    // vault: two gold-banded bronze bars across it, running into the jambs, and between them an ornate lock box,
+    // its bolt shot into the jamb, on both sides.
+    const OW = 53, SHOULDER = 134, OH = 148; // the opening; where its corners are cut away, and its top
+    const zs = (s, a, b) => (s > 0 ? [a, b] : [-b, -a]); // a to b out from the middle, on the side s faces
+    m.group('frame', () => {
+      for (const s of [-1, 1]) {
+        const side = s < 0 ? 'left' : 'right', [x0, x1] = s < 0 ? [-HALF, -OW] : [OW, HALF];
+        m.cube(`jamb_${side}`, [x0, 0, -20], [x1, SHOULDER, 20], { mat: 'dwarfJamb' });
+        m.mesh(`shoulder_${side}`, prism(s < 0 ? [[-HALF, SHOULDER], [-OW, SHOULDER], [-39, OH], [-HALF, OH]] : [[OW, SHOULDER], [HALF, SHOULDER], [HALF, OH], [39, OH]], -20, 20), { mat: 'porphyry' });
+        m.cube(`plinth_${side}`, [s < 0 ? -HALF - 1 : OW - 1, 0, -22], [s < 0 ? -OW + 1 : HALF + 1, 10, 22], { mat: 'bronze' });
+        m.cube(`capital_${side}`, [s < 0 ? -HALF - 1 : OW - 1, SHOULDER - 10, -22], [s < 0 ? -OW + 1 : HALF + 1, SHOULDER, 22], { mat: 'bronze' });
+      }
+      m.cube('lintel', [-HALF, OH, -20], [HALF, TOP, 20], { mat: 'dwarfLintel' });
+      bothFaces((s) => m.mesh(`crest_${s > 0 ? 'front' : 'back'}`, prism([[0, 152], [11, 163], [0, 174], [-11, 163]], ...zs(s, 20, 23.5)), { mat: 'crest' }));
+      m.cube('sill', [-OW, 0, -20], [OW, 1.5, 20], { mat: 'bronze' });
+    });
+    m.group('leaf', () => {
+      m.cube('door', [-OW + 1, 1.5, -4], [OW - 1, SHOULDER - 0.4, 4], { mat: 'dwarfDoor' });
+      m.mesh('door_top', prism([[-OW + 1, SHOULDER - 0.4], [OW - 1, SHOULDER - 0.4], [38.6, OH - 1], [-38.6, OH - 1]], -4, 4), { mat: 'dwarfDoor' });
+      bothFaces((s) => {
+        const side = s > 0 ? 'front' : 'back';
+        m.mesh(`medallion_${side}`, revolve([[0, 0], [13, 0], [13, 1.2], [11, 2.2], [0, 2.2]], { sides: 12 }), { mat: 'medallion', origin: [0, 84, s * 4], rotation: [s * 90, 0, 0] });
+        for (const y of [20, 110]) {
+          m.mesh(`hinge_strap_${y < 60 ? 'low' : 'high'}_${side}`, prism([[-OW + 1, y], [-22, y], [-17, y + 3.5], [-22, y + 7], [-OW + 1, y + 7]], ...zs(s, 4, 5.4)), { mat: 'bronze' });
+        }
+        const [r0, r1] = zs(s, 4, 6.4);
+        m.cube(`ring_boss_${side}`, [35, 68, r0], [41, 74, r1], { mat: 'bronze' });
+        const ringPts = Array.from({ length: 10 }, (_, i) => [38 + Math.cos((i / 10) * Math.PI * 2) * 6, 63 + Math.sin((i / 10) * Math.PI * 2) * 6, s * 7]);
+        m.mesh(`ring_${side}`, tube(ringPts, { half: 1.1, closed: true, side: [0, 0, 1] }), { mat: 'bronze' });
+      });
+    }, { origin: [-OW, 0, 0] });
+    m.group('lock', () => {
+      bothFaces((s) => {
+        const side = s > 0 ? 'front' : 'back', [l0, l1] = zs(s, 4, 11), [b0, b1] = zs(s, 5, 8.5), [k0, k1] = zs(s, 11, 12.2);
+        const [r0, r1] = zs(s, 5.4, 9);
+        for (const y of [44, 98]) m.cube(`bar_${y < 70 ? 'low' : 'high'}_${side}`, [-60, y, r0], [60, y + 7, r1], { mat: 'lockBar' });
+        m.cube(`lock_box_${side}`, [22, 57, l0], [46, 85, l1], { mat: 'lockBox', info: { kx: 34, ky: 71 } });
+        m.cube(`bolt_${side}`, [46, 68, b0], [62, 74, b1], { mat: 'bronze' });
+        for (const [x, y] of [[23.2, 58.2], [44.8, 58.2], [23.2, 83.8], [44.8, 83.8]]) m.cube(`knob_${x < 34 ? 'l' : 'r'}${y < 70 ? 'b' : 't'}_${side}`, [x - 1.2, y - 1.2, k0], [x + 1.2, y + 1.2, k1], { mat: 'gold' });
+      });
+    });
+  }, { density: 1 }),
 };

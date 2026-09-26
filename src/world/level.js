@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { TILE, VIEW_RADIUS_TILES, MAX_DEPTH, PLAYER_RADIUS, danger } from '../config.js';
 import { T } from '../dungeon/tiles.js';
-import { buildLevelMeshes, flowWater } from '../dungeon/levelBuilder.js';
+import { buildLevelMeshes, flowWater, poseDoor } from '../dungeon/levelBuilder.js';
 import { TrapView, loadTraps, trapsLoaded } from './trapModels.js';
 import { buildItemModel } from '../items/models.js';
 import { shopPrice, stackable } from '../items/generate.js';
@@ -47,8 +47,9 @@ export class Level {
     this.waterT = 0;
     this.drips = built.drips.length ? new Drips(this.group, built.drips) : null;
 
-    // Doors: open when something walks into them, swing shut once the doorway has been clear a while.
-    this.doors = data.doors.map((d, i) => ({ ...d, open: false, amt: 0, clearT: 0, ...built.doors[i] }));
+    // Doors: open when something walks into them, shut again once the doorway has been clear a while. `amt` is how
+    // far open (0..1), `swing` which way a swinging door turns (see openDoor).
+    this.doors = data.doors.map((d, i) => ({ ...d, open: false, amt: 0, clearT: 0, swing: 1, ...built.doors[i] }));
     this.doorByTile = new Map(this.doors.map((d) => [d.y * this.w + d.x, d]));
     // Tiles inside locked rooms: never a teleport destination or a wanderer's spawn point.
     this.lockedMask = new Uint8Array(this.w * this.h);
@@ -152,7 +153,8 @@ export class Level {
       d.locked = !!(v & 1);
       d.open = !!(v & 2);
       d.amt = d.open ? 1 : 0;
-      d.pivot.rotation.y = (d.swing * d.amt * Math.PI) / 2;
+      if (d.parts.lock) d.parts.lock.visible = d.locked;
+      this.poseDoor(d);
     });
     this.traps.forEach((t, i) => {
       const v = +s.traps[i] || 0;
@@ -483,14 +485,32 @@ export class Level {
     return d && !d.open ? d : null;
   }
 
-  /** Opens an unlocked door. Locked doors are the player's business (see Game.useDoor). */
-  openDoor(d) {
+  /**
+   * Opens an unlocked door. Locked doors are the player's business (see Game.useDoor). A swinging door swings
+   * away from `by`, whoever opens it, so it never opens into their face: unless it's still closing, when it goes
+   * back the way it came.
+   */
+  openDoor(d, by = null) {
     if (d.open || d.locked) return false;
+    if (by && d.amt === 0) {
+      // Which side of the door they're on, along its passage (the door's local z: see buildDoor). The leaf turns
+      // toward +z for a negative swing.
+      const off = d.alongZ ? by.z - this.center(d.y) : by.x - this.center(d.x);
+      d.swing = off < 0 ? -1 : 1;
+    }
     d.open = true;
     d.clearT = 0;
-    if (this.nearPlayer(d, 14)) this.game.audio.door(true);
+    if (this.nearPlayer(d, 14)) this.game.audio.door(true, d.parts.leaf_left ? 'slide' : 'swing');
     return true;
   }
+
+  /** Unlocks a door: its lock (a bar, a chain, a seal) is gone. */
+  unlockDoor(d) {
+    d.locked = false;
+    if (d.parts.lock) d.parts.lock.visible = false;
+  }
+
+  poseDoor(d) { poseDoor(d, d.amt, d.swing); }
 
   nearPlayer(d, range) {
     const p = this.game.player;
@@ -509,13 +529,13 @@ export class Level {
         if (this.doorOccupied(d)) d.clearT = 0;
         else if ((d.clearT += dt) > 2.5) {
           d.open = false;
-          if (this.nearPlayer(d, 14)) this.game.audio.door(false);
+          if (this.nearPlayer(d, 14)) this.game.audio.door(false, d.parts.leaf_left ? 'slide' : 'swing');
         }
       }
       const target = d.open ? 1 : 0;
       if (d.amt !== target) {
         d.amt += Math.max(-dt * 3, Math.min(dt * 3, target - d.amt));
-        d.pivot.rotation.y = (d.swing * d.amt * Math.PI) / 2;
+        this.poseDoor(d);
       }
     }
   }

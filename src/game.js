@@ -695,7 +695,7 @@ export class Game {
     if (door.locked) {
       if ((p.keys[depth] || 0) > 0) {
         p.keys[depth]--;
-        door.locked = false;
+        this.level.unlockDoor(door);
         this.audio.unlock();
         this.log('You turn the iron key in the lock. The door grinds open.', 'good');
       } else {
@@ -708,7 +708,7 @@ export class Game {
         return;
       }
     }
-    this.level.openDoor(door);
+    this.level.openDoor(door, p);
   }
 
   quickHeal() {

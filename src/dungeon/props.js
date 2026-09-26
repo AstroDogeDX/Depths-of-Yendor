@@ -54,6 +54,17 @@ function template(type) {
 /** The model a prop is cloned from, with its anchors in `userData.anchors` (for fittings built on it). */
 export const propTemplate = (type) => template(type).model;
 
+const rigs = new Map();
+/** The model a prop with moving parts is cloned from: each of its groups a part of its own (see buildBBModel). */
+export function propRig(type) {
+  if (!rigs.has(type)) {
+    const src = sources.get(type);
+    if (!src) throw new Error(`Prop ${type} isn't loaded: fetch it with loadProps() first`);
+    rigs.set(type, buildBBModel(src, MODEL_PX, { rig: true }));
+  }
+  return rigs.get(type);
+}
+
 /**
  * Sets out a prop { type, x, y (grid tiles), yaw, solid, round }. Returns its mesh, the world positions of its
  * slots, candles, glows, drips and fires, and an obstacle over its footprint (a box, or a circle for round things)

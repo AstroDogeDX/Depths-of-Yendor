@@ -105,7 +105,15 @@ export class Sfx {
     this.tone({ f: 660, dur: 0.08, type: 'triangle', vol: 0.14 });
     this.tone({ f: 990, dur: 0.12, type: 'triangle', vol: 0.14, delay: 0.07 });
   }
-  door(open) {
+  /** A door opening or shutting: a swinging one creaks and thuds; one of halves sliding apart ('slide') grinds, humming. */
+  door(open, kind = 'swing') {
+    if (kind === 'slide') {
+      this.noise({ dur: 0.45, vol: 0.2, freq: open ? 220 : 320, freq2: open ? 90 : 120, type: 'lowpass', q: 1.2 });
+      this.tone({ f: open ? 70 : 110, f2: open ? 115 : 65, dur: 0.6, type: 'sine', vol: 0.12 });
+      this.tone({ f: open ? 104 : 164, f2: open ? 172 : 97, dur: 0.6, type: 'sine', vol: 0.06 });
+      if (!open) this.noise({ dur: 0.18, vol: 0.22, freq: 140, type: 'lowpass', q: 0.8, delay: 0.38 });
+      return;
+    }
     if (open) {
       this.tone({ f: 140, f2: 90, dur: 0.45, type: 'sawtooth', vol: 0.05 });
       this.noise({ dur: 0.35, vol: 0.12, freq: 700, freq2: 300, q: 3 });

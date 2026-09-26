@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { THEMES, FLOORS_PER_THEME, TILE, EYE_H } from '../config.js';
 import { generateLevel } from '../dungeon/generator.js';
-import { buildLevelMeshes, disposeGroup, flowWater, propsForTheme } from '../dungeon/levelBuilder.js';
+import { buildLevelMeshes, disposeGroup, flowWater, propsForTheme, poseDoor } from '../dungeon/levelBuilder.js';
 import { loadProps } from '../dungeon/props.js';
 import { T } from '../dungeon/tiles.js';
 import { Drips } from '../fx/drips.js';
@@ -80,7 +80,7 @@ export class TitleScene {
 
     this.built = buildLevelMeshes(data);
     this.drips = new Drips(this.built.group, this.built.drips);
-    for (const d of this.built.doors) d.pivot.rotation.y = (d.swing * Math.PI) / 2; // every door stands open
+    for (const d of this.built.doors) poseDoor(d, 1); // every door stands open
     this.scene.add(this.built.group);
     this.scene.fog.color.setHex(theme.fog);
     this.scene.fog.near = theme.fogNear;
