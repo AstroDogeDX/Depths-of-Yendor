@@ -1,5 +1,5 @@
 import {
-  WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD,
+  WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS,
   POTION_COLORS, SCROLL_SYLLABLES, WAND_MATERIALS, RING_GEMS,
 } from './defs.js';
 import { DAMAGE_TYPES, damageType, describeResist } from '../damage.js';
@@ -114,6 +114,7 @@ export class Knowledge {
       case 'potion': case 'scroll': case 'wand': case 'ring':
         return this.appearance[item.kind][item.type].color;
       case 'weapon': return 0xa8adb4;
+      case 'offhand': return 0xffa050;
       case 'armor': return ARMORS[item.type].color;
       case 'artefact': return ARTEFACTS[item.type].color;
       case 'food': return 0x8a5a2a;
@@ -178,6 +179,7 @@ export class Knowledge {
         const base = FOOD[item.type].name;
         return plural ? `${q} ${base}s` : base;
       }
+      case 'offhand': return OFFHANDS[item.type].name;
       case 'artefact': return ARTEFACTS[item.type].name;
       case 'amulet': return 'the Amulet of Yendor';
       case 'gold': return `${q} gold`;
@@ -239,6 +241,7 @@ export class Knowledge {
         return parts.filter(Boolean).join('\n\n');
       }
       case 'food': return FOOD[item.type].desc;
+      case 'offhand': return OFFHANDS[item.type].desc;
       case 'artefact': return ARTEFACTS[item.type].desc;
       case 'amulet': return 'The Amulet of Yendor. It thrums with the heartbeat of the dungeon itself. Invoke it to escape now, or carry it back to the surface for true glory.';
       case 'gold': return 'Shiny.';

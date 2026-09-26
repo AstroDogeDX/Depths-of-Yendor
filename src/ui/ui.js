@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { KIND_GLYPH, ARTEFACTS, WEAPONS, ARMORS, wandRecharge } from '../items/defs.js';
+import { KIND_GLYPH, ARTEFACTS, ARMORS, wandRecharge } from '../items/defs.js';
 import { equipSlotFor } from '../items/use.js';
 import { T } from '../dungeon/tiles.js';
 import { TRAP_COLORS } from '../world/level.js';
@@ -15,7 +15,7 @@ const $ = (id) => document.getElementById(id);
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const KIND_COLOR = {
-  weapon: '#c8ccd4', armor: '#c0a880', scroll: '#e8dcb0', wand: '#a0c8ff', ring: '#e0a0ff',
+  weapon: '#c8ccd4', offhand: '#ffa050', armor: '#c0a880', scroll: '#e8dcb0', wand: '#a0c8ff', ring: '#e0a0ff',
   food: '#c09060', artefact: '#ffb040', amulet: '#ffd040', gold: '#ffd040',
 };
 // Floating text over the world, by class (see .popup in style.css): how many seconds it lasts, how far it rises
@@ -45,11 +45,13 @@ const DOLL_SLOTS = [
   { key: 'art1', label: 'Artefact', x: 174, y: 12 },
   { key: 'armor', label: 'Armor', x: 94, y: 88 },
   { key: 'weapon', label: 'Weapon', x: 14, y: 150 },
+  { key: 'offhand', label: 'Off hand', x: 174, y: 150 },
   { key: 'ring0', label: 'Ring', x: 20, y: 228, small: true },
   { key: 'ring1', label: 'Ring', x: 180, y: 228, small: true },
 ];
 const equippedIn = (p, key) => {
   if (key === 'weapon') return p.equip.weapon;
+  if (key === 'offhand') return p.equip.offhand;
   if (key === 'armor') return p.equip.armor;
   if (key.startsWith('ring')) return p.equip.rings[+key[4]];
   return p.equip.artefacts[+key[3]];
@@ -333,15 +335,14 @@ export class UI {
     this.setHtml('status-line', st.join(' '));
 
     const gear = [];
-    gear.push(`<div>${p.equip.weapon ? k.name(p.equip.weapon) : 'bare hands'}</div>`);
+    gear.push(`<div>${p.equip.weapon ? k.name(p.equip.weapon) : 'bare hands'}${p.twoHanded ? ' <span class="grip">(both hands)</span>' : ''}</div>`);
+    if (p.equip.offhand) gear.push(`<div class="off">${k.name(p.equip.offhand)}${p.twoHanded ? ' <span class="grip">(stowed)</span>' : ''}</div>`);
     p.equip.artefacts.forEach((a, i) => {
       if (!a) return;
       const def = ARTEFACTS[a.type];
       const cd = p.artefactCD[i];
       gear.push(`<div class="art">${def.active ? `[${i === 0 ? 'R' : 'T'}] ` : ''}${def.name}${def.active ? (cd > 0 ? ` <span class="cd">${Math.ceil(cd)}s</span>` : ' <span class="ok">ready</span>') : ''}</div>`);
     });
-    const wand = p.lastWand && p.inventory.includes(p.lastWand) ? p.lastWand : p.inventory.find((i) => i.kind === 'wand');
-    if (wand) gear.push(`<div class="wand">[F] ${k.name(wand)}</div>`);
     this.setHtml('gear', gear.join(''));
 
     const prompt = g.interaction && !g.menu ? `[E] ${g.interaction.label}` : '';
@@ -642,13 +643,17 @@ export class UI {
       el.classList.toggle('cursed', !!it && it.curse > 0 && it.curseKnown);
       el.classList.toggle('sel', !!it && it === sel);
       el.classList.toggle('target', d.key === target);
+      // Gripping your weapon in both hands: it says so, and what's in your off hand is shown stowed.
+      el.classList.toggle('stowed', !!it && d.key === 'offhand' && p.twoHanded);
       if (it) {
         // Its + (a cursed ring's shown as what it does to you: against you).
         const showPlus = it.identified && (it.kind === 'weapon' || it.kind === 'armor' || (it.kind === 'ring' && it.type !== 'teleportation'));
         const against = it.kind === 'ring' && it.curse > 0;
         const plus = showPlus ? `<span class="de${against ? ' bad' : ''}">${against ? '−' : '+'}${it.plus}</span>` : '';
-        el.innerHTML = `<span class="dg" style="color:${glyphColor(k, it)}">${KIND_GLYPH[it.kind]}</span>${plus}`;
-        el.title = k.name(it);
+        const grip = d.key === 'weapon' && p.twoHanded ? '<span class="dh">2H</span>'
+          : d.key === 'offhand' && p.twoHanded ? '<span class="dh">stowed</span>' : '';
+        el.innerHTML = `<span class="dg" style="color:${glyphColor(k, it)}">${KIND_GLYPH[it.kind]}</span>${plus}${grip}`;
+        el.title = k.name(it) + (d.key === 'weapon' && p.twoHanded ? ' (in both hands)' : d.key === 'offhand' && p.twoHanded ? ' (stowed)' : '');
       } else {
         el.innerHTML = `<span class="dl">${d.label}</span>`;
         el.title = '';
@@ -662,7 +667,7 @@ export class UI {
     // An unknown + or curse must not leak through the numbers.
     const known = !wi || wi.identified;
     const mult = !wi || wi.curseKnown ? w.dmgMult : 1;
-    const heavy = !!wi && WEAPONS[wi.type].str > p.str;
+    const heavy = w.short > 0; // (with your grip: see Player.weaponStats)
     const slow = !!a && ARMORS[a.type].str > p.str;
     const lo = Math.max(1, Math.round((w.dmg[0] + (known ? w.plus : 0)) * mult));
     const hi = Math.max(1, Math.round((w.dmg[1] + (known ? w.plus : 0) + w.excess) * mult));
@@ -673,7 +678,8 @@ export class UI {
       ['Speed', `${Math.round((p.moveSpeed() / PLAYER_SPEED) * 100)}%`, slow], ['Strength', String(p.str)],
     ];
     let html = rows.map(([label, v, bad]) => `<span>${label}</span><b${bad ? ' class="bad"' : ''}>${v}</b>`).join('');
-    if (heavy) html += '<div class="warn">Your weapon is too heavy for you.</div>';
+    if (heavy) html += `<div class="warn">${p.twoHanded ? 'Your weapon is too heavy for you, even in both hands.' : 'Your weapon is too heavy for you in one hand: F grips it in both.'}</div>`;
+    else if (p.twoHanded) html += '<div class="note">Your weapon is gripped in both hands (F for one).</div>';
     if (slow) html += '<div class="warn">Your armor is weighing you down.</div>';
     $('inv-stats').innerHTML = html;
   }
@@ -838,7 +844,8 @@ export class UI {
 
 function equipTag(p, it) {
   const e = p.equip;
-  if (e.weapon === it) return 'in hand';
+  if (e.weapon === it) return p.twoHanded ? 'in both hands' : 'in hand';
+  if (e.offhand === it) return p.twoHanded ? 'stowed' : 'in off hand';
   if (e.armor === it) return 'worn';
   if (e.rings.includes(it)) return 'on finger';
   if (e.artefacts.includes(it)) return 'attuned';

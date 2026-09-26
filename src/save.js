@@ -47,6 +47,8 @@ export function readSave() {
  * restored: see restoreStatus in status.js.)
  * - The wand of slowness is now the wand of frost.
  * - A wand takes a few zaps to know now (item.zapsToId, see zapWand).
+ * - The torch was always in your off hand: now it's a thing you carry, in the off-hand slot (Player.equip.offhand),
+ *   so a save from before gets one there.
  * - Before format 2, the scroll of enchanting was what's now the scroll of upgrade, and an item's enchantment could be
  *   negative: now it's a + of 0 or more, a curse is a strength (item.curse), and a cursed weapon or armour has a Curse
  *   of ___ (see items/enchant.js). A cursed ring's old minus becomes a + that works against you, as before.
@@ -77,6 +79,13 @@ function upgrade(save) {
   };
   for (const list of [save.knowledge.known.wand, save.knowledge.tried.wand]) rename(list, 'slow', 'frost');
   if (old) for (const list of [save.knowledge.known.scroll, save.knowledge.tried.scroll]) rename(list, 'enchant', 'upgrade');
+  const pl = save.player;
+  if (!('offhand' in pl.equip)) {
+    // (As makeItem makes it, with the next uid the save has: it always fits, like the Amulet.)
+    const torch = { uid: save.nextUid++, kind: 'offhand', type: 'torch', qty: 1, plus: 0, curse: 0, identified: true, curseKnown: false };
+    pl.inventory.push(torch);
+    pl.equip.offhand = torch.uid;
+  }
   save.format = SAVE_FORMAT;
   return save;
 }

@@ -1,4 +1,4 @@
-import { WEAPONS, ARMORS, FOOD, ARTEFACTS, WANDS, WAND_PLUS_DMG } from './defs.js';
+import { WEAPONS, ARMORS, FOOD, ARTEFACTS, WANDS, OFFHANDS, WAND_PLUS_DMG } from './defs.js';
 import { ENCHANTMENTS, binds, enchantOf } from './enchant.js';
 import { buildItemModel } from './models.js';
 import { HUNGER_MAX, EYE_H } from '../config.js';
@@ -10,6 +10,12 @@ import { sellPrice, refusedAsCursed } from './generate.js';
 import { cure } from '../status.js';
 
 // --- Inventory actions shown in the pack screen ---
+
+// What the pack calls equipping and unequipping each kind of equipment.
+const EQUIP_LABELS = {
+  weapon: ['Wield', 'Unwield'], offhand: ['Hold', 'Put away'], armor: ['Wear', 'Remove'], ring: ['Put on', 'Remove'],
+  artefact: ['Put on', 'Remove'],
+};
 
 export function itemActions(game, item) {
   const p = game.player;
@@ -23,11 +29,11 @@ export function itemActions(game, item) {
     case 'scroll': acts.push({ label: 'Read', fn: () => readScroll(game, item) }); break;
     case 'food': acts.push({ label: 'Eat', fn: () => eatFood(game, item) }); break;
     case 'wand': acts.push({ label: 'Zap', fn: () => zapWand(game, item) }); break;
-    case 'weapon': case 'armor': case 'ring': case 'artefact':
-      acts.push(equipped
-        ? { label: item.kind === 'weapon' ? 'Unwield' : 'Remove', fn: () => unequipItem(game, item) }
-        : { label: item.kind === 'weapon' ? 'Wield' : item.kind === 'armor' ? 'Wear' : 'Put on', fn: () => equipItem(game, item) });
+    case 'weapon': case 'offhand': case 'armor': case 'ring': case 'artefact': {
+      const [on, off] = EQUIP_LABELS[item.kind];
+      acts.push(equipped ? { label: off, fn: () => unequipItem(game, item) } : { label: on, fn: () => equipItem(game, item) });
       break;
+    }
     case 'amulet': acts.push({ label: 'Invoke', fn: () => game.amuletDialog() }); break;
   }
   // Drop stays last: the pack's D key uses the last action.
@@ -364,7 +370,6 @@ function teleportOther(game, who) {
 export function zapWand(game, item) {
   if (!game.canFight()) return false;
   const p = game.player, k = game.knowledge, level = game.level;
-  p.lastWand = item;
   game.viewmodel.dip();
   if (item.charges <= 0) {
     game.log('You zap the wand, but nothing happens. It is out of charges.', 'warn');
@@ -451,14 +456,15 @@ function wildZap(game, item, power, bolt) {
 // --- Equipment ---
 
 /**
- * Which paper-doll slot equipping `item` would fill: 'weapon' | 'armor' | 'ring0' | 'ring1' | 'art0' | 'art1',
- * or null if it can't go anywhere (both rings cursed). Equipped cursed items always have curseKnown set,
+ * Which paper-doll slot equipping `item` would fill: 'weapon' | 'offhand' | 'armor' | 'ring0' | 'ring1' | 'art0' |
+ * 'art1', or null if it can't go anywhere (both rings cursed). Equipped cursed items always have curseKnown set,
  * so this never reveals a hidden curse.
  */
 export function equipSlotFor(p, item) {
   const e = p.equip;
   switch (item.kind) {
     case 'weapon': return 'weapon';
+    case 'offhand': return 'offhand';
     case 'armor': return 'armor';
     case 'ring': {
       let s = e.rings.indexOf(null);
@@ -502,14 +508,27 @@ export function equipItem(game, item) {
     }
   };
   switch (item.kind) {
-    case 'weapon':
+    case 'weapon': {
       if (e.weapon && binds(e.weapon)) return cursedStuck(game, e.weapon);
       e.weapon = item;
       game.viewmodel.setWeapon(WEAPONS[item.type]);
       game.log(`You wield the ${name()}.`);
-      if (p.str < WEAPONS[item.type].str) game.log('It is too heavy for you to use well.', 'warn');
+      // (Gripped in both hands, a weapon needs less strength: see Player.weaponStats.)
+      if (p.weaponStats().short > 0) {
+        game.log(p.twoHanded ? 'It is too heavy for you to use well, even in both hands.'
+          : 'It is too heavy for you to use well in one hand. Press F to grip it in both.', 'warn');
+      }
       bind();
       break;
+    }
+    case 'offhand': {
+      // Taking something in your off hand takes your weapon back into one.
+      const was = p.twoHanded && e.weapon;
+      e.offhand = item;
+      p.twoHanded = false;
+      game.log(`You take the ${name()} in your off hand${was ? `, and your ${WEAPONS[was.type].name} back in one` : ''}.`);
+      break;
+    }
     case 'armor':
       if (e.armor && binds(e.armor)) return cursedStuck(game, e.armor);
       e.armor = item;
@@ -543,19 +562,53 @@ export function equipItem(game, item) {
 export function unequipItem(game, item, silent = false) {
   const p = game.player, k = game.knowledge, e = p.equip;
   if (binds(item)) return cursedStuck(game, item);
-  if (e.weapon === item) { e.weapon = null; game.viewmodel.setWeapon(null); }
+  // Without a weapon there's nothing to grip in both hands: what's in your off hand comes back out.
+  if (e.weapon === item) { e.weapon = null; p.twoHanded = false; game.viewmodel.setWeapon(null); }
+  if (e.offhand === item) e.offhand = null;
   if (e.armor === item) e.armor = null;
   e.rings = e.rings.map((r) => (r === item ? null : r));
   e.artefacts = e.artefacts.map((r) => (r === item ? null : r));
-  if (!silent) game.log(`You take off the ${k.name(item)}.`);
+  if (!silent) game.log(item.kind === 'offhand' ? `You put away the ${k.name(item)}.` : `You take off the ${k.name(item)}.`);
   return true;
+}
+
+/**
+ * F: grips your weapon in both hands, stowing what's in your off hand (see OFFHANDS: it can't be used, and a torch
+ * lights less), or takes it back into one. Changing grip empties your attack meter, as changing equipment does.
+ */
+export function toggleGrip(game) {
+  const p = game.player, w = p.equip.weapon, off = p.equip.offhand;
+  if (!w) {
+    game.log('You have no weapon to grip in both hands.', 'info');
+    return false;
+  }
+  p.twoHanded = !p.twoHanded;
+  p.charge = 0;
+  const name = WEAPONS[w.type].name, o = off && OFFHANDS[off.type];
+  game.log(p.twoHanded ? `You grip your ${name} in both hands${o ? `, and ${o.stow}` : ''}.`
+    : `You take your ${name} in one hand${o ? `, and ${o.unstow}` : ''}.`);
+  game.audio.equip();
+  return true;
+}
+
+// What right-click does (see useOffhand): what's in your off hand, by its `use` (items/defs.js OFFHANDS), or, while
+// you grip your weapon in both hands, the weapon's two-handed special, by its `special` (WEAPONS). Neither has any
+// yet: each goes here, as (game, item) => whether it did anything.
+const OFFHAND_USES = {};
+const TWO_HAND_SPECIALS = {};
+
+/** Right-click: uses what's in your off hand, if it has a use, or, gripping your weapon in both hands, its special. */
+export function useOffhand(game) {
+  const p = game.player;
+  const item = p.twoHanded ? p.equip.weapon : p.equip.offhand;
+  const fn = item && (p.twoHanded ? TWO_HAND_SPECIALS[WEAPONS[item.type].special] : OFFHAND_USES[OFFHANDS[item.type].use]);
+  return fn ? fn(game, item) : false;
 }
 
 export function dropItem(game, item) {
   const p = game.player;
   if (p.isEquipped(item) && !unequipItem(game, item, true)) return false;
   p.inventory.splice(p.inventory.indexOf(item), 1);
-  if (p.lastWand === item) p.lastWand = null;
   const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
   const pos = game.level.landSpot(p.x + fx * 0.7, p.z + fz * 0.7);
   game.level.collide(pos, 0.2);
@@ -569,7 +622,6 @@ export function sellItem(game, item) {
   const p = game.player, level = game.level;
   if (p.isEquipped(item) && !unequipItem(game, item, true)) return false;
   const one = p.takeOne(item);
-  if (p.lastWand === one) p.lastWand = null;
   const price = sellPrice(one, level.depth, game.knowledge);
   p.gold += price;
   game.audio.coins();

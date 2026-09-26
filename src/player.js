@@ -2,7 +2,7 @@ import {
   PLAYER_RADIUS, PLAYER_SPEED, TURN_SPEED, MOUSE_SENS, HUNGER_MAX, HUNGER_HUNGRY, HUNGER_FAMISHED, INVENTORY_SIZE, HOTBAR_SIZE,
   STAMINA_BASE, STAMINA_PER_LEVEL, STAMINA_DRAIN, STAMINA_REGEN, STAMINA_REGEN_DELAY, STAMINA_RECOVER, MODE_SPEED, NOISE,
 } from './config.js';
-import { WEAPONS, ARMORS, ARTEFACTS, wandRecharge } from './items/defs.js';
+import { WEAPONS, ARMORS, ARTEFACTS, OFFHANDS, wandRecharge } from './items/defs.js';
 import { enchantOf, baneOf } from './items/enchant.js';
 import { stackable } from './items/generate.js';
 import { playerStrike } from './combat.js';
@@ -14,10 +14,13 @@ import { round2 } from './save.js';
 // What a save keeps of you as it is (see snapshot): the rest is either rebuilt or not worth keeping.
 const SAVED = [
   'x', 'z', 'yaw', 'pitch', 'maxHp', 'hp', 'baseStr', 'level', 'xp', 'gold', 'hunger', 'hungerState', 'charge',
-  'maxStamina', 'stamina', 'winded', 'sneaking', 'artefactCD', 'teleT', 'kills', 'maxDepth', 'keys', 'hotbar', 'inventory',
+  'maxStamina', 'stamina', 'winded', 'sneaking', 'twoHanded', 'artefactCD', 'teleT', 'kills', 'maxDepth', 'keys', 'hotbar',
+  'inventory',
 ];
 
 const FISTS = { name: 'fists', dmgType: 'bash', dmg: [1, 3], recharge: 0.6, reach: 1.4, str: 0, model: null };
+// Gripped in both hands, a weapon needs this much less strength to use well (see weaponStats).
+export const TWO_HAND_STR = 4;
 
 export class Player {
   constructor() {
@@ -28,7 +31,10 @@ export class Player {
     this.gold = 0;
     this.hunger = HUNGER_MAX;
     this.inventory = [];
-    this.equip = { weapon: null, armor: null, rings: [null, null], artefacts: [null, null] };
+    this.equip = { weapon: null, offhand: null, armor: null, rings: [null, null], artefacts: [null, null] };
+    // Your weapon gripped in both hands (F), with whatever's in your off hand stowed: it can't be used, and a torch
+    // lights less (see torchLight). Only ever with a weapon in hand.
+    this.twoHanded = false;
     this.hotbar = new Array(HOTBAR_SIZE).fill(null);
     this.keys = {}; // depth -> iron keys held for that floor
     this.charge = 1;
@@ -49,7 +55,6 @@ export class Player {
     this.moving = false; this.bob = 0;
     this.kills = 0;
     this.maxDepth = 1;
-    this.lastWand = null;
     this.hungerState = 0;
     this.lastTrapTile = -1;
     this.creeping = null; // a found trap you're sneaking over (see update)
@@ -57,14 +62,15 @@ export class Player {
 
   // --- Saving (see Game.save) ---
 
-  /** What a save keeps of you. Your things go as they are; what's equipped (and your last wand) by uid. */
+  /** What a save keeps of you. Your things go as they are; what's equipped by uid. */
   snapshot() {
     const s = {};
     for (const k of SAVED) s[k] = typeof this[k] === 'number' ? round2(this[k]) : this[k];
     const uid = (item) => item?.uid ?? null;
     const e = this.equip;
-    s.equip = { weapon: uid(e.weapon), armor: uid(e.armor), rings: e.rings.map(uid), artefacts: e.artefacts.map(uid) };
-    s.lastWand = uid(this.lastWand);
+    s.equip = {
+      weapon: uid(e.weapon), offhand: uid(e.offhand), armor: uid(e.armor), rings: e.rings.map(uid), artefacts: e.artefacts.map(uid),
+    };
     s.status = saveStatus(this.status);
     return s;
   }
@@ -74,10 +80,10 @@ export class Player {
     for (const k of SAVED) if (k in s) this[k] = s[k];
     const byUid = (uid) => (uid == null ? null : this.inventory.find((it) => it.uid === uid) ?? null);
     this.equip = {
-      weapon: byUid(s.equip.weapon), armor: byUid(s.equip.armor),
+      weapon: byUid(s.equip.weapon), offhand: byUid(s.equip.offhand), armor: byUid(s.equip.armor),
       rings: s.equip.rings.map(byUid), artefacts: s.equip.artefacts.map(byUid),
     };
-    this.lastWand = byUid(s.lastWand);
+    this.twoHanded = this.twoHanded && !!this.equip.weapon;
     restoreStatus(this.status, s.status);
   }
 
@@ -99,23 +105,34 @@ export class Player {
   held() { return this.status.paralysed > 0 || this.status.frozen > 0; }
 
   /**
-   * Your weapon (or fists) as it fights now: its +, strength, statuses, and any Enchantment or Curse of ___ on it
-   * (see items/enchant.js): `onHit` is what an enchantment's blows bring, `dmgMult` what a curse takes off them.
+   * Your weapon (or fists) as it fights now: its +, strength, grip, statuses, and any Enchantment or Curse of ___ on
+   * it (see items/enchant.js): `onHit` is what an enchantment's blows bring, `dmgMult` what a curse takes off them.
+   * `short`: how much strength you lack to use it well, each point of which slows it and makes it miss more. Gripped
+   * in both hands it needs TWO_HAND_STR less (but hits no harder for it: `excess` goes by your strength alone).
    */
   weaponStats() {
     const it = this.equip.weapon;
     const d = it ? WEAPONS[it.type] : FISTS;
     const plus = it ? it.plus : 0;
-    const short = Math.max(0, d.str - this.str);
+    const short = Math.max(0, d.str - this.str - (this.twoHanded && it ? TWO_HAND_STR : 0));
     const bane = baneOf(it);
     return {
-      dmg: d.dmg, dmgType: damageType(d), plus, reach: d.reach, model: d.model,
+      dmg: d.dmg, dmgType: damageType(d), plus, reach: d.reach, model: d.model, short,
       recharge: (d.recharge * (1 + short * 0.15) * (this.status.chilled > 0 ? 1.25 : 1)) / (this.status.hasted > 0 ? 1.35 : 1),
       accuracy: plus * 0.03 - short * 0.08 + (bane?.accuracy ?? 0),
       excess: Math.max(0, this.str - d.str),
       onHit: enchantOf(it)?.onHit ?? null,
       dmgMult: bane?.dmgMult ?? 1,
     };
+  }
+
+  /**
+   * How brightly the torch you carry lights your way, as a share of its full light: what's in your off hand gives
+   * its `light` held up, its `stowedLight` stowed while you grip your weapon in both hands (see OFFHANDS). 0 without.
+   */
+  torchLight() {
+    const o = this.equip.offhand;
+    return o ? (this.twoHanded ? OFFHANDS[o.type].stowedLight : OFFHANDS[o.type].light) ?? 0 : 0;
   }
 
   /** What your armour's Enchantment or Curse of ___ does to `stat` (a multiplier: noise, speed; see items/enchant.js). */
@@ -239,7 +256,7 @@ export class Player {
 
   isEquipped(item) {
     const e = this.equip;
-    return e.weapon === item || e.armor === item || e.rings.includes(item) || e.artefacts.includes(item);
+    return e.weapon === item || e.offhand === item || e.armor === item || e.rings.includes(item) || e.artefacts.includes(item);
   }
 
   // --- Per-frame ---

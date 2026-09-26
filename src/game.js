@@ -7,7 +7,7 @@ import { Player } from './player.js';
 import { Knowledge } from './items/identify.js';
 import { ARTEFACTS, WEAPONS } from './items/defs.js';
 import { makeItem, randomItem, nextItemUid, reserveUids } from './items/generate.js';
-import { itemActions, zapWand, drinkPotion, activateArtefact } from './items/use.js';
+import { itemActions, drinkPotion, activateArtefact, toggleGrip, useOffhand } from './items/use.js';
 import { ViewModel } from './fx/viewmodel.js';
 import { burst, ring, gasCloud, lightColumn } from './fx/particles.js';
 import { playerPopupPos } from './combat.js';
@@ -123,11 +123,14 @@ export class Game {
     this.beginRun(seed || Math.random().toString(36).slice(2, 8).toUpperCase(), name || 'Adventurer');
     const p = this.player;
     const sword = makeItem('weapon', 'shortsword', { identified: true, curseKnown: true, hitsToId: 0 });
+    const torch = makeItem('offhand', 'torch');
     const armor = makeItem('armor', 'leather', { identified: true, curseKnown: true, hitsToId: 0 });
     p.addItem(sword);
+    p.addItem(torch);
     p.addItem(armor);
     p.addItem(makeItem('food', 'ration'));
     p.equip.weapon = sword;
+    p.equip.offhand = torch;
     p.equip.armor = armor;
     this.viewmodel.setWeapon(WEAPONS.shortsword);
 
@@ -385,7 +388,8 @@ export class Game {
     if ((inp.wasPressed('KeyI') || inp.wasPressed('Tab')) && this.canAct()) this.openMenu('inventory');
     else if (inp.wasPressed('KeyM')) this.openMenu('map');
     if (inp.wasPressed('KeyE') && this.canAct()) this.interact();
-    if ((inp.wasPressed('KeyF') || inp.wasPressed('Mouse2')) && this.canAct()) this.quickZap();
+    if (inp.wasPressed('KeyF') && this.canAct()) toggleGrip(this);
+    if (inp.wasPressed('Mouse2') && this.canAct()) useOffhand(this);
     if (inp.wasPressed('KeyQ') && this.canAct()) this.quickHeal();
     for (let i = 0; i < HOTBAR_SIZE; i++) {
       if ((inp.wasPressed(`Digit${i + 1}`) || inp.wasPressed(`Numpad${i + 1}`)) && useSlot(this, i)) this.ui.flashSlot(i);
@@ -450,7 +454,8 @@ export class Game {
     const p = this.player;
     this.viewmodel.update(dt, {
       moving: p.moving, bob: p.bob, charge: p.charge, time: this.time, yaw: p.yaw, sprint: p.moving && p.mode === 'sprint',
-      lightLevel: p.status.blind > 0 ? 0.1 : 1,
+      lightLevel: p.status.blind > 0 ? 0.1 : 1, torchLight: p.torchLight(),
+      offhand: p.equip.offhand?.type ?? null, twoHanded: p.twoHanded,
     });
     this.interaction = this.findInteraction();
     this.target = this.findTarget();
@@ -475,12 +480,14 @@ export class Game {
     }
     cam.rotation.set(pitch, yaw, roll);
 
-    // The torch you carry is the main light: slightly left of and ahead of your eyes.
+    // The torch you carry is the main light: held up, slightly left of and ahead of your eyes; stowed while you grip
+    // your weapon in both hands, lower down at your belt, and dimmer (see Player.torchLight).
     const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
-    this.torch.position.set(p.x + fx * 0.35 + fz * 0.25, eye - 0.1, p.z + fz * 0.35 - fx * 0.25);
+    const held = p.twoHanded ? 0 : 1;
+    this.torch.position.set(p.x + fx * 0.35 * held + fz * 0.25, eye - 0.1 - 0.6 * (1 - held), p.z + fz * 0.35 * held - fx * 0.25);
     const flick = 0.9 + Math.sin(this.time * 21) * 0.04 + Math.sin(this.time * 7.7) * 0.06;
     const blind = p.status.blind > 0;
-    this.torch.intensity = (blind ? 4 : 26) * flick;
+    this.torch.intensity = (blind ? 4 : 26) * flick * p.torchLight();
     this.scene.fog.far = blind ? 4 : this.level.theme.fogFar;
     this.ambient.intensity = blind ? 0.8 : 5;
   }
@@ -700,16 +707,6 @@ export class Game {
       }
     }
     this.level.openDoor(door);
-  }
-
-  quickZap() {
-    const p = this.player;
-    let wand = p.lastWand && p.inventory.includes(p.lastWand) ? p.lastWand : p.inventory.find((i) => i.kind === 'wand');
-    if (!wand) {
-      this.log('You have no wand to zap.', 'info');
-      return;
-    }
-    zapWand(this, wand);
   }
 
   quickHeal() {

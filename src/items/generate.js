@@ -1,4 +1,4 @@
-import { WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, FOOD, WAND_ZAPS_TO_ID } from './defs.js';
+import { WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, FOOD, OFFHANDS, WAND_ZAPS_TO_ID } from './defs.js';
 import { randomBane, randomEnchant } from './enchant.js';
 import { danger } from '../config.js';
 
@@ -22,7 +22,7 @@ export function makeItem(kind, type, extra = {}) {
     qty: 1,
     plus: 0,
     curse: 0,
-    identified: kind === 'food' || kind === 'artefact' || kind === 'amulet' || kind === 'gold' || kind === 'key',
+    identified: kind === 'food' || kind === 'offhand' || kind === 'artefact' || kind === 'amulet' || kind === 'gold' || kind === 'key',
     curseKnown: false,
     ...extra,
   };
@@ -83,10 +83,10 @@ export function randomItem(rng, depth) {
 }
 
 // What the shop charges never depends on what's hidden about a thing, so a price can't give it away: potions,
-// scrolls, wands and rings are one price a kind, and weapons and armour (whose kind you can always see) go by their
-// `value` in items/defs.js. What the shopkeeper pays depends on what you know of a thing (see worth).
+// scrolls, wands and rings are one price a kind, and weapons, armour and off-hand things (whose kind you can always
+// see) go by their `value` in items/defs.js. What the shopkeeper pays depends on what you know of a thing (see worth).
 const BUY = { food: 15, potion: 35, scroll: 30, wand: 110, ring: 130, artefact: 400 };
-const DEFS = { weapon: WEAPONS, armor: ARMORS, potion: POTIONS, scroll: SCROLLS, wand: WANDS, ring: RINGS, food: FOOD };
+const DEFS = { weapon: WEAPONS, armor: ARMORS, potion: POTIONS, scroll: SCROLLS, wand: WANDS, ring: RINGS, food: FOOD, offhand: OFFHANDS };
 const UNKNOWN = { potion: 15, scroll: 12, wand: 55, ring: 60 }; // what a potion, scroll, wand or ring of a kind you don't know is worth
 const UNKNOWN_GEAR = 0.4; // equipment you know nothing about (not even whether it's cursed) is worth this share
 const PER_PLUS = { weapon: 30, armor: 30, ring: 35, wand: 30 }; // what each + adds, once you know it
@@ -96,7 +96,7 @@ const SELL_RATE = 0.4; // the shopkeeper pays 40% of what a thing is worth
 const markup = (depth) => 1 + Math.max(0, danger(depth) - 3) * 0.1; // deeper merchants charge (and pay) more
 
 function buyBase(item) {
-  return item.kind === 'weapon' || item.kind === 'armor' ? DEFS[item.kind][item.type].value : BUY[item.kind];
+  return item.kind === 'weapon' || item.kind === 'armor' || item.kind === 'offhand' ? DEFS[item.kind][item.type].value : BUY[item.kind];
 }
 
 /**
@@ -110,7 +110,7 @@ function buyBase(item) {
 export function worth(item, k) {
   switch (item.kind) {
     case 'potion': case 'scroll': return k.isKnown(item) ? DEFS[item.kind][item.type].value : UNKNOWN[item.kind];
-    case 'food': return FOOD[item.type].value;
+    case 'food': case 'offhand': return DEFS[item.kind][item.type].value;
     case 'artefact': return BUY.artefact;
     case 'weapon': case 'armor': case 'wand': case 'ring': {
       if (item.curseKnown && item.curse >= 2) return 0;
@@ -181,5 +181,5 @@ export function stackable(item) {
 }
 
 export function isEquipment(item) {
-  return item.kind === 'weapon' || item.kind === 'armor' || item.kind === 'ring' || item.kind === 'artefact';
+  return item.kind === 'weapon' || item.kind === 'offhand' || item.kind === 'armor' || item.kind === 'ring' || item.kind === 'artefact';
 }

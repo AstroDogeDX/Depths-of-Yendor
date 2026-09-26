@@ -27,7 +27,8 @@ The build is plain static files with relative paths (`base: './'` in `vite.confi
 | I or Tab | Pack (click or ↑↓ select, double-click or Enter use, T throw, D drop) |
 | M | Full map |
 | 1–6 | Hotbar slots (see below) |
-| F / right-click | Zap your last-used wand |
+| F | Grip your weapon in both hands, or back in one (see *Off hand and two hands*) |
+| Right-click | Use what's in your off hand, or, gripping your weapon in both hands, its special (none yet) |
 | Q | Drink a potion you *know* is healing |
 | R / T | Active power of artefact slot 1 / 2 |
 | P | Cycle internal render resolution (270p → 360p → 540p → native) |
@@ -40,14 +41,26 @@ For testing by hand, press **`** (the key left of 1) during a run to open the de
 
 - **Travel:** jump straight to any of the 25 floors, arriving at its entrance as if you'd walked down (boss floors are marked red, shop floors gold). **New layout** builds the floor you're on again from a new seed, for a quick look at another layout. **Reveal map** maps the whole floor and shows its hidden traps, and **To the stairs down** puts you at its exit.
 - **You:** god mode (nothing can hurt you), health and maximum health, strength, levelling up, gold, **Restore** (full health and stamina, fed, every status cleared) and **Kill every monster**.
-- **Items:** make any weapon, armour, potion, scroll, wand, ring, artefact or food, or the Amulet or an iron key for this floor, with the +N (a charge more each, for a wand), quantity, curse (none, weakened or full), enchantment and identification you choose. It goes in your pack, or on the floor in front of you when the pack is full. **Identify everything** teaches you every potion, scroll, wand and ring, and identifies what you carry.
+- **Items:** make any weapon, off-hand thing (the torch), armour, potion, scroll, wand, ring, artefact or food, or the Amulet or an iron key for this floor, with the +N (a charge more each, for a wand), quantity, curse (none, weakened or full), enchantment and identification you choose. It goes in your pack, or on the floor in front of you when the pack is full. **Identify everything** teaches you every potion, scroll, wand and ring, and identifies what you carry.
 - **Monsters:** spawn any monster a few steps in front of you, awake or asleep.
 - **Traps:** lay a trap of any kind on the floor in front of you, found and armed, to step on.
 - **Statuses:** give yourself, or the monster you're facing, any status for 15 s, as it would happen in play (immunities and how statuses meet included).
 
 ## The pack
 
-The left of the pack shows a paper doll of what you have equipped: weapon in hand, armor on the chest (tinting the figure), two rings and two artefact attunements. A known curse gives the slot a red border. Clicking a filled slot selects that item. Selecting something you haven't equipped highlights the slot it would go into. Underneath are your derived stats (damage and its type, recovery, reach, defense, speed, strength), with anything too heavy for you shown in red. An unidentified weapon's + stays hidden: its damage shows as *(+?)*. A curse on it you don't know of stays hidden too.
+The left of the pack shows a paper doll of what you have equipped: weapon in hand, what's in your off hand (the torch), armor on the chest (tinting the figure), two rings and two artefact attunements. A weapon gripped in both hands is marked *2H*, and what's in your off hand meanwhile *stowed*. A known curse gives the slot a red border. Clicking a filled slot selects that item. Selecting something you haven't equipped highlights the slot it would go into. Underneath are your derived stats (damage and its type, recovery, reach, defense, speed, strength), with anything too heavy for you shown in red. An unidentified weapon's + stays hidden: its damage shows as *(+?)*. A curse on it you don't know of stays hidden too.
+
+## Off hand and two hands
+
+Your weapon is in your main hand, and your other hand holds an **off-hand** thing: for now, only the **torch** you start with. Shields, throwing weapons, a bow and more are to come (`OFFHANDS` in `items/defs.js`). It's equipment like any other: **Put away** in the pack stows it with your things, **Hold** takes it back up, and you can drop it, or sell it (for next to nothing).
+
+- **The torch is your light.** Held up, it lights the way as it always has. Without one in hand, only the floor's own dim light and the sconces show you anything.
+- **F grips your weapon in both hands**, or takes it back into one. Two hands make a heavy weapon manageable: it needs **4 less strength** to use well (`TWO_HAND_STR` in `player.js`), so a war hammer 5 strength too heavy for you recovers in 2.1 s instead of 3.2, and its penalty to hit drops from 40% to 8%. It hits no harder for it: strength beyond what a weapon needs still counts only from your own. Every weapon can be gripped this way. Blades and hafts are held upright before you, and swing higher and further; spears are held low across the body, and driven further home.
+- **Two hands stow what's in your off hand.** You can't use it, and the torch hangs at your belt, lighting far less (45%) from lower down. Taking something in your off hand takes your weapon back into one, and so does putting your weapon away.
+- **Changing grip empties your attack meter**, as changing equipment does.
+- **Right-click** uses what's in your off hand, if it has a use (the torch has none but its light), or, while you grip your weapon in both hands, the weapon's two-handed special (none yet). Each goes in `OFFHAND_USES` or `TWO_HAND_SPECIALS` in `items/use.js`.
+
+Wands no longer have a key of their own: put them on the hotbar.
 
 ## Hotbar
 
@@ -64,7 +77,7 @@ Potion, scroll and food slots remember the *type*, so a slot whose stack runs ou
 - **Attack meter instead of turns.** Every weapon has a recovery time. You can swing early, but damage scales with the charge, like King's Field's power bar. The weapon visibly sags while the meter refills.
 - **Telegraphed monster attacks.** Monsters wind up before striking, and during the windup they turn slowly toward you. Stepping back or circle-strafing makes them whiff, which replaces Rogue's to-hit dice for defence. Heavy hits can stagger a monster out of its windup.
 - **Stealth and sneak attacks.** Monsters start asleep or wandering. Unaware targets take double damage and cannot dodge (Pixel Dungeon's surprise attacks). Monsters notice you by sight and by the sound of your footsteps (see below). Standing still, rings of stealth and light armour help. Heavy armour hurts.
-- **Clocks tick in seconds.** Hunger, regeneration, status effects, wand recharge and ring identification all run on real time. The world pauses while the pack or map is open, but drinking, eating, throwing or changing equipment empties your attack meter, so doing it mid-fight still costs a swing.
+- **Clocks tick in seconds.** Hunger, regeneration, status effects, wand recharge and ring identification all run on real time. The world pauses while the pack or map is open, but drinking, eating, throwing, changing equipment or changing grip empties your attack meter, so doing it mid-fight still costs a swing.
 - **Paralysis means paralysis.** While paralysed (or frozen) you can't use items (from the pack or the hotbar), pick things up, take stairs or invoke artefacts. Only the map stays available.
 - **Identification is per run.** Potion colours, scroll labels, wand woods and ring gems are reshuffled from the seed. Potions reveal themselves when drunk, and throwing a potion identifies it if the splash does something visible. Weapons and armour reveal their + after enough hits, and any Enchantment or Curse of ___ as soon as you put them on. Rings reveal themselves after about 100 s of wear. A wand shows what kind it is the first time its spell does something you can see, but its + and its charges only after 3 zaps.
 - **Curses.** About 16% of weapons and armour, a fifth of rings and an eighth of wands are cursed. See *Curses, upgrades and enchantments* below.
@@ -74,7 +87,7 @@ Potion, scroll and food slots remember the *type*, so a slot whose stack runs ou
 
 - **25 floors in 5 themes** of five floors each: Sewers, Catacombs, Caves, Dwarven Ruins and the Underworld. Seeded layouts with pillared halls, wall sconces, doors and hidden traps (spike, poison gas, teleport, alarm). See *The dungeon* and *Floors and doors* below.
 - **12 monsters:** rat, bat, ooze, goblin, goblin archer, skeleton, orc, wraith, fire imp, troll, stone golem, and the **Warden of Yendor**, who fires bolt volleys and raises the dead at half health.
-- **Items:** 7 weapons with different reach, speed and damage types (spears out-reach swords, hammers hit hard but recover slowly), 5 armours with strength requirements, 10 potions, 10 scrolls, 5 wands, 6 rings, food.
+- **Items:** 7 weapons with different reach, speed and damage types (spears out-reach swords, hammers hit hard but recover slowly), each to be gripped in one hand or both, the torch in your off hand, 5 armours with strength requirements, 10 potions, 10 scrolls, 5 wands, 6 rings, food.
 - **A shop** on the first floor of each theme after the first (floors 6, 11, 16 and 21). See *The shop* below.
 - **6 artefacts**, 5 per run in guarded shrines on the third floor of each theme (3, 8, 13, 18 and 23): Chalice of Crimson Thirst (lifesteal), Eye of the Deep (see all monsters and traps), Horn of Thunder (stun blast), Cloak of Shadows (invisibility), Boots of the Wind (speed), Emberheart (burning strikes, fire immunity). You have two attunement slots.
 - A title screen that walks you through a floor of each theme in turn, down the stairs from one to the next.
@@ -321,7 +334,7 @@ On the first floor of each new theme after the first (floors 6, 11, 16 and 21), 
 
 ## Blockbench models
 
-The monsters, the shopkeeper, the weapons you hold and find, the torch in your other hand, the sconces, torches and lanterns on the walls, room furniture, traps and the items lying on the floor are [Blockbench](https://www.blockbench.net) projects in `assets/models/`:
+The monsters, the shopkeeper, the weapons you hold and find, the torch in your off hand (and on the floor, dropped), the sconces, torches and lanterns on the walls, room furniture, traps and the items lying on the floor are [Blockbench](https://www.blockbench.net) projects in `assets/models/`:
 
 - `monsters/` has one per monster type in `monsters/defs.js` (`rat`, `bat`, `slime`, `goblin`, `archer`, `skeleton`, `orc`, `wraith`, `imp`, `troll`, `golem`, `warden`).
 - `weapons/` has one per `model` name in `items/defs.js` (`dagger`, `sword`, `longsword`, `mace`, `spear`, `axe`, `hammer`).
@@ -362,7 +375,7 @@ These models were first built in code by `tools/modelgen/`. It shapes low-poly m
 src/
   config.js            world scale, themes and floors, boss/shop/shrine floors, the danger curve, tuning constants
   game.js              run lifecycle, level transitions, rendering, interaction, traps, endings
-  player.js            movement, attack meter, stats, statuses, hunger/regen, inventory
+  player.js            movement, attack meter, stats, grip, torchlight, statuses, hunger/regen, inventory
   combat.js            player melee resolution
   damage.js            damage types (physical, magic and the elements) and the resistances to them
   status.js            statuses for the player and monsters alike: what they do, what wards them off, how they meet
@@ -394,7 +407,7 @@ src/
   items/identify.js    per-run appearance shuffle, naming, descriptions
   items/generate.js    random items by depth, their + and curses, shop stock, what things are worth
   items/enchant.js     Enchantments and Curses of ___ on weapons and armour, and what a curse's strength means
-  items/use.js         potions, scrolls, wands, equip/curses, throwing, artefact powers
+  items/use.js         potions, scrolls, wands, equip/curses, grip and off-hand use, throwing, artefact powers
   items/models.js      loads the weapon and item models, tinting each item in its colour
   items/bbmodel.js     loads Blockbench .bbmodel projects (cubes, meshes, groups, textures) into three.js
   fx/                  viewmodel (hands), pixel-art flames, projectiles, particles, drips, haze over channels (the rifts' miasma, the lava's embers), glow sprites
