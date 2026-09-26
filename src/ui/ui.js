@@ -3,7 +3,7 @@ import { KIND_GLYPH, ARTEFACTS, ARMORS, wandRecharge } from '../items/defs.js';
 import { equipSlotFor } from '../items/use.js';
 import { T } from '../dungeon/tiles.js';
 import { TRAP_COLORS } from '../world/level.js';
-import { HUNGER_HUNGRY, HUNGER_FAMISHED, INVENTORY_SIZE, TILE, HOTBAR_SIZE, PLAYER_SPEED, MAX_DEPTH, THEMES, FLOORS_PER_THEME, themeForDepth } from '../config.js';
+import { HUNGER_HUNGRY, HUNGER_FAMISHED, INVENTORY_SIZE, TILE, HOTBAR_SIZE, PLAYER_SPEED, MAX_DEPTH, THEMES, FLOORS_PER_THEME, TWO_HAND_STR, themeForDepth } from '../config.js';
 import { canHotbar, slotItem, slotHolds, slotAction, assignSlot, clearSlot } from '../hotbar.js';
 import { stackable } from '../items/generate.js';
 import { DAMAGE_TYPES } from '../damage.js';
@@ -678,8 +678,11 @@ export class UI {
       ['Speed', `${Math.round((p.moveSpeed() / PLAYER_SPEED) * 100)}%`, slow], ['Strength', String(p.str)],
     ];
     let html = rows.map(([label, v, bad]) => `<span>${label}</span><b${bad ? ' class="bad"' : ''}>${v}</b>`).join('');
-    if (heavy) html += `<div class="warn">${p.twoHanded ? 'Your weapon is too heavy for you, even in both hands.' : 'Your weapon is too heavy for you in one hand: F grips it in both.'}</div>`;
-    else if (p.twoHanded) html += '<div class="note">Your weapon is gripped in both hands (F for one).</div>';
+    if (heavy) {
+      html += `<div class="warn">${p.twoHanded ? 'Your weapon is too heavy for you, even in both hands.'
+        : w.short <= TWO_HAND_STR ? 'Your weapon is too heavy for you in one hand: F grips it in both.'
+        : 'Your weapon is too heavy for you. Gripping it in both hands (F) would help.'}</div>`;
+    } else if (p.twoHanded) html += '<div class="note">Your weapon is gripped in both hands (F for one).</div>';
     if (slow) html += '<div class="warn">Your armor is weighing you down.</div>';
     $('inv-stats').innerHTML = html;
   }

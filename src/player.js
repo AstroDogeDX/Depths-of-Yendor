@@ -1,6 +1,7 @@
 import {
   PLAYER_RADIUS, PLAYER_SPEED, TURN_SPEED, MOUSE_SENS, HUNGER_MAX, HUNGER_HUNGRY, HUNGER_FAMISHED, INVENTORY_SIZE, HOTBAR_SIZE,
   STAMINA_BASE, STAMINA_PER_LEVEL, STAMINA_DRAIN, STAMINA_REGEN, STAMINA_REGEN_DELAY, STAMINA_RECOVER, MODE_SPEED, NOISE,
+  TWO_HAND_STR,
 } from './config.js';
 import { WEAPONS, ARMORS, ARTEFACTS, OFFHANDS, wandRecharge } from './items/defs.js';
 import { enchantOf, baneOf } from './items/enchant.js';
@@ -19,8 +20,6 @@ const SAVED = [
 ];
 
 const FISTS = { name: 'fists', dmgType: 'bash', dmg: [1, 3], recharge: 0.6, reach: 1.4, str: 0, model: null };
-// Gripped in both hands, a weapon needs this much less strength to use well (see weaponStats).
-export const TWO_HAND_STR = 4;
 
 export class Player {
   constructor() {
@@ -107,20 +106,21 @@ export class Player {
   /**
    * Your weapon (or fists) as it fights now: its +, strength, grip, statuses, and any Enchantment or Curse of ___ on
    * it (see items/enchant.js): `onHit` is what an enchantment's blows bring, `dmgMult` what a curse takes off them.
-   * `short`: how much strength you lack to use it well, each point of which slows it and makes it miss more. Gripped
-   * in both hands it needs TWO_HAND_STR less (but hits no harder for it: `excess` goes by your strength alone).
+   * Gripped in both hands, it needs TWO_HAND_STR less strength: `short` is how much you lack of what it needs (each
+   * point slows it and makes it miss more), and `excess` how much you have beyond it (bonus damage).
    */
   weaponStats() {
     const it = this.equip.weapon;
     const d = it ? WEAPONS[it.type] : FISTS;
     const plus = it ? it.plus : 0;
-    const short = Math.max(0, d.str - this.str - (this.twoHanded && it ? TWO_HAND_STR : 0));
+    const needs = d.str - (this.twoHanded && it ? TWO_HAND_STR : 0);
+    const short = Math.max(0, needs - this.str);
     const bane = baneOf(it);
     return {
       dmg: d.dmg, dmgType: damageType(d), plus, reach: d.reach, model: d.model, short,
       recharge: (d.recharge * (1 + short * 0.15) * (this.status.chilled > 0 ? 1.25 : 1)) / (this.status.hasted > 0 ? 1.35 : 1),
       accuracy: plus * 0.03 - short * 0.08 + (bane?.accuracy ?? 0),
-      excess: Math.max(0, this.str - d.str),
+      excess: Math.max(0, this.str - needs),
       onHit: enchantOf(it)?.onHit ?? null,
       dmgMult: bane?.dmgMult ?? 1,
     };

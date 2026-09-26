@@ -1,7 +1,7 @@
 import { WEAPONS, ARMORS, FOOD, ARTEFACTS, WANDS, OFFHANDS, WAND_PLUS_DMG } from './defs.js';
 import { ENCHANTMENTS, binds, enchantOf } from './enchant.js';
 import { buildItemModel } from './models.js';
-import { HUNGER_MAX, EYE_H } from '../config.js';
+import { HUNGER_MAX, EYE_H, TWO_HAND_STR } from '../config.js';
 import { rand } from '../rng.js';
 import { spawnProjectile } from '../fx/projectiles.js';
 import { burst, ring, transient, lightningMesh } from '../fx/particles.js';
@@ -514,9 +514,11 @@ export function equipItem(game, item) {
       game.viewmodel.setWeapon(WEAPONS[item.type]);
       game.log(`You wield the ${name()}.`);
       // (Gripped in both hands, a weapon needs less strength: see Player.weaponStats.)
-      if (p.weaponStats().short > 0) {
+      const short = p.weaponStats().short;
+      if (short > 0) {
         game.log(p.twoHanded ? 'It is too heavy for you to use well, even in both hands.'
-          : 'It is too heavy for you to use well in one hand. Press F to grip it in both.', 'warn');
+          : short <= TWO_HAND_STR ? 'It is too heavy for you to use well in one hand. Press F to grip it in both.'
+          : 'It is too heavy for you to use well, though gripping it in both hands (F) would help.', 'warn');
       }
       bind();
       break;
