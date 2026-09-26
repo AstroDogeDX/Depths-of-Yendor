@@ -81,6 +81,8 @@ export const WAND_PLUS_DMG = 2;
 // Seconds for a wand to regain a charge: WAND_RECHARGE at +0, a tenth less for each + (to no less than half).
 export const WAND_RECHARGE = 55;
 export const wandRecharge = (plus) => WAND_RECHARGE * Math.max(0.5, 1 - 0.1 * plus);
+// Zaps it takes to know a wand: its + and its charges (see zapWand). What kind it is, its effect usually shows sooner.
+export const WAND_ZAPS_TO_ID = 3;
 
 export const RINGS = {
   protection:    { name: 'protection',    freq: 18, value: 130, desc: 'Wards off blows. Adds its bonus to your defense.' },

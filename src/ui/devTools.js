@@ -1,5 +1,5 @@
 import { THEMES, FLOORS_PER_THEME, TILE, HUNGER_MAX, isBossDepth, isShopDepth } from '../config.js';
-import { WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD } from '../items/defs.js';
+import { WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, WAND_ZAPS_TO_ID } from '../items/defs.js';
 import { makeItem, stackable } from '../items/generate.js';
 import { MONSTERS } from '../monsters/defs.js';
 import { generateLevel } from '../dungeon/generator.js';
@@ -284,7 +284,7 @@ export class DevTools {
       case 'ring': item = makeItem('ring', type, { wornTime: 0 }); break;
       case 'wand': {
         const max = WANDS[type].charges[1] + plus; // for a wand, each + is a charge more
-        item = makeItem('wand', type, { charges: max, maxCharges: max, rechargeT: 0 });
+        item = makeItem('wand', type, { charges: max, maxCharges: max, rechargeT: 0, zapsToId: WAND_ZAPS_TO_ID });
         break;
       }
       case 'special':

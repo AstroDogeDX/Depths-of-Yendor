@@ -12,6 +12,7 @@
 // starts afresh (see Game.getLevel).
 
 import { randomBane } from './items/enchant.js';
+import { WAND_ZAPS_TO_ID } from './items/defs.js';
 import { rand } from './rng.js';
 
 const KEY = 'doy.save';
@@ -45,6 +46,7 @@ export function readSave() {
  * Brings a save up to date with what's changed since it was made. (Renamed statuses are dealt with as they're
  * restored: see restoreStatus in status.js.)
  * - The wand of slowness is now the wand of frost.
+ * - A wand takes a few zaps to know now (item.zapsToId, see zapWand).
  * - Before format 2, the scroll of enchanting was what's now the scroll of upgrade, and an item's enchantment could be
  *   negative: now it's a + of 0 or more, a curse is a strength (item.curse), and a cursed weapon or armour has a Curse
  *   of ___ (see items/enchant.js). A cursed ring's old minus becomes a + that works against you, as before.
@@ -54,6 +56,7 @@ function upgrade(save) {
   const fix = (it) => {
     if (!it) return;
     if (it.kind === 'wand' && it.type === 'slow') it.type = 'frost';
+    if (it.kind === 'wand' && 'charges' in it && it.zapsToId === undefined) it.zapsToId = WAND_ZAPS_TO_ID; // not a hotbar binding
     if (!old) return;
     if (it.kind === 'scroll' && it.type === 'enchant') it.type = 'upgrade';
     if ('ench' in it || 'cursed' in it) {

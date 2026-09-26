@@ -741,12 +741,13 @@ export class UI {
         let qty = '', cd = 0, rc = '';
         if (stackable(b)) qty = String(it ? it.qty : 0);
         else if (b.kind === 'wand' && it) {
-          // Its charges, and while it's short of them, how near the next is (the seconds to it, when it's empty).
-          qty = String(it.charges);
+          // Its charges, and while it's short of them, how near the next is (the seconds to it, when it's empty). Until
+          // you know the wand, only that it's recharging.
+          qty = it.identified ? String(it.charges) : '?';
           if (it.charges < it.maxCharges) {
             const every = wandRecharge(it.plus);
             rc = `<span class="rc"><i style="width:${Math.round((it.rechargeT / every) * 50) * 2}%"></i></span>`;
-            if (it.charges === 0) qty = `${Math.ceil(every - it.rechargeT)}s`;
+            if (it.charges === 0 && it.identified) qty = `${Math.ceil(every - it.rechargeT)}s`;
           }
         }
         else if (b.kind === 'artefact' && it) {

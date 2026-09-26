@@ -1,8 +1,10 @@
 // Enchantments and curses on weapons and armour.
 //
-// An Enchantment of ___ (a scroll of enchantment lays one, at random) and a Curse of ___ (a cursed weapon or armour
-// comes with one) are each an effect on the item, named after it: "long sword of flames", "chain mail of clamour".
-// An item has one or the other, never both: a scroll of enchantment only takes on something free of every curse.
+// An Enchantment of ___ (a scroll of enchantment lays one, at random, and now and then a weapon or armour is found
+// with one) and a Curse of ___ (a cursed weapon or armour comes with one) are each an effect on the item, named after
+// it: "long sword of flames", "chain mail of clamour". An item has one or the other, never both: a scroll of
+// enchantment only takes on something free of every curse. Either makes itself known when you first put the thing on
+// (item.enchantKnown, or curseKnown for a curse), if identifying it hasn't told you already.
 //
 // Curses come in two strengths (item.curse): 2, a full curse, binds the item to you once you put it on; 1, a curse a
 // scroll of upgrade has weakened, lets you take it off, but its effect lingers. At 0 it's clean. On a ring, a curse
@@ -48,6 +50,9 @@ export const baneOf = (item) => (item?.curse > 0 && item.bane && CURSES[item.kin
 
 /** A curse effect for a weapon or armour, at random. */
 export const randomBane = (rng, kind) => rng.pick(Object.keys(CURSES[kind]));
+
+/** An enchantment for a weapon or armour, at random. */
+export const randomEnchant = (rng, kind) => rng.pick(Object.keys(ENCHANTMENTS[kind]));
 
 /** Whether a weapon, armour or ring is stuck on you: fully cursed. */
 export const binds = (item) => item.curse >= 2 && item.kind !== 'artefact';

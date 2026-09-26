@@ -1,5 +1,5 @@
-import { WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, FOOD } from './defs.js';
-import { randomBane } from './enchant.js';
+import { WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, FOOD, WAND_ZAPS_TO_ID } from './defs.js';
+import { randomBane, randomEnchant } from './enchant.js';
 import { danger } from '../config.js';
 
 let nextUid = 1;
@@ -12,7 +12,8 @@ export function reserveUids(uid) { nextUid = Math.max(nextUid, uid); }
 /**
  * A new item. Equipment has `plus` (its +N, never below 0), `curse` (0 clean, 1 weakened, 2 full: see enchant.js),
  * and for weapons and armour `enchant` or `bane` (an Enchantment or Curse of ___). `identified`: you know its +, its
- * enchantment and its curse; `curseKnown`: you know at least whether it's cursed (and so its Curse of ___).
+ * enchantment and its curse (and a wand's charges); `curseKnown`: you know at least whether it's cursed (and so its
+ * Curse of ___); `enchantKnown`: you know its enchantment, having put it on.
  */
 export function makeItem(kind, type, extra = {}) {
   return {
@@ -29,14 +30,14 @@ export function makeItem(kind, type, extra = {}) {
 
 const freqTable = (defs) => Object.fromEntries(Object.entries(defs).map(([k, v]) => [k, v.freq]));
 
-/** A found weapon's or armour's +, and whether it's cursed (with its Curse of ___). */
+/** A found weapon's or armour's +, and whether it's cursed (with its Curse of ___) or, now and then, enchanted. */
 function rollGear(rng, item, depth) {
   const d = danger(depth);
   if (rng.next() < 0.18 + d * 0.015) item.plus = rng.int(1, d > 6 ? 3 : 2);
   if (rng.chance(0.16)) {
     item.curse = 2;
     item.bane = randomBane(rng, item.kind);
-  }
+  } else if (rng.chance(0.045 + d * 0.005)) item.enchant = randomEnchant(rng, item.kind);
 }
 
 function pickTiered(rng, defs, depth) {
@@ -63,7 +64,7 @@ export function randomItem(rng, depth) {
       rollGear(rng, it, depth);
       return it;
     }
-    case 'wand': return randomWand(rng);
+    case 'wand': return randomWand(rng, depth);
     case 'ring': {
       const type = rng.weighted(freqTable(RINGS));
       // A cursed ring's + works against you (see Player.ringBonus).
@@ -116,7 +117,8 @@ export function worth(item, k) {
       if (!(item.kind === 'weapon' || item.kind === 'armor' || k.isKnown(item))) return UNKNOWN[item.kind];
       let v = DEFS[item.kind][item.type].value;
       if (!item.identified && !item.curseKnown) return v * UNKNOWN_GEAR;
-      if (item.identified) v += item.plus * PER_PLUS[item.kind] + (item.enchant ? ENCHANTED : 0);
+      if (item.identified) v += item.plus * PER_PLUS[item.kind];
+      if (item.enchant && (item.identified || item.enchantKnown)) v += ENCHANTED;
       if (item.curseKnown && item.curse === 1) v *= WEAK_CURSE;
       return v;
     }
@@ -143,7 +145,7 @@ export function shopStock(rng, depth) {
   const gear = rng.chance(0.5)
     ? makeItem('weapon', pickTiered(rng, WEAPONS, depth + 3), { hitsToId: 20, plus: rng.chance(0.3) ? 1 : 0 })
     : makeItem('armor', pickTiered(rng, ARMORS, depth + 3), { hitsToId: 14, plus: rng.chance(0.3) ? 1 : 0 });
-  const trinket = rng.chance(0.5) ? randomWand(rng, false)
+  const trinket = rng.chance(0.5) ? randomWand(rng)
     : makeItem('ring', rng.weighted({ ...freqTable(RINGS), teleportation: 0 }), { wornTime: 0, plus: rng.int(1, 2) });
   const wares = [
     makeItem('food', 'ration'),
@@ -155,12 +157,23 @@ export function shopStock(rng, depth) {
   return wares.map((item) => ({ item, price: shopPrice(item, depth) }));
 }
 
-/** A wand with its charges, cursed (so it misfires: see zapWand) about one time in eight unless `cursable` is off. */
-function randomWand(rng, cursable = true) {
+/**
+ * A wand, full of charges. One found at `depth` is cursed (so it misfires: see zapWand) about one time in eight, and
+ * may have a + (a charge more for each), as a weapon might. A shop's (no depth) has neither, and takes no more draws
+ * from the floor's generator than it always has, so floors with shops keep their layouts.
+ */
+function randomWand(rng, depth) {
   const type = rng.weighted(freqTable(WANDS));
   const [a, b] = WANDS[type].charges;
-  const max = rng.int(a, b);
-  return makeItem('wand', type, { charges: max, maxCharges: max, rechargeT: 0, curse: cursable && rng.chance(0.12) ? 2 : 0 });
+  const it = makeItem('wand', type, { maxCharges: rng.int(a, b), rechargeT: 0, zapsToId: WAND_ZAPS_TO_ID });
+  if (depth) {
+    if (rng.chance(0.12)) it.curse = 2;
+    const d = danger(depth);
+    if (rng.next() < 0.18 + d * 0.015) it.plus = rng.int(1, d > 6 ? 3 : 2);
+  }
+  it.maxCharges += it.plus;
+  it.charges = it.maxCharges;
+  return it;
 }
 
 export function stackable(item) {

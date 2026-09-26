@@ -19,7 +19,7 @@ function curseNote(item) {
 
 /** A weapon's or armour's Enchantment or Curse of ___, as far as you know it: [label, description] or null. */
 function effectOf(item) {
-  const e = item.identified && enchantOf(item);
+  const e = (item.identified || item.enchantKnown) && enchantOf(item);
   if (e) return [`Enchantment of ${cap(e.name)}`, e];
   const b = item.curseKnown && baneOf(item);
   return b ? [`Curse of ${cap(b.name)}`, b] : null;
@@ -102,7 +102,7 @@ export class Knowledge {
     return true;
   }
 
-  /** Fully identify an item: its type and, for equipment, its +, its enchantment and its curse. */
+  /** Fully identify an item: its type and, for equipment, its +, its enchantment and its curse (and a wand's charges). */
   identify(item) {
     this.learn(item);
     item.identified = true;
@@ -136,11 +136,12 @@ export class Knowledge {
     const q = item.qty || 1;
     const plural = q > 1;
     const plus = `+${item.plus}`;
-    // What you know of its curse: bound, weakened, or (if you know that much but no more) none.
-    const curseTag = !item.curseKnown ? '' : item.curse >= 2 ? ' (cursed)' : item.curse === 1 ? ' (curse weakened)'
-      : !item.identified && GEAR.has(item.kind) ? ' (uncursed)' : '';
     const effect = effectOf(item);
     const of = effect ? ` of ${effect[1].name}` : '';
+    // What you know of its curse: bound, weakened, or (if you know that much but no more) none. A known enchantment
+    // says it's clean itself.
+    const curseTag = !item.curseKnown ? '' : item.curse >= 2 ? ' (cursed)' : item.curse === 1 ? ' (curse weakened)'
+      : !item.identified && !effect && GEAR.has(item.kind) ? ' (uncursed)' : '';
 
     switch (item.kind) {
       case 'weapon': {
@@ -165,9 +166,9 @@ export class Knowledge {
           : `${prefix}${noun} labeled "${this.appearance.scroll[item.type].name}"`;
       }
       case 'wand': {
-        const tag = item.identified ? ` ${plus}` : '';
-        return (known ? `wand of ${WANDS[item.type].name}` : `${this.appearance.wand[item.type].name} wand`) + tag +
-          ` [${item.charges}/${item.maxCharges}]` + curseTag;
+        // Its + and charges only once you know it (see zapWand).
+        const tag = item.identified ? ` ${plus} [${item.charges}/${item.maxCharges}]` : '';
+        return (known ? `wand of ${WANDS[item.type].name}` : `${this.appearance.wand[item.type].name} wand`) + tag + curseTag;
       }
       case 'ring': {
         const tag = item.identified && item.type !== 'teleportation' ? ` ${plus}` : '';
@@ -215,10 +216,16 @@ export class Knowledge {
           const up = item.identified ? item.plus * WAND_PLUS_DMG : 0;
           parts.push(`Damage ${d.dmg[0] + up}–${d.dmg[1] + up} (${DAMAGE_TYPES[d.dmgType].name})${item.identified && item.plus ? `, with its +${item.plus}` : ''}.`);
         }
-        // Charges come back one at a time, faster for each + (see wandRecharge).
-        const every = Math.round(wandRecharge(item.plus));
-        parts.push(`${item.charges} of ${item.maxCharges} charges.` + (item.charges < item.maxCharges
-          ? ` The next returns in ${Math.ceil(wandRecharge(item.plus) - item.rechargeT)}s (one every ${every}s).` : ` A spent charge returns every ${every}s.`));
+        // Charges come back one at a time, faster for each + (see wandRecharge). Until you know the wand, you can tell
+        // it's recharging, but not how many charges it has, or how fast they come back.
+        if (item.identified) {
+          const every = Math.round(wandRecharge(item.plus));
+          parts.push(`${item.charges} of ${item.maxCharges} charges.` + (item.charges < item.maxCharges
+            ? ` The next returns in ${Math.ceil(wandRecharge(item.plus) - item.rechargeT)}s (one every ${every}s).` : ` A spent charge returns every ${every}s.`));
+        } else {
+          parts.push((item.charges < item.maxCharges ? 'It is recharging. ' : '') +
+            'You do not know how strong it is, or how many charges it holds. Zap it a few times to learn more.');
+        }
         if (item.curseKnown && item.curse > 0) {
           parts.push(item.curse >= 2 ? 'A curse twists its magic: it misfires, and may turn on you.' : 'Its curse is weakened, but its magic still goes astray.');
         } else if (item.curseKnown) parts.push('It is free of curses.');

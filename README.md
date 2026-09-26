@@ -66,7 +66,7 @@ Potion, scroll and food slots remember the *type*, so a slot whose stack runs ou
 - **Stealth and sneak attacks.** Monsters start asleep or wandering. Unaware targets take double damage and cannot dodge (Pixel Dungeon's surprise attacks). Monsters notice you by sight and by the sound of your footsteps (see below). Standing still, rings of stealth and light armour help. Heavy armour hurts.
 - **Clocks tick in seconds.** Hunger, regeneration, status effects, wand recharge and ring identification all run on real time. The world pauses while the pack or map is open, but drinking, eating, throwing or changing equipment empties your attack meter, so doing it mid-fight still costs a swing.
 - **Paralysis means paralysis.** While paralysed (or frozen) you can't use items (from the pack or the hotbar), pick things up, take stairs or invoke artefacts. Only the map stays available.
-- **Identification is per run.** Potion colours, scroll labels, wand woods and ring gems are reshuffled from the seed. Potions reveal themselves when drunk, and throwing a potion identifies it if the splash does something visible. Weapons and armour reveal their + after enough hits. Rings reveal themselves after about 100 s of wear.
+- **Identification is per run.** Potion colours, scroll labels, wand woods and ring gems are reshuffled from the seed. Potions reveal themselves when drunk, and throwing a potion identifies it if the splash does something visible. Weapons and armour reveal their + after enough hits, and any Enchantment or Curse of ___ as soon as you put them on. Rings reveal themselves after about 100 s of wear. A wand shows what kind it is the first time its spell does something you can see, but its + and its charges only after 3 zaps.
 - **Curses.** About 16% of weapons and armour, a fifth of rings and an eighth of wands are cursed. See *Curses, upgrades and enchantments* below.
 - **Persistent floors.** Levels are kept when you leave, so you can go back up, and they're saved with the run (see *Saving*). The dungeon also restocks itself slowly, and fast and angrily once you carry the Amulet.
 
@@ -136,6 +136,10 @@ You can see when a type matters. A hit on a monster's weakness shows a bigger nu
 
 Equipment has a **+N** (never below 0), which the scroll of **upgrade** raises. A weapon or armour can also have an **Enchantment of ___**, or a **Curse of ___**, but not both (`items/enchant.js`: the effects there so far are a first few).
 
+Now and then a weapon or armour you find is already enchanted: about 5% of those that aren't cursed on the first floor, rising to about 10% on the last. A wand you find may have a +, as often as a weapon does. The shop's weapons and armour are never enchanted, and its wands never have a +.
+
+You learn an Enchantment or Curse of ___ the moment you put the thing on ("Power stirs in the long sword: an Enchantment of Flames!"), and so, with an enchantment, that it's free of curses. Its + you only learn by using it (or a scroll of identify).
+
 **Curses** come in two strengths (`item.curse`):
 
 - **Full:** a cursed weapon, armour or ring binds itself to you once you put it on, and a weapon or armour has a Curse of ___ (clumsiness, frailty, burden, clamour...). A weapon's or armour's + still counts as normal. A cursed ring's + works *against* you instead: a cursed ring of protection +1 is −1 defense until the curse is lifted.
@@ -153,7 +157,7 @@ The scrolls:
 | Enchantment | a weapon or armour free of curses | a random enchantment, in place of any it had; identifies it. On something with a curse you didn't know of, the magic recoils and shows you the curse |
 | Remove curse | one item that might be cursed | lifts any curse, and either way marks it clean. Things you know are clean aren't offered |
 
-**Wands** show their charges in the pack and on the hotbar, where a bar fills toward the next charge, and an empty wand counts down the seconds to it. A charge returns every 55 s at +0, a tenth faster for each + (to no faster than every 27.5 s). Each + also adds a charge, and 2 to both ends of a damaging wand's damage, which its description shows.
+**Wands** keep their + and their charges to themselves until you know them: 3 zaps (misfires count), or a scroll of identify. Until then the hotbar shows **?** for its charges. Once you know it, the hotbar shows its charges, and an empty wand counts down the seconds to the next. Either way, while a wand is short of charges, a bar under its slot fills toward the next one, and its description says it's recharging. A charge returns every 55 s at +0, a tenth faster for each + (to no faster than every 27.5 s). Each + also adds a charge, and 2 to both ends of a damaging wand's damage, which its description shows once you know the wand.
 
 ## Statuses
 
@@ -307,7 +311,7 @@ On the first floor of each new theme after the first (floors 6, 11, 16 and 21), 
   - **A potion, scroll, wand or ring of a kind you don't know** fetches a low price, the same for every kind.
   - **Known potions and scrolls** fetch their value.
   - **Equipment you know nothing about** (not even whether it's cursed) fetches a share of what its kind is worth, cursed or not.
-  - **Known to be clean** but not identified, it fetches its full value. **Identified**, add what its + and any enchantment are worth.
+  - **Known to be clean** but not identified, it fetches its full value, plus what an enchantment you know of is worth. **Identified**, add what its + is worth too.
   - **A weakened curse you know of** halves the price. **A full curse you know of**, and the shopkeeper refuses it outright.
   - Stacks sell one at a time, equipped items come off first (not if they're cursed), and the shopkeeper won't buy the Amulet.
 - **Buying back:** the shopkeeper sets what you sell out with its wares, at its usual price for that item. It goes on the first free spot on the counter or the display tables, then on the rug, which holds six. Potions, scrolls and food of the same kind pile up on one spot and sell back one at a time. When every spot is taken, the item you sold longest ago goes to make room.

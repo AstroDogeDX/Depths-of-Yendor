@@ -1,5 +1,5 @@
 import { WEAPONS, ARMORS, FOOD, ARTEFACTS, WANDS, WAND_PLUS_DMG } from './defs.js';
-import { ENCHANTMENTS, binds } from './enchant.js';
+import { ENCHANTMENTS, binds, enchantOf } from './enchant.js';
 import { buildItemModel } from './models.js';
 import { HUNGER_MAX, EYE_H } from '../config.js';
 import { rand } from '../rng.js';
@@ -387,11 +387,8 @@ export function zapWand(game, item) {
   const learn = () => { if (k.learn(item)) game.log(`This must be a ${k.name(item)}!`, 'info'); };
 
   // A cursed wand won't cast its own spell, but some wand's bolt at random, and it may fizzle, or turn on you.
-  if (item.curse > 0) {
-    wildZap(game, item, power, bolt);
-    return true;
-  }
-  if (item.type === 'lightning') {
+  if (item.curse > 0) wildZap(game, item, power, bolt);
+  else if (item.type === 'lightning') {
     const len = 16;
     let ex = ox, ey = oy, ez = oz;
     const hitSet = new Set();
@@ -408,14 +405,21 @@ export function zapWand(game, item) {
     for (const m of hitSet) m.takeDamage(game, rand.int(w.dmg[0], w.dmg[1]) + power * WAND_PLUS_DMG, { type: w.dmgType });
     game.flash('#c0e0ff', 0.25);
     learn();
-    return true;
+  } else {
+    const b = WAND_BOLTS[item.type];
+    bolt(b.color, b.speed, (m, pr) => {
+      b.hit(game, m, power, pr);
+      learn();
+    });
+    if (b.known) learn();
   }
-  const b = WAND_BOLTS[item.type];
-  bolt(b.color, b.speed, (m, pr) => {
-    b.hit(game, m, power, pr);
-    learn();
-  });
-  if (b.known) learn();
+
+  // A few zaps and you know the wand through and through: its +, and its charges (and its kind and curse, if its
+  // spell hasn't shown you those already).
+  if (!item.identified && --item.zapsToId <= 0) {
+    k.identify(item);
+    game.log(`You have used your wand enough to know it: ${k.name(item)}.`, 'info');
+  }
   return true;
 }
 
@@ -481,7 +485,8 @@ function cursedStuck(game, item) {
 export function equipItem(game, item) {
   const p = game.player, k = game.knowledge, e = p.equip;
   const name = () => k.name(item);
-  // Putting on something cursed tells you so: a full curse binds it to you; a weakened one only taints you.
+  // Putting on something cursed tells you so: a full curse binds it to you; a weakened one only taints you. So does
+  // something enchanted, and with that, that it's free of curses (an item never has both: see enchant.js).
   const bind = () => {
     if (binds(item)) {
       item.curseKnown = true;
@@ -490,6 +495,10 @@ export function equipItem(game, item) {
     } else if (item.curse > 0 && item.kind !== 'artefact') {
       item.curseKnown = true;
       game.log(`A lingering taint creeps from the ${plainName(game, item)} into you: its curse is weakened, but not gone.`, 'warn');
+    } else if (enchantOf(item) && !item.identified && !item.enchantKnown) {
+      const e = enchantOf(item), n = plainName(game, item);
+      item.enchantKnown = item.curseKnown = true;
+      game.log(`Power stirs in the ${n}: an Enchantment of ${e.name[0].toUpperCase() + e.name.slice(1)}! ${e.desc}`, 'good');
     }
   };
   switch (item.kind) {
