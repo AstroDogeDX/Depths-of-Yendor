@@ -3,6 +3,7 @@
 // dmgType: the kind of damage its melee blows deal (slash, stab or bash; generic if not given). resist: multipliers
 // on the damage each type does to it, physical or magical, e.g. { slash: 0.5, fire: 0 }. See damage.js. A ranged
 // attack's shots deal its own dmgType (arrows stab, bolts are magic, the imp's fire is fire).
+// traits: `bloodless` (can't bleed), `fluid` (always as good as wet, so cold freezes it solid). See status.js.
 
 export const MONSTERS = {
   rat: {
@@ -19,7 +20,7 @@ export const MONSTERS = {
     name: 'green ooze', hp: 16, dmg: [2, 5], speed: 1.5, radius: 0.45, reach: 1.3, windup: 0.6, cooldown: 1.3,
     dmgType: 'bash', resist: { slash: 1.25, stab: 0.75, bash: 0.5, fire: 1.25, poison: 0 }, // slams; blades cut it,
     // blows ripple through, fire boils it, and it's poison itself
-    xp: 3, depth: [4, 14], freq: 6, dodge: 0, def: 1, sleepChance: 0.6, poisonHit: 0.35,
+    xp: 3, depth: [4, 14], freq: 6, dodge: 0, def: 1, sleepChance: 0.6, poisonHit: 0.35, traits: ['bloodless', 'fluid'],
   },
   goblin: {
     name: 'goblin', hp: 13, dmg: [2, 6], speed: 3.0, radius: 0.32, reach: 1.5, windup: 0.45, cooldown: 1.0,
@@ -36,7 +37,7 @@ export const MONSTERS = {
     name: 'skeleton', hp: 20, dmg: [3, 8], speed: 2.6, radius: 0.33, reach: 1.6, windup: 0.5, cooldown: 1.1,
     dmgType: 'slash', resist: { slash: 0.75, stab: 0.5, bash: 1.5, poison: 0, holy: 1.5 }, // a sword; nothing to
     // stab, bones that shatter, no blood to poison, and undead
-    xp: 6, depth: [9, 22], freq: 8, dodge: 0.05, def: 2, sleepChance: 0.7,
+    xp: 6, depth: [9, 22], freq: 8, dodge: 0.05, def: 2, sleepChance: 0.7, traits: ['bloodless'],
   },
   orc: {
     name: 'orc', hp: 28, dmg: [4, 11], speed: 2.8, radius: 0.42, reach: 1.8, windup: 0.6, cooldown: 1.2,
@@ -47,7 +48,7 @@ export const MONSTERS = {
     name: 'wraith', hp: 22, dmg: [4, 9], speed: 3.2, radius: 0.35, reach: 1.6, windup: 0.5, cooldown: 1.1,
     dmgType: 'slash', resist: { stab: 0.5, bash: 0.75, ice: 0.5, poison: 0, holy: 2 }, // claws; a point finds only
     // robe, a blow little to hit; the grave's own cold, no blood, and a restless spirit that holy light unmakes
-    xp: 11, depth: [14, 25], freq: 5, dodge: 0.25, def: 0, sleepChance: 0.2, flying: 0.4,
+    xp: 11, depth: [14, 25], freq: 5, dodge: 0.25, def: 0, sleepChance: 0.2, flying: 0.4, traits: ['bloodless'],
     ranged: { speed: 7, keepAway: 0, maxRange: 11, color: 0x8060ff, size: 0.18, kind: 'bolt', chance: 0.5,
               dmgType: 'magic' },
   },
@@ -68,7 +69,7 @@ export const MONSTERS = {
     name: 'stone golem', hp: 75, dmg: [9, 20], speed: 1.7, radius: 0.55, reach: 2.1, windup: 0.9, cooldown: 1.6,
     dmgType: 'bash', resist: { slash: 0.5, stab: 0.5, bash: 1.5, fire: 0.5, lightning: 0.5, poison: 0, magic: 1.25 },
     // stone fists; edges and points glance off it, stone shrugs off fire and lightning, but magic unravels its rune
-    xp: 22, depth: [20, 25], freq: 3, dodge: 0, def: 6, sleepChance: 0.8,
+    xp: 22, depth: [20, 25], freq: 3, dodge: 0, def: 6, sleepChance: 0.8, traits: ['bloodless'],
   },
   warden: {
     name: 'Warden of Yendor', hp: 230, dmg: [10, 22], speed: 2.9, radius: 0.6, reach: 2.4, windup: 0.75, cooldown: 1.3,

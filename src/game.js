@@ -7,7 +7,7 @@ import { Player } from './player.js';
 import { Knowledge } from './items/identify.js';
 import { ARTEFACTS, WEAPONS } from './items/defs.js';
 import { makeItem, randomItem, nextItemUid, reserveUids } from './items/generate.js';
-import { itemActions, zapWand, drinkPotion, activateArtefact } from './items/use.js';
+import { itemActions, drinkPotion, activateArtefact, toggleGrip, useOffhand } from './items/use.js';
 import { ViewModel } from './fx/viewmodel.js';
 import { burst, ring, gasCloud, lightColumn } from './fx/particles.js';
 import { playerPopupPos } from './combat.js';
@@ -18,7 +18,9 @@ import { disposeGroup, propsForTheme } from './dungeon/levelBuilder.js';
 import { loadProps } from './dungeon/props.js';
 import { loadTraps } from './world/trapModels.js';
 import { TitleScene } from './ui/titleScene.js';
-import { SAVE_VERSION, writeSave, deleteSave, fingerprint } from './save.js';
+import { SAVE_VERSION, SAVE_FORMAT, writeSave, deleteSave, fingerprint } from './save.js';
+import { damageTakenMult, hitStatuses } from './status.js';
+import { BUILD } from './build.js';
 
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, matches stair `dir`
 
@@ -59,6 +61,7 @@ export class Game {
     this.loading = false; // waiting for a floor's props to download (see enterLevel)
     this.dev = null; // the dev tools (ui/devTools.js), when main.js loads them
     this.running = false; // a run is under way (not over, not quit): what save() saves
+    this.hunted = false; // carrying the Amulet: every monster on the floor knows where you are (see Monster.update)
     this.saveT = 0;
 
     this.input.onLockChange = (locked) => {
@@ -121,11 +124,14 @@ export class Game {
     this.beginRun(seed || Math.random().toString(36).slice(2, 8).toUpperCase(), name || 'Adventurer');
     const p = this.player;
     const sword = makeItem('weapon', 'shortsword', { identified: true, curseKnown: true, hitsToId: 0 });
+    const torch = makeItem('offhand', 'torch');
     const armor = makeItem('armor', 'leather', { identified: true, curseKnown: true, hitsToId: 0 });
     p.addItem(sword);
+    p.addItem(torch);
     p.addItem(armor);
     p.addItem(makeItem('food', 'ration'));
     p.equip.weapon = sword;
+    p.equip.offhand = torch;
     p.equip.armor = armor;
     this.viewmodel.setWeapon(WEAPONS.shortsword);
 
@@ -168,7 +174,8 @@ export class Game {
 
   /**
    * Saves the run as it stands (see save.js): what you've learned, you and your things, and every floor you've
-   * been to. False if there's no run to save, or storage refused it.
+   * been to, with the build of the game that saved it (see build.js). False if there's no run to save, or storage
+   * refused it.
    */
   save() {
     if (!this.running || this.over || !this.level) return false;
@@ -176,7 +183,7 @@ export class Game {
     const levels = [...this.levels.values()].map((l) => l.snapshot());
     for (const s of this.savedLevels.values()) levels.push(s); // (from the save we continued, not yet revisited)
     return writeSave({
-      version: SAVE_VERSION, savedAt: Date.now(),
+      version: SAVE_VERSION, format: SAVE_FORMAT, build: BUILD, savedAt: Date.now(),
       seed: this.seed, name: this.playerName, depth: this.level.depth, time: Math.round(this.time),
       level: p.level, amuletTaken: this.amuletTaken, artefactQueue: this.artefactQueue, nextUid: nextItemUid(),
       knowledge: this.knowledge.snapshot(), player: p.snapshot(), levels,
@@ -286,10 +293,14 @@ export class Game {
       for (const pr of this.level.projectiles) this.level.group.remove(pr.mesh);
       this.level.projectiles.length = 0;
       this.scene.remove(this.level.group);
+      this.level.leftAt = this.time;
     }
     const firstVisit = !this.levels.has(depth) && !this.savedLevels.has(depth);
     const level = this.getLevel(depth);
     this.level = level;
+    // Only the floor you're on runs, so one you come back to catches up on the time you were away: statuses wear off.
+    if (level.leftAt != null) level.catchUp(this, this.time - level.leftAt);
+    level.leftAt = null;
     this.scene.add(level.group);
 
     const th = level.theme;
@@ -379,7 +390,8 @@ export class Game {
     if ((inp.wasPressed('KeyI') || inp.wasPressed('Tab')) && this.canAct()) this.openMenu('inventory');
     else if (inp.wasPressed('KeyM')) this.openMenu('map');
     if (inp.wasPressed('KeyE') && this.canAct()) this.interact();
-    if ((inp.wasPressed('KeyF') || inp.wasPressed('Mouse2')) && this.canAct()) this.quickZap();
+    if (inp.wasPressed('KeyF') && this.canAct()) toggleGrip(this);
+    if (inp.wasPressed('Mouse2') && this.canAct()) useOffhand(this);
     if (inp.wasPressed('KeyQ') && this.canAct()) this.quickHeal();
     for (let i = 0; i < HOTBAR_SIZE; i++) {
       if ((inp.wasPressed(`Digit${i + 1}`) || inp.wasPressed(`Numpad${i + 1}`)) && useSlot(this, i)) this.ui.flashSlot(i);
@@ -393,9 +405,19 @@ export class Game {
     }
   }
 
+  /** False while you're charmed: no swinging, zapping, throwing or warlike powers. Says so, at most every 0.6s. */
+  canFight() {
+    if (!(this.player.status.charmed > 0)) return true;
+    if (this.time - (this.charmMsgT ?? -Infinity) >= 0.6) {
+      this.charmMsgT = this.time;
+      this.log("You can't bring yourself to fight!", 'warn');
+    }
+    return false;
+  }
+
   /** False while paralysed: no item use, pickups, stairs or powers. Says so, at most every 0.6s. */
   canAct() {
-    if (this.player.status.paralysis <= 0) return true;
+    if (!this.player.held()) return true;
     if (this.time - this.paraMsgT >= 0.6) {
       this.paraMsgT = this.time;
       this.log('You cannot move a muscle!', 'warn');
@@ -422,6 +444,7 @@ export class Game {
 
   update(dt) {
     this.time += dt;
+    this.hunted = this.player.hasAmulet();
     if ((this.saveT -= dt) <= 0) {
       this.saveT = 60;
       this.save(); // a minute's play is the most a crash can cost
@@ -433,7 +456,8 @@ export class Game {
     const p = this.player;
     this.viewmodel.update(dt, {
       moving: p.moving, bob: p.bob, charge: p.charge, time: this.time, yaw: p.yaw, sprint: p.moving && p.mode === 'sprint',
-      lightLevel: p.status.blind > 0 ? 0.1 : 1,
+      lightLevel: p.status.blind > 0 ? 0.1 : 1, torchLight: p.torchLight(),
+      offhand: p.equip.offhand?.type ?? null, twoHanded: p.twoHanded,
     });
     this.interaction = this.findInteraction();
     this.target = this.findTarget();
@@ -447,7 +471,7 @@ export class Game {
     const bobAmp = p.mode === 'sprint' ? 0.05 : p.mode === 'sneak' ? 0.015 : 0.03;
     const bobY = p.moving ? Math.sin(p.bob * 2) * bobAmp : 0;
     cam.position.set(p.x, eye + bobY, p.z);
-    let roll = p.status.confusion > 0 ? Math.sin(this.time * 1.7) * 0.12 : 0;
+    let roll = p.status.confused > 0 ? Math.sin(this.time * 1.7) * 0.12 : 0;
     let pitch = p.pitch, yaw = p.yaw;
     if (this.shakeT > 0) {
       this.shakeT -= dt;
@@ -458,12 +482,14 @@ export class Game {
     }
     cam.rotation.set(pitch, yaw, roll);
 
-    // The torch you carry is the main light: slightly left of and ahead of your eyes.
+    // The torch you carry is the main light: held up, slightly left of and ahead of your eyes; stowed while you grip
+    // your weapon in both hands, lower down at your belt, and dimmer (see Player.torchLight).
     const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
-    this.torch.position.set(p.x + fx * 0.35 + fz * 0.25, eye - 0.1, p.z + fz * 0.35 - fx * 0.25);
+    const held = p.twoHanded ? 0 : 1;
+    this.torch.position.set(p.x + fx * 0.35 * held + fz * 0.25, eye - 0.1 - 0.6 * (1 - held), p.z + fz * 0.35 * held - fx * 0.25);
     const flick = 0.9 + Math.sin(this.time * 21) * 0.04 + Math.sin(this.time * 7.7) * 0.06;
     const blind = p.status.blind > 0;
-    this.torch.intensity = (blind ? 4 : 26) * flick;
+    this.torch.intensity = (blind ? 4 : 26) * flick * p.torchLight();
     this.scene.fog.far = blind ? 4 : this.level.theme.fogFar;
     this.ambient.intensity = blind ? 0.8 : 5;
   }
@@ -685,16 +711,6 @@ export class Game {
     this.level.openDoor(door);
   }
 
-  quickZap() {
-    const p = this.player;
-    let wand = p.lastWand && p.inventory.includes(p.lastWand) ? p.lastWand : p.inventory.find((i) => i.kind === 'wand');
-    if (!wand) {
-      this.log('You have no wand to zap.', 'info');
-      return;
-    }
-    zapWand(this, wand);
-  }
-
   quickHeal() {
     const p = this.player;
     const potion = p.inventory.find((i) => i.kind === 'potion' && i.type === 'healing' && this.knowledge.isKnown(i));
@@ -709,13 +725,14 @@ export class Game {
 
   /**
    * Hurts the player by `amount`: less their armour's defense unless opts.ignoreArmor, then more or less as what
-   * they wear resists or is weak to its damage type (see Player.resistMult). opts: { source (what killed them),
-   * type (see damage.js; fire sets them burning too), monster, dot, ranged, ignoreArmor }.
+   * they wear resists or is weak to its damage type (see Player.resistMult), and as their statuses make it (see
+   * status.js). opts: { source (what killed them), type (see damage.js: fire sets them alight, for `ignite` seconds,
+   * 3 by default), chill (seconds of chill it brings), monster, dot, ranged, ignoreArmor }.
    */
   hurtPlayer(amount, opts = {}) {
     if (this.over || this.dev?.god) return;
     const p = this.player;
-    const mult = p.resistMult(opts.type);
+    const mult = damageTakenMult(p, opts.type, p.resistMult(opts.type));
     if (mult === 0) {
       if (!opts.dot) this.popup(playerPopupPos(p), 'IMMUNE', 'immune');
       return;
@@ -746,16 +763,29 @@ export class Game {
       this.shake(0.1 + Math.min(0.3, dmg / p.maxHp));
       this.audio.hurt();
     }
-    if (opts.type === 'fire' && !opts.dot) p.addStatus('burning', 3, this);
-    if (p.hp <= 0) this.playerDied(opts.source || 'something');
+    if (p.hp <= 0) {
+      this.playerDied(opts.source || 'something');
+      return;
+    }
+    // Fire thaws you or sets you alight; ice chills you (see status.js).
+    if (!opts.dot) hitStatuses(this, p, opts.type, { ignite: opts.type === 'fire' ? opts.ignite ?? 3 : 0, chill: opts.chill });
   }
 
-  onMonsterKilled(m) {
+  /**
+   * A monster died: to you, or to `killer` (another monster: one of your allies, or in a brawl). Its death is yours to
+   * profit from, unless it was fighting for you.
+   */
+  onMonsterKilled(m, killer = null) {
     const p = this.player;
-    p.kills++;
     this.audio.kill();
-    this.log(m.boss ? `The ${m.name} crashes to the floor and is still.` : `You kill the ${m.name}.`, m.boss ? 'good' : '');
-    p.gainXp(Math.round(m.def.xp * (1 + (m.maxHp / m.def.hp - 1) * 0.5)), this);
+    if (m.isAlly()) {
+      this.log(`The ${m.name} fighting at your side falls.`, 'warn');
+    } else {
+      p.kills++;
+      const how = killer ? `The ${killer.name} kills the ${m.name}.` : `You kill the ${m.name}.`;
+      this.log(m.boss ? `The ${m.name} crashes to the floor and is still.` : how, m.boss ? 'good' : '');
+      p.gainXp(Math.round(m.def.xp * (1 + (m.maxHp / m.def.hp - 1) * 0.5)), this);
+    }
     const level = this.level;
     // Whatever it carried falls where it died, or onto the bank if it flew over water.
     const at = level.landSpot(m.x, m.z);
@@ -784,7 +814,7 @@ export class Game {
         this.audio.hiss();
         ring(level, x, z, 0x40c040, 3, 1);
         gasCloud(level, x, z, 0x6ac03a);
-        p.addStatus('poison', 8, this);
+        p.addStatus('poisoned', 8, this);
         break;
       case 'teleport':
         this.log('The glyph flares and the world lurches!', 'warn');
@@ -794,8 +824,9 @@ export class Game {
       case 'alarm':
         this.log('A bell clangs out, ringing through the halls!', 'danger');
         this.audio.bell();
+        // Everything within earshot comes to see what set it off.
         for (const m of level.monsters) {
-          if (!m.dead && Math.hypot(m.x - p.x, m.z - p.z) < 30) m.notice(this);
+          if (!m.dead && Math.hypot(m.x - x, m.z - z) < 30) m.hear(this, level, x, z);
         }
         break;
     }

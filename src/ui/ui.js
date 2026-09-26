@@ -1,20 +1,22 @@
 import * as THREE from 'three';
-import { KIND_GLYPH, ARTEFACTS, WEAPONS, ARMORS } from '../items/defs.js';
+import { KIND_GLYPH, ARTEFACTS, ARMORS, wandRecharge } from '../items/defs.js';
 import { equipSlotFor } from '../items/use.js';
 import { T } from '../dungeon/tiles.js';
 import { TRAP_COLORS } from '../world/level.js';
-import { HUNGER_HUNGRY, HUNGER_WEAK, INVENTORY_SIZE, TILE, HOTBAR_SIZE, PLAYER_SPEED, MAX_DEPTH, THEMES, FLOORS_PER_THEME, themeForDepth } from '../config.js';
+import { HUNGER_HUNGRY, HUNGER_FAMISHED, INVENTORY_SIZE, TILE, HOTBAR_SIZE, PLAYER_SPEED, MAX_DEPTH, THEMES, FLOORS_PER_THEME, TWO_HAND_STR, themeForDepth } from '../config.js';
 import { canHotbar, slotItem, slotHolds, slotAction, assignSlot, clearSlot } from '../hotbar.js';
 import { stackable } from '../items/generate.js';
 import { DAMAGE_TYPES } from '../damage.js';
 import { Logo } from './logo.js';
 import { readSave } from '../save.js';
+import { STATUSES } from '../status.js';
+import { BUILD, buildLabel } from '../build.js';
 
 const $ = (id) => document.getElementById(id);
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const KIND_COLOR = {
-  weapon: '#c8ccd4', armor: '#c0a880', scroll: '#e8dcb0', wand: '#a0c8ff', ring: '#e0a0ff',
+  weapon: '#c8ccd4', offhand: '#ffa050', armor: '#c0a880', scroll: '#e8dcb0', wand: '#a0c8ff', ring: '#e0a0ff',
   food: '#c09060', artefact: '#ffb040', amulet: '#ffd040', gold: '#ffd040',
 };
 // Floating text over the world, by class (see .popup in style.css): how many seconds it lasts, how far it rises
@@ -31,6 +33,7 @@ const POPUPS = {
   immune: { life: 1.1, punch: 0.4 },
   alert: { life: 1.1, rise: 0.35, punch: 0.6 },
   zzz: { life: 1.6, rise: 1.1 },
+  status: { life: 1.2, rise: 0.45, punch: 0.4 },
   weak: { life: 1.4, punch: 1 },
   resist: { life: 1.2, punch: 0.2 },
 };
@@ -43,11 +46,13 @@ const DOLL_SLOTS = [
   { key: 'art1', label: 'Artefact', x: 174, y: 12 },
   { key: 'armor', label: 'Armor', x: 94, y: 88 },
   { key: 'weapon', label: 'Weapon', x: 14, y: 150 },
+  { key: 'offhand', label: 'Off hand', x: 174, y: 150 },
   { key: 'ring0', label: 'Ring', x: 20, y: 228, small: true },
   { key: 'ring1', label: 'Ring', x: 180, y: 228, small: true },
 ];
 const equippedIn = (p, key) => {
   if (key === 'weapon') return p.equip.weapon;
+  if (key === 'offhand') return p.equip.offhand;
   if (key === 'armor') return p.equip.armor;
   if (key.startsWith('ring')) return p.equip.rings[+key[4]];
   return p.equip.artefacts[+key[3]];
@@ -72,6 +77,8 @@ export class UI {
     fitLogo();
     window.addEventListener('resize', fitLogo);
     $('title-sub').textContent = `${MAX_DEPTH} floors down, the Amulet of Yendor waits. Take it, and climb home, if you can.`;
+    $('title-build').textContent = buildLabel();
+    if (BUILD.sha) $('title-build').title = `Commit ${BUILD.sha}`;
     $('howto-realms').innerHTML = THEMES.map((t, i) => {
       const first = i * FLOORS_PER_THEME + 1, last = first + FLOORS_PER_THEME - 1;
       return `<li>${t.name} <span>· floors ${first}–${last}${last === MAX_DEPTH ? ': the Amulet, and the Warden who keeps it' : ''}</span></li>`;
@@ -318,27 +325,27 @@ export class UI {
     document.body.classList.toggle('blind', p.status.blind > 0);
 
     const st = [];
-    const s = p.status;
-    const lab = { haste: 'Hasted', poison: 'Poisoned', confusion: 'Confused', blind: 'Blind', paralysis: 'Paralysed', mindvision: 'Mind vision', invisible: 'Invisible', burning: 'Burning' };
-    for (const key in lab) if (s[key] > 0) st.push(`<span class="st-${key}">${lab[key]} ${Math.ceil(s[key])}</span>`);
+    if (g.hunted) st.push('<span class="st-hunted">Hunted</span>');
+    for (const [key, def] of Object.entries(STATUSES)) {
+      if (p.status[key] > 0) st.push(`<span style="color:${def.color}">${def.label}${def.permanent ? '' : ` ${Math.ceil(p.status[key])}`}</span>`);
+    }
     if (p.winded) st.push('<span class="st-winded">Winded</span>');
     else if (p.mode === 'sneak') st.push('<span class="st-sneak">Sneaking</span>');
     else if (p.mode === 'sprint' && p.moving) st.push('<span class="st-sprint">Sprinting</span>');
     if (p.hunger <= 0) st.push('<span class="st-starving">Starving</span>');
-    else if (p.hunger < HUNGER_WEAK) st.push('<span class="st-weak">Weak</span>');
+    else if (p.hunger < HUNGER_FAMISHED) st.push('<span class="st-famished">Famished</span>');
     else if (p.hunger < HUNGER_HUNGRY) st.push('<span class="st-hungry">Hungry</span>');
     this.setHtml('status-line', st.join(' '));
 
     const gear = [];
-    gear.push(`<div>${p.equip.weapon ? k.name(p.equip.weapon) : 'bare hands'}</div>`);
+    gear.push(`<div>${p.equip.weapon ? k.name(p.equip.weapon) : 'bare hands'}${p.twoHanded ? ' <span class="grip">(both hands)</span>' : ''}</div>`);
+    if (p.equip.offhand) gear.push(`<div class="off">${k.name(p.equip.offhand)}${p.twoHanded ? ' <span class="grip">(stowed)</span>' : ''}</div>`);
     p.equip.artefacts.forEach((a, i) => {
       if (!a) return;
       const def = ARTEFACTS[a.type];
       const cd = p.artefactCD[i];
       gear.push(`<div class="art">${def.active ? `[${i === 0 ? 'R' : 'T'}] ` : ''}${def.name}${def.active ? (cd > 0 ? ` <span class="cd">${Math.ceil(cd)}s</span>` : ' <span class="ok">ready</span>') : ''}</div>`);
     });
-    const wand = p.lastWand && p.inventory.includes(p.lastWand) ? p.lastWand : p.inventory.find((i) => i.kind === 'wand');
-    if (wand) gear.push(`<div class="wand">[F] ${k.name(wand)}</div>`);
     this.setHtml('gear', gear.join(''));
 
     const prompt = g.interaction && !g.menu ? `[E] ${g.interaction.label}` : '';
@@ -347,8 +354,11 @@ export class UI {
     const t = g.target;
     $('target').hidden = !t;
     if (t) {
-      const tag = t.state === 'sleep' ? ' (asleep)' : t.state !== 'hunt' ? ' (unaware)' : !t.seen ? ' (searching)' : '';
-      this.set('target-name', t.name + tag);
+      const tag = t.isAlly() ? ' (fighting for you)' : t.charmed() ? '' : t.state === 'sleep' ? ' (asleep)' : t.state !== 'hunt' ? ' (unaware)'
+        : !t.seen ? ' (searching)' : '';
+      const sts = Object.entries(STATUSES).filter(([key]) => t.status[key] > 0)
+        .map(([, def]) => `<span style="color:${def.color}">${def.label}</span>`).join(' ');
+      this.setHtml('target-name', `${t.name}${tag}${sts ? ` <span class="target-st">${sts}</span>` : ''}`);
       $('target-fill').style.width = `${Math.max(0, t.hp / t.maxHp) * 100}%`;
     }
 
@@ -450,7 +460,7 @@ export class UI {
       if (m.dead) continue;
       const seen = lvl.isVisibleWorld(m.x, m.z) && p.status.blind <= 0;
       if (!seen && !sense) continue;
-      ctx.fillStyle = m.boss ? '#ff40ff' : seen ? '#ff4030' : '#b03060';
+      ctx.fillStyle = m.isAlly() ? '#ff8ac8' : m.boss ? '#ff40ff' : seen ? '#ff4030' : '#b03060';
       const s = Math.max(3, scale * (m.boss ? 0.9 : 0.6));
       ctx.fillRect(ox + (m.x / TS) * scale - s / 2, oy + (m.z / TS) * scale - s / 2, s, s);
     }
@@ -633,14 +643,20 @@ export class UI {
       const el = this.dollEls[d.key];
       const it = equippedIn(p, d.key);
       el.classList.toggle('empty', !it);
-      el.classList.toggle('cursed', !!it && it.cursed && it.curseKnown);
+      el.classList.toggle('cursed', !!it && it.curse > 0 && it.curseKnown);
       el.classList.toggle('sel', !!it && it === sel);
       el.classList.toggle('target', d.key === target);
+      // Gripping your weapon in both hands: it says so, and what's in your off hand is shown stowed.
+      el.classList.toggle('stowed', !!it && d.key === 'offhand' && p.twoHanded);
       if (it) {
-        const showEnch = it.identified && (it.kind === 'weapon' || it.kind === 'armor' || (it.kind === 'ring' && it.type !== 'teleportation'));
-        const ench = showEnch ? `<span class="de">${it.ench >= 0 ? '+' : ''}${it.ench}</span>` : '';
-        el.innerHTML = `<span class="dg" style="color:${glyphColor(k, it)}">${KIND_GLYPH[it.kind]}</span>${ench}`;
-        el.title = k.name(it);
+        // Its + (a cursed ring's shown as what it does to you: against you).
+        const showPlus = it.identified && (it.kind === 'weapon' || it.kind === 'armor' || (it.kind === 'ring' && it.type !== 'teleportation'));
+        const against = it.kind === 'ring' && it.curse > 0;
+        const plus = showPlus ? `<span class="de${against ? ' bad' : ''}">${against ? '−' : '+'}${it.plus}</span>` : '';
+        const grip = d.key === 'weapon' && p.twoHanded ? '<span class="dh">2H</span>'
+          : d.key === 'offhand' && p.twoHanded ? '<span class="dh">stowed</span>' : '';
+        el.innerHTML = `<span class="dg" style="color:${glyphColor(k, it)}">${KIND_GLYPH[it.kind]}</span>${plus}${grip}`;
+        el.title = k.name(it) + (d.key === 'weapon' && p.twoHanded ? ' (in both hands)' : d.key === 'offhand' && p.twoHanded ? ' (stowed)' : '');
       } else {
         el.innerHTML = `<span class="dl">${d.label}</span>`;
         el.title = '';
@@ -651,11 +667,13 @@ export class UI {
     $('doll-torso').style.fill = a ? hex(ARMORS[a.type].color) : '';
 
     const w = p.weaponStats(), wi = p.equip.weapon;
-    const known = !wi || wi.identified; // an unidentified enchantment must not leak through the numbers
-    const heavy = !!wi && WEAPONS[wi.type].str > p.str;
+    // An unknown + or curse must not leak through the numbers.
+    const known = !wi || wi.identified;
+    const mult = !wi || wi.curseKnown ? w.dmgMult : 1;
+    const heavy = w.short > 0; // (with your grip: see Player.weaponStats)
     const slow = !!a && ARMORS[a.type].str > p.str;
-    const lo = Math.max(1, w.dmg[0] + (known ? w.ench : 0));
-    const hi = Math.max(1, w.dmg[1] + (known ? w.ench : 0) + w.excess);
+    const lo = Math.max(1, Math.round((w.dmg[0] + (known ? w.plus : 0)) * mult));
+    const hi = Math.max(1, Math.round((w.dmg[1] + (known ? w.plus : 0) + w.excess) * mult));
     // Two label/value pairs per row: wide values on the left, short ones on the right.
     const rows = [
       ['Damage', `${lo}–${hi}${known ? '' : ' (+?)'} ${DAMAGE_TYPES[w.dmgType].name}`, heavy], ['Reach', `${w.reach}m`],
@@ -663,7 +681,11 @@ export class UI {
       ['Speed', `${Math.round((p.moveSpeed() / PLAYER_SPEED) * 100)}%`, slow], ['Strength', String(p.str)],
     ];
     let html = rows.map(([label, v, bad]) => `<span>${label}</span><b${bad ? ' class="bad"' : ''}>${v}</b>`).join('');
-    if (heavy) html += '<div class="warn">Your weapon is too heavy for you.</div>';
+    if (heavy) {
+      html += `<div class="warn">${p.twoHanded ? 'Your weapon is too heavy for you, even in both hands.'
+        : w.short <= TWO_HAND_STR ? 'Your weapon is too heavy for you in one hand: F grips it in both.'
+        : 'Your weapon is too heavy for you. Gripping it in both hands (F) would help.'}</div>`;
+    } else if (p.twoHanded) html += '<div class="note">Your weapon is gripped in both hands (F for one).</div>';
     if (slow) html += '<div class="warn">Your armor is weighing you down.</div>';
     $('inv-stats').innerHTML = html;
   }
@@ -690,7 +712,7 @@ export class UI {
     const res = a.fn();
     if (g.over || g.menu === 'dialog') return;
     // Close on request, or if that action just paralysed you (a potion of paralysis drunk from the pack).
-    if (res === true || p.status.paralysis > 0) g.closeMenu();
+    if (res === true || p.held()) g.closeMenu();
     else this.renderInventory();
   }
 
@@ -728,9 +750,18 @@ export class UI {
       let unattuned = false;
       if (b) {
         const probe = it ?? { ...b, qty: 0 };
-        let qty = '', cd = 0;
+        let qty = '', cd = 0, rc = '';
         if (stackable(b)) qty = String(it ? it.qty : 0);
-        else if (b.kind === 'wand' && it) qty = it.identified ? String(it.charges) : '?';
+        else if (b.kind === 'wand' && it) {
+          // Its charges, and while it's short of them, how near the next is (the seconds to it, when it's empty). Until
+          // you know the wand, only that it's recharging.
+          qty = it.identified ? String(it.charges) : '?';
+          if (it.charges < it.maxCharges) {
+            const every = wandRecharge(it.plus);
+            rc = `<span class="rc"><i style="width:${Math.round((it.rechargeT / every) * 50) * 2}%"></i></span>`;
+            if (it.charges === 0 && it.identified) qty = `${Math.ceil(every - it.rechargeT)}s`;
+          }
+        }
         else if (b.kind === 'artefact' && it) {
           const s = p.equip.artefacts.indexOf(it);
           if (s < 0) unattuned = true;
@@ -743,7 +774,7 @@ export class UI {
         // Cooldown shade sits over the glyph but under the text, so a recharging power reads as dimmed.
         html = `<span class="glyph" style="color:${glyphColor(k, probe)}">${KIND_GLYPH[b.kind]}</span>` +
           (cd > 0 ? `<span class="cd" style="height:${Math.round(cd * 100)}%"></span>` : '') +
-          html + `<span class="qty">${qty}</span><span class="act ${act}">${act}</span>`;
+          html + `<span class="qty">${qty}</span><span class="act ${act}">${act}</span>${rc}`;
       }
       if (this.hotKeys[i] !== html) {
         this.hotKeys[i] = html;
@@ -819,7 +850,8 @@ export class UI {
 
 function equipTag(p, it) {
   const e = p.equip;
-  if (e.weapon === it) return 'in hand';
+  if (e.weapon === it) return p.twoHanded ? 'in both hands' : 'in hand';
+  if (e.offhand === it) return p.twoHanded ? 'stowed' : 'in off hand';
   if (e.armor === it) return 'worn';
   if (e.rings.includes(it)) return 'on finger';
   if (e.artefacts.includes(it)) return 'attuned';

@@ -1,18 +1,22 @@
 import {
-  PLAYER_RADIUS, PLAYER_SPEED, TURN_SPEED, MOUSE_SENS, HUNGER_MAX, HUNGER_HUNGRY, HUNGER_WEAK, INVENTORY_SIZE, HOTBAR_SIZE,
-  STAMINA_BASE, STAMINA_PER_LEVEL, STAMINA_DRAIN, STAMINA_REGEN, STAMINA_REGEN_DELAY, STAMINA_RECOVER, MODE_SPEED, NOISE, danger,
+  PLAYER_RADIUS, PLAYER_SPEED, TURN_SPEED, MOUSE_SENS, HUNGER_MAX, HUNGER_HUNGRY, HUNGER_FAMISHED, INVENTORY_SIZE, HOTBAR_SIZE,
+  STAMINA_BASE, STAMINA_PER_LEVEL, STAMINA_DRAIN, STAMINA_REGEN, STAMINA_REGEN_DELAY, STAMINA_RECOVER, MODE_SPEED, NOISE,
+  TWO_HAND_STR,
 } from './config.js';
-import { WEAPONS, ARMORS, ARTEFACTS } from './items/defs.js';
+import { WEAPONS, ARMORS, ARTEFACTS, OFFHANDS, wandRecharge } from './items/defs.js';
+import { enchantOf, baneOf } from './items/enchant.js';
 import { stackable } from './items/generate.js';
 import { playerStrike } from './combat.js';
-import { STATUS_TYPES, damageType, damageMult } from './damage.js';
+import { damageType, damageMult } from './damage.js';
+import { STATUSES, blankStatus, restoreStatus, saveStatus, afflict, tickStatuses } from './status.js';
 import { rand } from './rng.js';
 import { round2 } from './save.js';
 
 // What a save keeps of you as it is (see snapshot): the rest is either rebuilt or not worth keeping.
 const SAVED = [
   'x', 'z', 'yaw', 'pitch', 'maxHp', 'hp', 'baseStr', 'level', 'xp', 'gold', 'hunger', 'hungerState', 'charge',
-  'maxStamina', 'stamina', 'winded', 'sneaking', 'artefactCD', 'teleT', 'kills', 'maxDepth', 'keys', 'hotbar', 'inventory',
+  'maxStamina', 'stamina', 'winded', 'sneaking', 'twoHanded', 'artefactCD', 'teleT', 'kills', 'maxDepth', 'keys', 'hotbar',
+  'inventory',
 ];
 
 const FISTS = { name: 'fists', dmgType: 'bash', dmg: [1, 3], recharge: 0.6, reach: 1.4, str: 0, model: null };
@@ -26,7 +30,10 @@ export class Player {
     this.gold = 0;
     this.hunger = HUNGER_MAX;
     this.inventory = [];
-    this.equip = { weapon: null, armor: null, rings: [null, null], artefacts: [null, null] };
+    this.equip = { weapon: null, offhand: null, armor: null, rings: [null, null], artefacts: [null, null] };
+    // Your weapon gripped in both hands (F), with whatever's in your off hand stowed: it can't be used, and a torch
+    // lights less (see torchLight). Only ever with a weapon in hand.
+    this.twoHanded = false;
     this.hotbar = new Array(HOTBAR_SIZE).fill(null);
     this.keys = {}; // depth -> iron keys held for that floor
     this.charge = 1;
@@ -39,13 +46,14 @@ export class Player {
     this.crouch = 0; // 0..1, eases the camera down while sneaking
     this.noise = 0; // metres of walking distance at which monsters can hear you this frame
     this.swingT = -1; this.swingDur = 0.3; this.swingHit = false; this.swingPower = 1;
-    this.status = { haste: 0, poison: 0, confusion: 0, blind: 0, paralysis: 0, mindvision: 0, invisible: 0, burning: 0 };
+    this.status = blankStatus(true); // seconds left of each status (see status.js)
+    this.isPlayer = true;
+    this.boss = false;
     this.artefactCD = [0, 0];
     this.regenT = 0; this.dotT = 0; this.starveT = 0; this.teleT = rand.range(40, 90);
     this.moving = false; this.bob = 0;
     this.kills = 0;
     this.maxDepth = 1;
-    this.lastWand = null;
     this.hungerState = 0;
     this.lastTrapTile = -1;
     this.creeping = null; // a found trap you're sneaking over (see update)
@@ -53,16 +61,16 @@ export class Player {
 
   // --- Saving (see Game.save) ---
 
-  /** What a save keeps of you. Your things go as they are; what's equipped (and your last wand) by uid. */
+  /** What a save keeps of you. Your things go as they are; what's equipped by uid. */
   snapshot() {
     const s = {};
     for (const k of SAVED) s[k] = typeof this[k] === 'number' ? round2(this[k]) : this[k];
     const uid = (item) => item?.uid ?? null;
     const e = this.equip;
-    s.equip = { weapon: uid(e.weapon), armor: uid(e.armor), rings: e.rings.map(uid), artefacts: e.artefacts.map(uid) };
-    s.lastWand = uid(this.lastWand);
-    s.status = {};
-    for (const k in this.status) if (this.status[k] > 0) s.status[k] = round2(this.status[k]);
+    s.equip = {
+      weapon: uid(e.weapon), offhand: uid(e.offhand), armor: uid(e.armor), rings: e.rings.map(uid), artefacts: e.artefacts.map(uid),
+    };
+    s.status = saveStatus(this.status);
     return s;
   }
 
@@ -71,56 +79,87 @@ export class Player {
     for (const k of SAVED) if (k in s) this[k] = s[k];
     const byUid = (uid) => (uid == null ? null : this.inventory.find((it) => it.uid === uid) ?? null);
     this.equip = {
-      weapon: byUid(s.equip.weapon), armor: byUid(s.equip.armor),
+      weapon: byUid(s.equip.weapon), offhand: byUid(s.equip.offhand), armor: byUid(s.equip.armor),
       rings: s.equip.rings.map(byUid), artefacts: s.equip.artefacts.map(byUid),
     };
-    this.lastWand = byUid(s.lastWand);
-    Object.assign(this.status, s.status);
+    this.twoHanded = this.twoHanded && !!this.equip.weapon;
+    restoreStatus(this.status, s.status);
   }
 
   // --- Derived stats ---
 
   ringBonus(type) {
     let b = 0;
-    for (const r of this.equip.rings) if (r && r.type === type) b += r.ench;
+    // A cursed ring's + works against you, until the curse is lifted.
+    for (const r of this.equip.rings) if (r && r.type === type) b += r.curse > 0 ? -r.plus : r.plus;
     return b;
   }
   wearingRing(type) { return this.equip.rings.some((r) => r && r.type === type); }
   hasArtefact(type) { return this.equip.artefacts.some((a) => a && a.type === type); }
   hasAmulet() { return this.inventory.some((i) => i.kind === 'amulet'); }
 
-  get str() { return this.baseStr + this.ringBonus('strength') - (this.hunger < HUNGER_WEAK ? 1 : 0); }
+  get str() { return this.baseStr + this.ringBonus('strength') - (this.status.weakened > 0 ? 3 : 0); }
 
+  /** Paralysed or frozen: no moving, looking, fighting or using things. */
+  held() { return this.status.paralysed > 0 || this.status.frozen > 0; }
+
+  /**
+   * Your weapon (or fists) as it fights now: its +, strength, grip, statuses, and any Enchantment or Curse of ___ on
+   * it (see items/enchant.js): `onHit` is what an enchantment's blows bring, `dmgMult` what a curse takes off them.
+   * Gripped in both hands, it needs TWO_HAND_STR less strength: `short` is how much you lack of what it needs (each
+   * point slows it and makes it miss more), and `excess` how much you have beyond it (bonus damage).
+   */
   weaponStats() {
     const it = this.equip.weapon;
     const d = it ? WEAPONS[it.type] : FISTS;
-    const ench = it ? it.ench : 0;
-    const short = Math.max(0, d.str - this.str);
+    const plus = it ? it.plus : 0;
+    const needs = d.str - (this.twoHanded && it ? TWO_HAND_STR : 0);
+    const short = Math.max(0, needs - this.str);
+    const bane = baneOf(it);
     return {
-      dmg: d.dmg, dmgType: damageType(d), ench, reach: d.reach, model: d.model,
-      recharge: (d.recharge * (1 + short * 0.15)) / (this.status.haste > 0 ? 1.35 : 1),
-      accuracy: ench * 0.03 - short * 0.08,
-      excess: Math.max(0, this.str - d.str),
+      dmg: d.dmg, dmgType: damageType(d), plus, reach: d.reach, model: d.model, short,
+      recharge: (d.recharge * (1 + short * 0.15) * (this.status.chilled > 0 ? 1.25 : 1)) / (this.status.hasted > 0 ? 1.35 : 1),
+      accuracy: plus * 0.03 - short * 0.08 + (bane?.accuracy ?? 0),
+      excess: Math.max(0, this.str - needs),
+      onHit: enchantOf(it)?.onHit ?? null,
+      dmgMult: bane?.dmgMult ?? 1,
     };
+  }
+
+  /**
+   * How brightly the torch you carry lights your way, as a share of its full light: what's in your off hand gives
+   * its `light` held up, its `stowedLight` stowed while you grip your weapon in both hands (see OFFHANDS). 0 without.
+   */
+  torchLight() {
+    const o = this.equip.offhand;
+    return o ? (this.twoHanded ? OFFHANDS[o.type].stowedLight : OFFHANDS[o.type].light) ?? 0 : 0;
+  }
+
+  /** What your armour's Enchantment or Curse of ___ does to `stat` (a multiplier: noise, speed; see items/enchant.js). */
+  armorMult(stat) {
+    const a = this.equip.armor;
+    return (enchantOf(a)?.[stat] ?? 1) * (baneOf(a)?.[stat] ?? 1);
   }
 
   /** The multiplier on damage of this type you take (see damage.js), from your armour and artefacts' `resist`. */
   resistMult(type) {
     let mult = 1;
     const a = this.equip.armor;
-    if (a) mult *= damageMult(ARMORS[a.type], type);
+    if (a) mult *= damageMult(ARMORS[a.type], type) * damageMult(enchantOf(a) ?? {}, type);
     for (const art of this.equip.artefacts) if (art) mult *= damageMult(ARTEFACTS[art.type], type);
     return mult;
   }
 
   get defense() {
     const a = this.equip.armor;
-    return Math.max(0, (a ? ARMORS[a.type].def + a.ench : 0) + this.ringBonus('protection'));
+    return Math.max(0, (a ? ARMORS[a.type].def + a.plus : 0) + this.ringBonus('protection'));
   }
 
   moveSpeed() {
     let s = PLAYER_SPEED;
-    if (this.status.haste > 0) s *= 1.45;
+    if (this.status.hasted > 0) s *= 1.45;
+    if (this.status.chilled > 0) s *= 0.6;
+    s *= this.armorMult('speed');
     if (this.hasArtefact('boots')) s *= 1.33;
     const a = this.equip.armor;
     if (a) s *= Math.max(0.6, 1 - Math.max(0, ARMORS[a.type].str - this.str) * 0.08);
@@ -144,18 +183,18 @@ export class Player {
 
   heal(n) { this.hp = Math.min(this.maxHp, this.hp + n); }
 
-  addStatus(key, dur, game) {
-    if (STATUS_TYPES[key] && this.resistMult(STATUS_TYPES[key]) === 0) return; // e.g. no burning with Emberheart
-    const fresh = this.status[key] <= 0;
-    this.status[key] = Math.max(this.status[key], dur);
-    if (fresh && game) {
-      const msg = {
-        poison: ['You feel very sick.', 'danger'], confusion: ['Huh? What? Where am I?', 'warn'],
-        blind: ['Darkness swallows your sight!', 'warn'], paralysis: ['Your limbs lock rigid!', 'danger'],
-        burning: ['You are on fire!', 'danger'],
-      }[key];
-      if (msg) game.log(...msg);
-    }
+  /** Gives you a status (see status.js). Returns whether it took. */
+  addStatus(key, dur, game) { return afflict(game, this, key, dur); }
+
+  hasTrait() { return false; }
+
+  /** The log's word on what's happened to one of your statuses (see status.js). */
+  statusNote(game, key, event) {
+    const def = STATUSES[key];
+    if (event === 'start' && def.start) game.log(...def.start);
+    else if (event === 'end' && def.end) game.log(def.end, 'info');
+    else if (event === 'doused') game.log('The flames on you go out.', 'good');
+    else if (event === 'thawed') game.log('Warmth floods back into your limbs.', 'good');
   }
 
   gainXp(n, game) {
@@ -217,7 +256,7 @@ export class Player {
 
   isEquipped(item) {
     const e = this.equip;
-    return e.weapon === item || e.armor === item || e.rings.includes(item) || e.artefacts.includes(item);
+    return e.weapon === item || e.offhand === item || e.armor === item || e.rings.includes(item) || e.artefacts.includes(item);
   }
 
   // --- Per-frame ---
@@ -226,7 +265,7 @@ export class Player {
     const level = game.level;
     this.tickStatus(dt, game);
     if (game.over) return;
-    const para = this.status.paralysis > 0;
+    const para = this.held();
 
     if (!para) {
       this.yaw -= input.mouseDX * MOUSE_SENS;
@@ -257,10 +296,10 @@ export class Player {
     this.mode = mode;
     this.crouch += ((mode === 'sneak' ? 1 : 0) - this.crouch) * Math.min(1, dt * 8);
     this.updateStamina(dt, game, this.moving && mode !== 'walk');
-    this.noise = this.moving ? NOISE[mode] * (this.heavyArmor() ? 1.25 : 1) : 0;
+    this.noise = this.moving ? NOISE[mode] * (this.heavyArmor() ? 1.25 : 1) * this.armorMult('noise') : 0;
     if (this.moving) {
       mx /= ml; mz /= ml;
-      if (this.status.confusion > 0) {
+      if (this.status.confused > 0) {
         const a = Math.sin(game.time * 1.3) * 1.6 + Math.sin(game.time * 3.7) * 0.6;
         const c = Math.cos(a), sn = Math.sin(a);
         [mx, mz] = [mx * c - mz * sn, mx * sn + mz * c];
@@ -297,7 +336,7 @@ export class Player {
         playerStrike(game, this.swingPower);
       }
       if (this.swingT >= this.swingDur) this.swingT = -1;
-    } else if (!para && ((input.attackPressed && this.charge >= 0.2) || (input.attack && this.charge >= 1))) {
+    } else if (!para && ((input.attackPressed && this.charge >= 0.2) || (input.attack && this.charge >= 1)) && game.canFight()) {
       this.swingPower = 0.3 + 0.7 * this.charge;
       this.charge = 0;
       this.swingT = 0;
@@ -336,26 +375,7 @@ export class Player {
     }
   }
 
-  tickStatus(dt, game) {
-    const s = this.status;
-    const was = { ...s };
-    for (const k in s) if (s[k] > 0) s[k] = Math.max(0, s[k] - dt);
-    const ended = {
-      haste: 'You feel yourself slow down.', confusion: 'You feel less confused now.',
-      blind: 'Your sight returns.', paralysis: 'You can move again.', mindvision: 'Your mind\'s eye closes.',
-      invisible: 'You fade back into view.', poison: 'You feel less sick.',
-    };
-    for (const k in ended) if (was[k] > 0 && s[k] <= 0) game.log(ended[k], 'info');
-
-    if (s.poison > 0 || s.burning > 0) {
-      this.dotT += dt;
-      if (this.dotT >= 1) {
-        this.dotT -= 1;
-        if (s.poison > 0) game.hurtPlayer(1 + Math.floor(danger(game.level.depth) / 4), { source: 'poison', type: 'poison', ignoreArmor: true, dot: true });
-        if (s.burning > 0 && !game.over) game.hurtPlayer(rand.int(1, 3), { source: 'flames', type: 'fire', ignoreArmor: true, dot: true });
-      }
-    }
-  }
+  tickStatus(dt, game) { tickStatuses(game, this, dt); }
 
   updateStamina(dt, game, spending) {
     if (spending) {
@@ -385,9 +405,11 @@ export class Player {
     if (this.wearingRing('sustenance')) rate = this.ringBonus('sustenance') >= 0 ? 0.4 : 1.6;
     if (this.wearingRing('regeneration')) rate *= 1.3;
     this.hunger = Math.max(0, this.hunger - dt * rate);
-    const state = this.hunger <= 0 ? 3 : this.hunger < HUNGER_WEAK ? 2 : this.hunger < HUNGER_HUNGRY ? 1 : 0;
+    // Hungry is a warning; Famished, your wounds stop healing; Starving, you waste away.
+    const state = this.hunger <= 0 ? 3 : this.hunger < HUNGER_FAMISHED ? 2 : this.hunger < HUNGER_HUNGRY ? 1 : 0;
     if (state > this.hungerState) {
-      game.log(['', 'You are getting hungry.', 'You feel weak with hunger!', 'You are starving to death!'][state], state > 1 ? 'danger' : 'warn');
+      game.log(['', 'You are getting hungry.', "You are famished. Your wounds won't heal until you eat.", 'You are starving to death!'][state],
+        state > 1 ? 'danger' : 'warn');
     }
     this.hungerState = state;
     if (this.hunger <= 0) {
@@ -400,7 +422,8 @@ export class Player {
   }
 
   updateRegen(dt) {
-    if (this.hunger <= 0 || this.hp >= this.maxHp || this.status.poison > 0) return;
+    // Nothing heals while you're famished, poisoned or bleeding.
+    if (this.hunger < HUNGER_FAMISHED || this.hp >= this.maxHp || this.status.poisoned > 0 || this.status.bleeding > 0) return;
     let mult = 1;
     if (this.wearingRing('regeneration')) mult = Math.max(0.25, 1 + this.ringBonus('regeneration') * 0.8);
     const interval = Math.max(1.5, 8 - this.level * 0.35);
@@ -413,9 +436,10 @@ export class Player {
 
   updateGear(dt, game) {
     for (const it of this.inventory) {
+      // Wands regain a charge at a time, faster for each + (see wandRecharge).
       if (it.kind === 'wand' && it.charges < it.maxCharges) {
         it.rechargeT += dt;
-        if (it.rechargeT >= 75) {
+        if (it.rechargeT >= wandRecharge(it.plus)) {
           it.rechargeT = 0;
           it.charges++;
         }

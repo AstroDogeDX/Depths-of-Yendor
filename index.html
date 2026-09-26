@@ -4,6 +4,25 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Depths of Yendor</title>
+    <meta name="description" content="A first-person, real-time roguelike for the browser, in the spirit of King's Field and Rogue. 25 floors down, the Amulet of Yendor waits. Take it, and climb home, if you can." />
+    <meta name="theme-color" content="#0c0906" />
+    <!-- The title logo's Y (public/: favicon.svg, with PNGs for browsers and home screens that want them) -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- What a shared link shows (Open Graph, which X's cards fall back on too). The image and the URL have to be
+         absolute, so they name the published site: change them if it moves. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Depths of Yendor" />
+    <meta property="og:title" content="Depths of Yendor" />
+    <meta property="og:description" content="A first-person, real-time roguelike for the browser, in the spirit of King's Field and Rogue. 25 floors down, the Amulet of Yendor waits. Take it, and climb home, if you can." />
+    <meta property="og:url" content="https://astrodogedx.github.io/Depths-of-Yendor/" />
+    <meta property="og:image" content="https://astrodogedx.github.io/Depths-of-Yendor/og-image.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="The Depths of Yendor title, in gold pixel lettering, over a torchlit dungeon corridor." />
+    <meta name="twitter:card" content="summary_large_image" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -77,10 +96,6 @@
                   <rect x="113" y="56" width="14" height="12" />
                   <circle cx="120" cy="42" r="17" />
                 </g>
-                <!-- the torch you always carry -->
-                <line x1="178" y1="176" x2="189" y2="140" stroke="#5a3a1c" stroke-width="4" stroke-linecap="round" />
-                <path d="M189 116 Q198 130 191 141 Q182 137 185 128 Q187 123 189 116 Z" fill="#ff9a30" />
-                <path d="M189 126 Q193 133 190 139 Q186 136 188 131 Z" fill="#fff0a0" />
               </svg>
             </div>
             <div id="inv-stats"></div>
@@ -137,6 +152,7 @@
         </div>
       </div>
       <div id="title-caption"></div>
+      <div id="title-build"></div>
     </div>
 
     <div id="howto" class="overlay" hidden>
@@ -152,12 +168,13 @@
           <section>
             <h3>Fighting</h3>
             <p><b>Click</b> or <b>Space</b> attack. Your swing meter refills between blows, and a partial swing hits softer.</p>
-            <p><b>F</b> or <b>Right-click</b> zap a wand · <b>Q</b> drink known healing · <b>R</b> / <b>T</b> artefact powers</p>
+            <p><b>F</b> grip your weapon in both hands, or one. In both, it needs less strength, so a heavy weapon is easier to wield and a light one hits harder, but your torch is stowed.</p>
+            <p><b>Right-click</b> use what's in your off hand · <b>Q</b> drink known healing · <b>R</b> / <b>T</b> artefact powers</p>
           </section>
           <section>
             <h3>Everything else</h3>
             <p><b>E</b> pick up, open, buy, use stairs · <b>I</b> pack · <b>M</b> map</p>
-            <p><b>1–6</b> hotbar (assign from your pack) · <b>P</b> pixel size · <b>Esc</b> pause, or save and quit</p>
+            <p><b>1–6</b> hotbar: potions, scrolls, food, wands (assign from your pack) · <b>P</b> pixel size · <b>Esc</b> pause, or save and quit</p>
           </section>
         </div>
         <h3>The descent</h3>

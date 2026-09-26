@@ -10,7 +10,8 @@ export function playerStrike(game, power) {
   const w = p.weaponStats();
   const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
 
-  let best = null, bestD = Infinity;
+  // The nearest monster in reach, in front of you; your allies only if there's nothing else to hit.
+  let best = null, bestD = Infinity, bestKey = Infinity;
   for (const m of level.monsters) {
     if (m.dead) continue;
     const dx = m.x - p.x, dz = m.z - p.z;
@@ -19,13 +20,14 @@ export function playerStrike(game, power) {
     const cos = (dx * fx + dz * fz) / (d || 1);
     if (d > m.radius + 0.35 && cos < CONE) continue;
     if (!level.los(p.x, p.z, m.x, m.z)) continue;
-    if (d < bestD) { best = m; bestD = d; }
+    const key = d + (m.isAlly() ? 100 : 0);
+    if (key < bestKey) { best = m; bestD = d; bestKey = key; }
   }
   if (!best) return false;
 
   const m = best;
   // Unaware: asleep, wandering, or still searching for a noise it hasn't traced to you.
-  const sneak = m.state !== 'hunt' || !m.seen || m.status.paralyzed > 0;
+  const sneak = m.state !== 'hunt' || !m.seen || m.held();
   const acc = Math.max(0.35, Math.min(0.98, 0.88 + w.accuracy - m.def.dodge + (p.level - m.danger) * 0.015));
   if (!sneak && !rand.chance(acc)) {
     game.popup(m.headPos(), 'miss', 'miss');
@@ -34,8 +36,8 @@ export function playerStrike(game, power) {
     return true;
   }
 
-  let dmg = rand.int(w.dmg[0], w.dmg[1]) + w.ench + (w.excess > 0 ? rand.int(0, w.excess) : 0);
-  dmg = Math.round(dmg * power);
+  let dmg = rand.int(w.dmg[0], w.dmg[1]) + w.plus + (w.excess > 0 ? rand.int(0, w.excess) : 0);
+  dmg = Math.round(dmg * power * w.dmgMult);
   if (sneak) dmg *= 2;
   dmg -= rand.int(0, m.def.def);
   dmg = Math.max(1, dmg);
@@ -47,6 +49,12 @@ export function playerStrike(game, power) {
   if (dealt > 0) game.audio.hit(mult > 1 ? 'weak' : mult < 1 ? 'resist' : null);
   game.shake(0.06);
 
+  // An enchanted weapon's blows bring its effect (see items/enchant.js).
+  if (dealt > 0 && w.onHit && !m.dead) {
+    if (w.onHit.ignite) m.afflict(game, 'burning', w.onHit.ignite, false);
+    if (w.onHit.chill) m.afflict(game, 'chilled', w.onHit.chill, false);
+    if (w.onHit.poison) m.afflict(game, 'poisoned', w.onHit.poison, false);
+  }
   if (dealt > 0 && p.hasArtefact('chalice')) {
     const heal = Math.max(1, Math.round(dealt * 0.25));
     p.heal(heal);

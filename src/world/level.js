@@ -14,6 +14,7 @@ import { glowSprite } from '../fx/glow.js';
 import { Drips } from '../fx/drips.js';
 import { Shopkeeper } from './shopkeeper.js';
 import { fingerprint, packBits, unpackBits, round2 } from '../save.js';
+import { tickStatuses } from '../status.js';
 
 const N8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
@@ -134,7 +135,13 @@ export class Level {
       })),
       spawnT: Math.round(this.spawnT),
       resales: this.resales,
+      leftAt: this.leftAt ?? undefined,
     };
+  }
+
+  /** Runs its monsters' statuses on by the `secs` you were away, as if you'd been here (but without their harm). */
+  catchUp(game, secs) {
+    if (secs > 0) for (const m of this.monsters) if (!m.dead) tickStatuses(game, m, secs, { damage: false });
   }
 
   /** Puts back what snapshot() kept, on a floor made from the same seed. */
@@ -163,6 +170,7 @@ export class Level {
     }
     this.spawnT = s.spawnT;
     this.resales = s.resales;
+    this.leftAt = s.leftAt ?? null;
   }
 
   // --- Grid queries ---

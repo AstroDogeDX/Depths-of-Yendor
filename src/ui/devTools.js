@@ -1,5 +1,5 @@
 import { THEMES, FLOORS_PER_THEME, TILE, HUNGER_MAX, isBossDepth, isShopDepth } from '../config.js';
-import { WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD } from '../items/defs.js';
+import { WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS, WAND_ZAPS_TO_ID } from '../items/defs.js';
 import { makeItem, stackable } from '../items/generate.js';
 import { MONSTERS } from '../monsters/defs.js';
 import { generateLevel } from '../dungeon/generator.js';
@@ -7,17 +7,21 @@ import { disposeGroup } from '../dungeon/levelBuilder.js';
 import { Level } from '../world/level.js';
 import { T } from '../dungeon/tiles.js';
 import { DAMAGE_TYPES, damageType, describeResist } from '../damage.js';
+import { STATUSES, afflict, cure } from '../status.js';
+import { ENCHANTMENTS, CURSES } from '../items/enchant.js';
+import { rand } from '../rng.js';
 import './devTools.css';
 
-// Dev tools, for testing by hand: jump to any floor, give yourself items, change your stats, spawn monsters, lay
-// traps.
+// Dev tools, for testing by hand: jump to any floor, give yourself items, change your stats, give you or a monster a
+// status, spawn monsters, lay traps.
 // The ` key opens and closes the panel during a run. main.js only loads this in development, or in a build
 // opened with ?dev in the address, so players never download it.
 
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, as stairs' `dir`
 const KINDS = [
-  ['weapon', 'Weapons', WEAPONS], ['armor', 'Armour', ARMORS], ['potion', 'Potions', POTIONS], ['scroll', 'Scrolls', SCROLLS],
-  ['wand', 'Wands', WANDS], ['ring', 'Rings', RINGS], ['artefact', 'Artefacts', ARTEFACTS], ['food', 'Food', FOOD],
+  ['weapon', 'Weapons', WEAPONS], ['offhand', 'Off hand', OFFHANDS], ['armor', 'Armour', ARMORS], ['potion', 'Potions', POTIONS],
+  ['scroll', 'Scrolls', SCROLLS], ['wand', 'Wands', WANDS], ['ring', 'Rings', RINGS], ['artefact', 'Artefacts', ARTEFACTS],
+  ['food', 'Food', FOOD],
   ['special', 'Other', { amulet: { name: 'Amulet of Yendor' }, key: { name: 'iron key (this floor)' } }],
 ];
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
@@ -66,6 +70,9 @@ export class DevTools {
               <button class="alt" data-act="restore" title="Full health and stamina, not hungry, no statuses">Restore</button>
               <button class="alt" data-act="kill">Kill every monster</button>
             </div>
+            <h3>Statuses</h3>
+            <div class="dev-opts"><span>Give one for 15 s to you, or</span><label class="check"><input type="checkbox" data-opt="stmonster" /> the monster you're facing</label></div>
+            <div class="dev-grid dev-statuses"></div>
             <h3>Monsters</h3>
             <div class="dev-opts"><span>Spawn one in front of you</span><label class="check"><input type="checkbox" data-opt="asleep" /> Asleep</label></div>
             <div class="dev-grid dev-monsters"></div>
@@ -77,9 +84,12 @@ export class DevTools {
             <h3>Items</h3>
             <div class="dev-tabs"></div>
             <div class="dev-opts">
-              <label>Enchant <input type="number" data-opt="ench" value="0" min="-5" max="20" /></label>
+              <label>Upgrade + <input type="number" data-opt="plus" value="0" min="0" max="20" /></label>
               <label>Quantity <input type="number" data-opt="qty" value="1" min="1" max="99" /></label>
-              <label class="check"><input type="checkbox" data-opt="cursed" /> Cursed</label>
+              <label>Curse <select data-opt="curse"><option value="0">none</option><option value="1">weakened</option><option value="2">full</option></select></label>
+              <label>Enchantment <select data-opt="enchant"><option value="">none</option><option value="random">random</option>${
+                Object.entries(ENCHANTMENTS).flatMap(([kind, set]) => Object.entries(set).map(([key, e]) =>
+                  `<option value="${kind}:${key}">${e.name} (${kind === 'armor' ? 'armour' : kind})</option>`)).join('')}</select></label>
               <label class="check"><input type="checkbox" data-opt="identified" checked /> Identified</label>
             </div>
             <div class="dev-grid dev-items"></div>
@@ -109,6 +119,8 @@ export class DevTools {
         const tip = `${cap(def.name)}. Melee: ${DAMAGE_TYPES[damageType(def)].name}.${shots} ${describeResist(def)}`;
         return `<button class="alt" data-monster="${type}" title="${tip.trim()}">${cap(def.name)}</button>`;
       }).join('');
+    this.$('.dev-statuses').innerHTML = Object.entries(STATUSES)
+      .map(([key, def]) => `<button class="alt" data-status="${key}">${def.label}</button>`).join('');
     this.$('.dev-traps').innerHTML = ['spike', 'poison', 'teleport', 'alarm']
       .map((type) => `<button class="alt" data-trap="${type}">${cap(type)}</button>`).join('');
     this.$('.dev-tabs').innerHTML = KINDS.map(([kind, label]) => `<button class="alt" data-kind="${kind}">${label}</button>`).join('');
@@ -126,6 +138,7 @@ export class DevTools {
       else if (d.type) this.give(d.type);
       else if (d.monster) this.spawn(d.monster);
       else if (d.trap) this.layTrap(d.trap);
+      else if (d.status) this.giveStatus(d.status);
       else if (d.stat) this.stat(d.stat);
       else if (d.act) this.act(d.act);
       this.refresh();
@@ -240,7 +253,7 @@ export class DevTools {
         p.stamina = p.maxStamina;
         p.winded = false;
         p.hunger = HUNGER_MAX;
-        for (const k in p.status) p.status[k] = 0;
+        for (const k in p.status) cure(g, p, k, { quiet: true });
         this.note('Restored: full health and stamina, fed, and every status cleared.');
         break;
       case 'kill': {
@@ -263,15 +276,16 @@ export class DevTools {
   /** Makes an item of `type` (of the selected kind) as the options say and puts it in your pack, or at your feet. */
   give(type) {
     const g = this.game, p = g.player, kind = this.kind;
-    const ench = Math.round(+this.opt('ench').value || 0), qty = Math.max(1, Math.round(+this.opt('qty').value || 1));
+    const plus = Math.max(0, Math.round(+this.opt('plus').value || 0)), qty = Math.max(1, Math.round(+this.opt('qty').value || 1));
+    const curse = +this.opt('curse').value, enchant = this.opt('enchant').value;
     let item;
     switch (kind) {
       case 'weapon': item = makeItem('weapon', type, { hitsToId: 20 }); break;
       case 'armor': item = makeItem('armor', type, { hitsToId: 14 }); break;
       case 'ring': item = makeItem('ring', type, { wornTime: 0 }); break;
       case 'wand': {
-        const max = Math.max(1, WANDS[type].charges[1] + ench); // for a wand, the enchantment adds charges
-        item = makeItem('wand', type, { charges: max, maxCharges: max, rechargeT: 0 });
+        const max = WANDS[type].charges[1] + plus; // for a wand, each + is a charge more
+        item = makeItem('wand', type, { charges: max, maxCharges: max, rechargeT: 0, zapsToId: WAND_ZAPS_TO_ID });
         break;
       }
       case 'special':
@@ -280,9 +294,16 @@ export class DevTools {
         break;
       default: item = makeItem(kind, type);
     }
-    if (kind === 'weapon' || kind === 'armor' || kind === 'ring') {
-      item.ench = ench;
-      item.cursed = this.opt('cursed').checked;
+    // Its +, its curse (a weapon's or armour's comes with a Curse of ___), and an enchantment, if it can take the one asked
+    // for: a weapon or armour, free of curses (see items/enchant.js).
+    if (['weapon', 'armor', 'ring', 'wand'].includes(kind)) {
+      item.plus = plus;
+      item.curse = curse;
+      if (curse && CURSES[kind]) item.bane = rand.pick(Object.keys(CURSES[kind]));
+      if (enchant && !curse && ENCHANTMENTS[kind]) {
+        const [ekind, key] = enchant.split(':');
+        item.enchant = enchant === 'random' ? rand.pick(Object.keys(ENCHANTMENTS[kind])) : ekind === kind ? key : undefined;
+      }
     }
     if (stackable(item)) item.qty = qty;
     if (this.opt('identified').checked) g.knowledge.identify(item);
@@ -306,6 +327,26 @@ export class DevTools {
     lvl.traps.push(trap);
     lvl.revealTrap(trap);
     this.note(`Laid a ${type} trap in front of you. Close the panel and step on it to set it off.`);
+  }
+
+  /**
+   * Gives you a status, or the monster you're facing (the one whose health shows, else the nearest you can see), as it
+   * would come in play: immunities and how it meets what's there already apply (see status.js).
+   */
+  giveStatus(key) {
+    const g = this.game, p = g.player, lvl = g.level, def = STATUSES[key];
+    let who = p;
+    if (this.opt('stmonster').checked) {
+      who = g.target && !g.target.dead ? g.target : lvl.monsters
+        .filter((m) => !m.dead && lvl.isVisibleWorld(m.x, m.z))
+        .sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z))[0];
+      if (!who) return this.note('There\'s no monster in sight to give it to.');
+    }
+    if (def[who.isPlayer ? 'player' : 'monster'] === false) return this.note(`${def.label} only happens to ${who.isPlayer ? 'monsters' : 'you'}.`);
+    const name = who.isPlayer ? 'You' : `The ${who.name}`;
+    const took = afflict(g, who, key, 15);
+    const now = Object.entries(STATUSES).filter(([k]) => who.status[k] > 0).map(([, d]) => d.label).join(', ') || 'nothing';
+    this.note(`${took ? `${name}: ${def.label}.` : `${def.label} didn't take on ${name.toLowerCase()} (immune, or it met something).`} Now: ${now}.`);
   }
 
   /** Puts a monster a few steps in front of you, or as near as there's room. */

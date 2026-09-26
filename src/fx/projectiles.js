@@ -7,7 +7,8 @@ const ARROW_GEO = new THREE.BoxGeometry(0.03, 0.03, 0.55);
 const ORB_GEO = new THREE.IcosahedronGeometry(1, 0);
 
 /**
- * o: { x, y, z, vx, vy, vz, owner: 'monster'|'player', dmg, kind, color, size, source,
+ * o: { x, y, z, vx, vy, vz, owner: 'monster'|'player'|'ally', attacker (the monster that shot it), dmg, kind, color,
+ *      size, source,
  *      type? (its damage type, see damage.js: fire sets what it hits burning), gravity?, life?, onImpact?(game, pr, target) }
  */
 export function spawnProjectile(level, o) {
@@ -46,21 +47,22 @@ export function updateProjectiles(dt, game, level) {
         done = true;
         break;
       }
-      if (pr.owner === 'monster') {
-        const p = game.player;
-        if (Math.hypot(p.x - pr.x, p.z - pr.z) < PLAYER_RADIUS + pr.size && pr.y < 2.0) {
-          target = 'player';
+      // A hostile's shot hits you, or an ally of yours (charmed: see Monster.isAlly). Yours and your allies' pass by
+      // your allies and hit anything else.
+      const hostile = pr.owner === 'monster';
+      const p = game.player;
+      if (hostile && Math.hypot(p.x - pr.x, p.z - pr.z) < PLAYER_RADIUS + pr.size && pr.y < 2.0) {
+        target = 'player';
+        done = true;
+        break;
+      }
+      for (const m of level.monsters) {
+        if (m.dead || m === pr.attacker || m.isAlly() !== hostile) continue;
+        if (Math.hypot(m.x - pr.x, m.z - pr.z) < m.radius + pr.size &&
+            pr.y > m.baseY - 0.2 && pr.y < m.baseY + m.height + 0.3) {
+          target = m;
           done = true;
-        }
-      } else {
-        for (const m of level.monsters) {
-          if (m.dead) continue;
-          if (Math.hypot(m.x - pr.x, m.z - pr.z) < m.radius + pr.size &&
-              pr.y > m.baseY - 0.2 && pr.y < m.baseY + m.height + 0.3) {
-            target = m;
-            done = true;
-            break;
-          }
+          break;
         }
       }
     }
@@ -85,7 +87,9 @@ function impact(game, level, pr, target) {
   if (target === 'player') {
     game.hurtPlayer(pr.dmg, { source: pr.source, type: pr.type, ranged: true });
   } else if (target) {
-    target.takeDamage(game, pr.dmg, { type: pr.type, knockback: { x: pr.vx / 20, z: pr.vz / 20 } });
-    if (pr.type === 'fire' && !target.dead) target.afflict(game, 'burning', 4, false);
+    target.takeDamage(game, pr.dmg, {
+      type: pr.type, ignite: pr.type === 'fire' ? 4 : 0, knockback: { x: pr.vx / 20, z: pr.vz / 20 },
+      attacker: pr.owner === 'player' ? undefined : pr.attacker,
+    });
   }
 }

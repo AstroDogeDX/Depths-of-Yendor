@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WEAPONS } from './defs.js';
+import { WEAPONS, OFFHANDS } from './defs.js';
 import { buildBBModel } from './bbmodel.js';
 import { MODEL_PX, ITEM_MIN_SIZE } from '../config.js';
 
@@ -54,7 +54,7 @@ const ITEM_BASE = -0.16;
  */
 export function buildItemModel(item, color, { floor = false } = {}) {
   const g = new THREE.Group();
-  const model = item.kind === 'weapon' ? lyingWeapon(item) : itemModel(item, color);
+  const model = item.kind === 'weapon' ? lyingWeapon(item) : item.kind === 'offhand' ? lyingOffhand(item) : itemModel(item, color);
   if (floor) {
     const bounds = new THREE.Box3().setFromObject(model);
     const longest = Math.max(...bounds.getSize(new THREE.Vector3()).toArray());
@@ -74,6 +74,23 @@ function lyingWeapon(item) {
   // Lie centred on the item's spot, whatever the weapon's length.
   w.position.x = -new THREE.Box3().setFromObject(w).getCenter(new THREE.Vector3()).x;
   return w;
+}
+
+// An off-hand thing (items/defs.js OFFHANDS) has the one model, in your hand (see ViewModel) or on the floor: the
+// torch is assets/models/torch.bbmodel. On the floor it lies on its side, like a weapon.
+const HELD_FILES = import.meta.glob('../../assets/models/*.bbmodel', { import: 'default', eager: true });
+
+function lyingOffhand(item) {
+  const name = OFFHANDS[item.type].model, key = `held:${name}`;
+  if (!itemCache.has(key)) {
+    const src = HELD_FILES[`../../assets/models/${name}.bbmodel`];
+    if (!src) console.warn(`No off-hand model assets/models/${name}.bbmodel`);
+    itemCache.set(key, src ? buildBBModel(src, MODEL_PX) : box(0.05, 0.4, 0.05, lam(0x8a5a2a), 0, 0.2));
+  }
+  const m = itemCache.get(key).clone();
+  m.rotation.z = Math.PI / 2.2;
+  m.position.x = -new THREE.Box3().setFromObject(m).getCenter(new THREE.Vector3()).x;
+  return m;
 }
 
 function itemModel(item, color) {

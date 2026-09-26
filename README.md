@@ -14,6 +14,10 @@ npm run build      # static build in dist/, deployable anywhere
 
 The build is plain static files with relative paths (`base: './'` in `vite.config.js`), so it works from any folder on any static host. Pushing to `master` publishes it to GitHub Pages (`.github/workflows/deploy.yml`) at https://astrodogedx.github.io/Depths-of-Yendor/. For that, the repo's Settings → Pages → Build and deployment → Source must be set to **GitHub Actions**. The workflow can also be run by hand from the Actions tab. Add `?dev` to the address to get the dev tools in a published build.
 
+Every build stamps itself with when it was built and from which commit, and on GitHub with the deploy workflow's run number, which counts up with every publish (`vite.config.js`, read by `src/build.js`). The title screen shows it in its bottom-right corner, "Build 42 · 26 Sep 2026, 14:05 UTC" (UTC, so it reads the same for everyone; hover it for the commit). A build made on your own machine says "Local build", and the dev server "Development build".
+
+A shared link to the site shows a preview card (Open Graph tags in `index.html`, which X's cards fall back on too): the title, a line about the game, and `public/og-image.png`, the title screen at 1200×630. Previews need absolute addresses, so the tags name the published site: change them if it moves. The tab's icon is the logo's gold Y (`public/favicon.svg`, with a 32 px PNG for browsers that want one and a 180 px `apple-touch-icon.png` for home screens). Everything in `public/` is copied into the build as it is.
+
 ## Controls
 
 | Key | Action |
@@ -27,7 +31,8 @@ The build is plain static files with relative paths (`base: './'` in `vite.confi
 | I or Tab | Pack (click or ↑↓ select, double-click or Enter use, T throw, D drop) |
 | M | Full map |
 | 1–6 | Hotbar slots (see below) |
-| F / right-click | Zap your last-used wand |
+| F | Grip your weapon in both hands, or back in one (see *Off hand and two hands*) |
+| Right-click | Use what's in your off hand, or, gripping your weapon in both hands, its special (none yet) |
 | Q | Drink a potion you *know* is healing |
 | R / T | Active power of artefact slot 1 / 2 |
 | P | Cycle internal render resolution (270p → 360p → 540p → native) |
@@ -40,13 +45,27 @@ For testing by hand, press **`** (the key left of 1) during a run to open the de
 
 - **Travel:** jump straight to any of the 25 floors, arriving at its entrance as if you'd walked down (boss floors are marked red, shop floors gold). **New layout** builds the floor you're on again from a new seed, for a quick look at another layout. **Reveal map** maps the whole floor and shows its hidden traps, and **To the stairs down** puts you at its exit.
 - **You:** god mode (nothing can hurt you), health and maximum health, strength, levelling up, gold, **Restore** (full health and stamina, fed, every status cleared) and **Kill every monster**.
-- **Items:** make any weapon, armour, potion, scroll, wand, ring, artefact or food, or the Amulet or an iron key for this floor, with the enchantment (extra charges, for a wand), quantity, curse and identification you choose. It goes in your pack, or on the floor in front of you when the pack is full. **Identify everything** teaches you every potion, scroll, wand and ring, and identifies what you carry.
+- **Items:** make any weapon, off-hand thing (the torch), armour, potion, scroll, wand, ring, artefact or food, or the Amulet or an iron key for this floor, with the +N (a charge more each, for a wand), quantity, curse (none, weakened or full), enchantment and identification you choose. It goes in your pack, or on the floor in front of you when the pack is full. **Identify everything** teaches you every potion, scroll, wand and ring, and identifies what you carry.
 - **Monsters:** spawn any monster a few steps in front of you, awake or asleep.
 - **Traps:** lay a trap of any kind on the floor in front of you, found and armed, to step on.
+- **Statuses:** give yourself, or the monster you're facing, any status for 15 s, as it would happen in play (immunities and how statuses meet included).
 
 ## The pack
 
-The left of the pack shows a paper doll of what you have equipped: weapon in hand, armor on the chest (tinting the figure), two rings and two artefact attunements. A known curse gives the slot a red border. Clicking a filled slot selects that item. Selecting something you haven't equipped highlights the slot it would go into. Underneath are your derived stats (damage and its type, recovery, reach, defense, speed, strength), with anything too heavy for you shown in red. An unidentified weapon's enchantment stays hidden: its damage shows as *(+?)*.
+The left of the pack shows a paper doll of what you have equipped: weapon in hand, what's in your off hand (the torch), armor on the chest (tinting the figure), two rings and two artefact attunements. A weapon gripped in both hands is marked *2H*, and what's in your off hand meanwhile *stowed*. A known curse gives the slot a red border. Clicking a filled slot selects that item. Selecting something you haven't equipped highlights the slot it would go into. Underneath are your derived stats (damage and its type, recovery, reach, defense, speed, strength), with anything too heavy for you shown in red. An unidentified weapon's + stays hidden: its damage shows as *(+?)*. A curse on it you don't know of stays hidden too.
+
+## Off hand and two hands
+
+Your weapon is in your main hand, and your other hand holds an **off-hand** thing: for now, only the **torch** you start with. Shields, throwing weapons, a bow and more are to come (`OFFHANDS` in `items/defs.js`). It's equipment like any other: **Put away** in the pack stows it with your things, **Hold** takes it back up, and you can drop it, or sell it (for next to nothing).
+
+- **The torch is your light.** Held up, it lights the way as it always has. Without one in hand, only the floor's own dim light and the sconces show you anything.
+- **F grips your weapon in both hands**, or takes it back into one. Every weapon can be gripped this way, and in both hands it needs **2 less strength** (`TWO_HAND_STR` in `config.js`): a war hammer, which needs 17, needs 15. So a weapon too heavy for you is less so: at 12 strength, the war hammer recovers in 2.7 s instead of 3.2, and its penalty to hit drops from 40% to 24%, while a long sword (14) is no longer too heavy at all. And one you're strong enough for hits harder, as strength beyond what a weapon needs always does: a short sword's 3–8 becomes 3–10. The price is what's in your off hand.
+- **In both hands, the weapon takes a two-handed pose** (there are no hands to show yet). A sword, axe, mace or hammer is held from the off-hand side, as if your left hand held it and your right guided it: it rises diagonally across your body, and swings higher and further. A spear comes in nearer the middle, braced low from your right hip, and is driven further home. A dagger is held out before you in both hands, and jabbed forward with both arms. Both point straight at the crosshair all through the thrust, their flats turned toward you (`KEYS_2H` in `fx/viewmodel.js` gives a weapon a pose of its own).
+- **Two hands stow what's in your off hand.** You can't use it, and the torch hangs at your belt, lighting far less (45%) from lower down. Taking something in your off hand takes your weapon back into one, and so does putting your weapon away.
+- **Changing grip empties your attack meter**, as changing equipment does.
+- **Right-click** uses what's in your off hand, if it has a use (the torch has none but its light), or, while you grip your weapon in both hands, the weapon's two-handed special (none yet). Each goes in `OFFHAND_USES` or `TWO_HAND_SPECIALS` in `items/use.js`.
+
+Wands no longer have a key of their own: put them on the hotbar.
 
 ## Hotbar
 
@@ -63,17 +82,17 @@ Potion, scroll and food slots remember the *type*, so a slot whose stack runs ou
 - **Attack meter instead of turns.** Every weapon has a recovery time. You can swing early, but damage scales with the charge, like King's Field's power bar. The weapon visibly sags while the meter refills.
 - **Telegraphed monster attacks.** Monsters wind up before striking, and during the windup they turn slowly toward you. Stepping back or circle-strafing makes them whiff, which replaces Rogue's to-hit dice for defence. Heavy hits can stagger a monster out of its windup.
 - **Stealth and sneak attacks.** Monsters start asleep or wandering. Unaware targets take double damage and cannot dodge (Pixel Dungeon's surprise attacks). Monsters notice you by sight and by the sound of your footsteps (see below). Standing still, rings of stealth and light armour help. Heavy armour hurts.
-- **Clocks tick in seconds.** Hunger, regeneration, status effects, wand recharge and ring identification all run on real time. The world pauses while the pack or map is open, but drinking, eating, throwing or changing equipment empties your attack meter, so doing it mid-fight still costs a swing.
-- **Paralysis means paralysis.** While paralysed you can't use items (from the pack or the hotbar), pick things up, take stairs or invoke artefacts. Only the map stays available.
-- **Identification is per run.** Potion colours, scroll labels, wand woods and ring gems are reshuffled from the seed. Potions reveal themselves when drunk, and throwing a potion identifies it if the splash does something visible. Weapons and armour reveal their enchantment after enough hits. Rings reveal themselves after about 100 s of wear.
-- **Curses.** About 16% of equipment is cursed with a negative enchantment and binds to you when equipped. Scrolls of remove curse or enchanting break the curse.
+- **Clocks tick in seconds.** Hunger, regeneration, status effects, wand recharge and ring identification all run on real time. The world pauses while the pack or map is open, but drinking, eating, throwing, changing equipment or changing grip empties your attack meter, so doing it mid-fight still costs a swing.
+- **Paralysis means paralysis.** While paralysed (or frozen) you can't use items (from the pack or the hotbar), pick things up, take stairs or invoke artefacts. Only the map stays available.
+- **Identification is per run.** Potion colours, scroll labels, wand woods and ring gems are reshuffled from the seed. Potions reveal themselves when drunk, and throwing a potion identifies it if the splash does something visible. Weapons and armour reveal their + after enough hits, and any Enchantment or Curse of ___ as soon as you put them on. Rings reveal themselves after about 100 s of wear. A wand shows what kind it is the first time its spell does something you can see, but its + and its charges only after 3 zaps.
+- **Curses.** About 16% of weapons and armour, a fifth of rings and an eighth of wands are cursed. See *Curses, upgrades and enchantments* below.
 - **Persistent floors.** Levels are kept when you leave, so you can go back up, and they're saved with the run (see *Saving*). The dungeon also restocks itself slowly, and fast and angrily once you carry the Amulet.
 
 ## What's in it
 
 - **25 floors in 5 themes** of five floors each: Sewers, Catacombs, Caves, Dwarven Ruins and the Underworld. Seeded layouts with pillared halls, wall sconces, doors and hidden traps (spike, poison gas, teleport, alarm). See *The dungeon* and *Floors and doors* below.
 - **12 monsters:** rat, bat, ooze, goblin, goblin archer, skeleton, orc, wraith, fire imp, troll, stone golem, and the **Warden of Yendor**, who fires bolt volleys and raises the dead at half health.
-- **Items:** 7 weapons with different reach, speed and damage types (spears out-reach swords, hammers hit hard but recover slowly), 5 armours with strength requirements, 10 potions, 9 scrolls, 5 wands, 6 rings, food.
+- **Items:** 7 weapons with different reach, speed and damage types (spears out-reach swords, hammers hit hard but recover slowly), each to be gripped in one hand or both, the torch in your off hand, 5 armours with strength requirements, 10 potions, 10 scrolls, 5 wands, 6 rings, food.
 - **A shop** on the first floor of each theme after the first (floors 6, 11, 16 and 21). See *The shop* below.
 - **6 artefacts**, 5 per run in guarded shrines on the third floor of each theme (3, 8, 13, 18 and 23): Chalice of Crimson Thirst (lifesteal), Eye of the Deep (see all monsters and traps), Horn of Thunder (stun blast), Cloak of Shadows (invisibility), Boots of the Wind (speed), Emberheart (burning strikes, fire immunity). You have two attunement slots.
 - A title screen that walks you through a floor of each theme in turn, down the stairs from one to the next.
@@ -81,7 +100,7 @@ Potion, scroll and food slots remember the *type*, so a slot whose stack runs ou
 
 ## Damage types
 
-Every source of damage has a type (`damage.js`), physical or magical. Only starvation has none.
+Every source of damage has a type (`damage.js`), physical or magical. Only starvation and bleeding have none.
 
 **Physical.** Every melee blow deals one of three kinds of physical damage: **slash** (the swords and the battle axe), **stab** (the dagger and the spear, which thrust rather than swing) or **bash** (the mace, the war hammer and your fists). A weapon's description and the pack's stats say which. Monsters' blows work the same way. Goblin archers' arrows stab, as do spike traps. A weapon or monster that doesn't give a type deals generic physical damage.
 
@@ -91,7 +110,7 @@ Every source of damage has a type (`damage.js`), physical or magical. Only starv
 | --- | --- | --- |
 | Magic | the wand of magic missile, wraiths' and the Warden's bolts, the Horn of Thunder's blast | non-elemental magic |
 | Fire | the wand of firebolt, liquid flame, fire imps' fireballs, burning | fire hits set you burning; being immune to fire means you can't burn |
-| Ice | nothing yet | for future wands, enchantments and monsters |
+| Ice | the wand of frost | chills, and freezes what's wet (see *Statuses*); being immune to ice means you can't be chilled or frozen |
 | Lightning | the wand of lightning | |
 | Poison | being poisoned (potions, gas traps, oozes) | being immune to poison means you can't be poisoned |
 | Holy | nothing yet | holy light, for use against the undead and the cursed |
@@ -131,6 +150,89 @@ So a mace is the answer to skeletons, golems and the Warden but little use again
 
 You can see when a type matters. A hit on a monster's weakness shows a bigger number tagged **WEAK!**, and a melee hit on a weakness lands with a crunch. A resisted hit shows a smaller number tagged **RESISTED**, and a resisted melee hit lands with a dull clank. For physical hits the number itself turns orange or grey. A monster immune to the damage shows **IMMUNE**, including when you try to poison or burn it. Burning and poison ticks aren't tagged; the hit that started them was. The first time in a run you see a kind of monster resist a type or be weak to it, the log says so, e.g. "The troll is weak to fire!" or "Poison can't harm the skeleton!". A hit on one of your armour's weaknesses is tagged **WEAK SPOT**, and one it resists is tagged **RESISTED**.
 
+## Curses, upgrades and enchantments
+
+Equipment has a **+N** (never below 0), which the scroll of **upgrade** raises. A weapon or armour can also have an **Enchantment of ___**, or a **Curse of ___**, but not both (`items/enchant.js`: the effects there so far are a first few).
+
+Now and then a weapon or armour you find is already enchanted: about 5% of those that aren't cursed on the first floor, rising to about 10% on the last. A wand you find may have a +, as often as a weapon does. The shop's weapons and armour are never enchanted, and its wands never have a +.
+
+You learn an Enchantment or Curse of ___ the moment you put the thing on ("Power stirs in the long sword: an Enchantment of Flames!"), and so, with an enchantment, that it's free of curses. Its + you only learn by using it (or a scroll of identify).
+
+**Curses** come in two strengths (`item.curse`):
+
+- **Full:** a cursed weapon, armour or ring binds itself to you once you put it on, and a weapon or armour has a Curse of ___ (clumsiness, frailty, burden, clamour...). A weapon's or armour's + still counts as normal. A cursed ring's + works *against* you instead: a cursed ring of protection +1 is −1 defense until the curse is lifted.
+- **Weakened:** it comes off, but its Curse of ___ (or a ring's reversal) remains.
+
+**Cursed wands** misfire. They don't cast their own spell, but some wand's bolt at random: missile, firebolt, frost or teleport other, never a line like lightning. A fifth of the time that fizzles, wasting the charge. Otherwise it flies as a wild, green, flickering bolt carrying that spell, or, while the curse is full, a quarter of the time the spell turns on you. The first misfire tells you the wand is cursed.
+
+What you know shows in its name: "(cursed)", "(curse weakened)", or "(uncursed)" when you know it's clean but nothing more.
+
+The scrolls:
+
+| Scroll | On | Does |
+| --- | --- | --- |
+| Upgrade | a weapon, armour, ring or wand | +1, and a wand gains a charge. On anything cursed it goes into the curse instead: a full curse is weakened (a fifth of the time lifted outright), and a weakened one is lifted |
+| Enchantment | a weapon or armour free of curses | a random enchantment, in place of any it had; identifies it. On something with a curse you didn't know of, the magic recoils and shows you the curse |
+| Remove curse | one item that might be cursed | lifts any curse, and either way marks it clean. Things you know are clean aren't offered |
+
+**Wands** keep their + and their charges to themselves until you know them: 3 zaps (misfires count), or a scroll of identify. Until then the hotbar shows **?** for its charges. Once you know it, the hotbar shows its charges, and an empty wand counts down the seconds to the next. Either way, while a wand is short of charges, a bar under its slot fills toward the next one, and its description says it's recharging. A charge returns every 55 s at +0, a tenth faster for each + (to no faster than every 27.5 s). Each + also adds a charge, and 2 to both ends of a damaging wand's damage, which its description shows once you know the wand.
+
+## Statuses
+
+Statuses afflict you and monsters alike, by one set of rules (`status.js`): what each does, what wards it off, and how they meet.
+
+- **Showing them.** Yours show under your health, with the seconds left. The monster you're facing lists its own beside its name. Some also show as a colour on the monster, and a word pops up over it as they take hold.
+- **Bosses** take any hostile status for half as long.
+- **Floors you've left** stand still, since only the one you're on runs. When you come back, its monsters' statuses have worn down by the time you were away, without doing their damage.
+
+| Status | Comes from | Does |
+| --- | --- | --- |
+| Burning | fire hits (the wand of firebolt, liquid flame, fire imps), Emberheart's strikes | fire damage every second |
+| Poisoned | poison potions and gas traps, oozes' hits | poison damage every second, and you don't heal |
+| Bleeding | nothing yet | damage every second that armour and resistances don't reduce, and you don't heal. The bloodless (skeletons, wraiths, golems, oozes) can't bleed |
+| Chilled | the wand of frost | you move at 60% speed, and your weapon recovers a quarter slower; monsters move and strike at half speed |
+| Frozen | cold on something wet, or on an ooze | frozen stiff: it can't move or act, a frozen monster takes a blow as if unaware (double damage), and it loses every resistance (weaknesses stay). A thaw leaves 4 s of Chilled |
+| Wet | nothing yet (wading, to come) | won't burn, and lightning does half as much damage again |
+| Oiled | nothing yet (oil flasks and traps, to come) | fire does half as much damage again, and set alight, it burns twice as long |
+| Paralysed | paralysis potions, the Horn of Thunder | as Frozen, but its resistances stay |
+| Weakened | nothing yet | you: 3 less strength. A monster: 3/4 of its damage and of its health |
+| Confused | confusion potions | you stagger. Monsters stagger, shoot wide, and half the time lay into another monster in reach |
+| Blind | potions of darkness | you see almost nothing; a monster sees only about a tile around it, so it hunts by ear (below) |
+| Feared | scrolls of terror | monsters run from you |
+| Charmed | nothing yet | you can't fight: no swinging, zapping, throwing or Horn. A monster takes your side (see *Allies* below); a boss just stops fighting. Striking a charmed monster breaks the charm |
+| Smitten | nothing yet (the Bard, to come) | monsters only: a charm that never wears off. On a boss it's an ordinary charm |
+| Heartbroken | a charm ending, or broken | no charm takes. 60 s for you, 30 s for a monster |
+| Hasted, Mind vision, Invisible | their potions, the Cloak of Shadows | yours only: you're faster, you sense every monster on the floor, monsters lose track of you |
+| Hunted | carrying the Amulet (not timed) | every monster on the floor knows where you are, even while you're invisible (but they can't strike what they can't see) |
+
+How they meet (`afflict` in `status.js`):
+
+- **Water puts out fire,** and nothing wet will burn.
+- **Cold puts out fire, and heat drives out cold.** Setting something chilled or frozen alight thaws it instead, and chilling something that's burning douses it instead. A fire hit on something frozen thaws it and does its full damage.
+- **Cold on something wet freezes it solid,** as does wetting something chilled. Oozes are `fluid` (a trait in `monsters/defs.js`), so cold alone freezes them.
+- **A charm leaves its target Heartbroken,** whether it wears off or is broken, and nothing heartbroken can be charmed.
+- **Immunity to a damage type wards off its status.** A resistance of 0 to fire, poison or ice (the fire imp to fire, Emberheart's wearer, the undead to poison) means no burning, no poison, or no chill or freezing.
+
+**Allies.** A charmed or smitten monster fights for you. It keeps near you, and goes for any monster in sight that's hunting you or fighting it, while leaving sleepers and wanderers be. Hostile monsters turn on an ally that strikes them or comes within a few metres. Any monster struck by another holds a grudge for 8 s, so a confused one's wild blows start brawls too. Striking a monster yourself pulls it back onto you for as long.
+
+- **Your attacks spare your allies.** Your sword goes for an enemy in reach before an ally. Your bolts, the lightning wand and the Horn pass them by, and so do your allies' own shots. Enemies' shots can hit them. Splashes and fire catch everyone.
+- **Striking an ally** (or a charmed boss) breaks its charm, and it turns on you.
+- **Kills:** what your allies kill (or a brawl does) counts as yours, experience and all. An ally that falls counts as nothing.
+- **Charmed allies stay on their floor** when you take the stairs. That floor stands still while you're away, but its charms still wear off by the time you come back (see above).
+
+**Hunger** has three stages:
+
+- **Hungry:** a warning.
+- **Famished** (below 80 of 1,000): your wounds stop healing.
+- **Starving** (at 0): you lose 1 health every 3 s and move slower.
+
+**Hunting by ear.** A monster knows where you are only while it can see you (or while you're Hunted).
+
+- When it hears you, it goes to where the sound came from. Footsteps, the alarm trap and a scroll of aggravate monsters all count.
+- When it loses sight of you, it goes to where it last saw you.
+- Either way, it looks around when it gets there and heads for anything else it hears.
+- It gives up after 12 s with no sign of you. A boss never gives up.
+
 ## Stamina, sprinting and sneaking
 
 Stamina is a separate bar from the attack meter and is never spent on swings. It drains only while you're *moving* in a mode: sprinting uses 22 a second, sneaking 9. Sprinting or sneaking while standing still is free. It refills (18 a second, half as fast again standing still) after a short pause. Run it dry and you're *Winded*: no sprinting or sneaking until it's back to 30%. It stands you up out of a sneak too, so tap C again once you've got your breath back. You start with 100, and gain 10 more per level.
@@ -166,7 +268,7 @@ Floors are made from the seed, so a save keeps only what's changed on each floor
 
 With you, your things and what you've learned, a run through all 25 floors saves as about 90 KB, in about 3 ms.
 
-A save whose format is out of date (`SAVE_VERSION`) can't be continued. A floor saved before a change to how floors are laid out starts afresh rather than with things in its walls: each saved floor keeps a fingerprint of its layout to check against.
+A save whose format is out of date (`SAVE_VERSION`) can't be continued. A floor saved before a change to how floors are laid out starts afresh rather than with things in its walls: each saved floor keeps a fingerprint of its layout to check against. Each save also records the build of the game that made it (`save.build`, see *Running*), though nothing reads it back yet.
 
 ## The dungeon
 
@@ -221,9 +323,15 @@ The minimap marks found traps in the same colours (grey, green, azure, yellow), 
 
 On the first floor of each new theme after the first (floors 6, 11, 16 and 21), a door in the room you arrive in leads to a shop. A small hooded shopkeeper stands on a stool behind the counter, idly shaking a purse of coins, watching you and passing remarks. The shop is lit by blue-flamed sconces.
 
-- **Stock:** five items, three on the counter and one on each display table. There's always a ration, a potion and a scroll (often healing and identify), a piece of uncursed gear from a little deeper than the floor you're on, and a wand or an uncursed ring. Items keep their unidentified names. A price depends only on the kind of item (and, for weapons and armour, which one), never on what's hidden about it, so prices give nothing away. Prices rise a little on deeper floors (see `shopStock` and `sellPrice` in `items/generate.js`).
+- **Stock:** five items, three on the counter and one on each display table. There's always a ration, a potion and a scroll (often healing and identify), a piece of uncursed gear from a little deeper than the floor you're on, and an uncursed wand or ring. Items keep their unidentified names. What the shop charges depends only on the kind of item (and, for weapons and armour, which one: its `value` in `items/defs.js`), never on what's hidden about it, so prices give nothing away. Prices rise a little on deeper floors (see `shopStock` and `worth` in `items/generate.js`).
 - **Buying:** walk up to an item and press **E**. The prompt shows the price, or what you're short. Gold goes, the item goes into your pack, and there's no haggling or refunds.
-- **Selling:** open your pack while you're in the shop and every item gets a **Sell** button with its price: 40% of what the shop would charge for that kind of item, by the same rules, so selling something unidentified tells you nothing about it. Stacks sell one at a time, equipped items come off first (not if they're cursed), and the shopkeeper won't buy the Amulet.
+- **Selling:** open your pack while you're in the shop and every item gets a **Sell** button with its price: 40% of what it's worth, as far as you know it (`worth` in `items/generate.js`). The price never tells you more than you knew:
+  - **A potion, scroll, wand or ring of a kind you don't know** fetches a low price, the same for every kind.
+  - **Known potions and scrolls** fetch their value.
+  - **Equipment you know nothing about** (not even whether it's cursed) fetches a share of what its kind is worth, cursed or not.
+  - **Known to be clean** but not identified, it fetches its full value, plus what an enchantment you know of is worth. **Identified**, add what its + is worth too.
+  - **A weakened curse you know of** halves the price. **A full curse you know of**, and the shopkeeper refuses it outright.
+  - Stacks sell one at a time, equipped items come off first (not if they're cursed), and the shopkeeper won't buy the Amulet.
 - **Buying back:** the shopkeeper sets what you sell out with its wares, at its usual price for that item. It goes on the first free spot on the counter or the display tables, then on the rug, which holds six. Potions, scrolls and food of the same kind pile up on one spot and sell back one at a time. When every spot is taken, the item you sold longest ago goes to make room.
 - **Monsters** never spawn, wander or get teleported into the shop. Only a monster that was chasing you when you went in may follow you in. Any other monster that comes looking waits at the door, unless you attack it from inside.
 
@@ -231,7 +339,7 @@ On the first floor of each new theme after the first (floors 6, 11, 16 and 21), 
 
 ## Blockbench models
 
-The monsters, the shopkeeper, the weapons you hold and find, the torch in your other hand, the sconces, torches and lanterns on the walls, room furniture, traps and the items lying on the floor are [Blockbench](https://www.blockbench.net) projects in `assets/models/`:
+The monsters, the shopkeeper, the weapons you hold and find, the torch in your off hand (and on the floor, dropped), the sconces, torches and lanterns on the walls, room furniture, traps and the items lying on the floor are [Blockbench](https://www.blockbench.net) projects in `assets/models/`:
 
 - `monsters/` has one per monster type in `monsters/defs.js` (`rat`, `bat`, `slime`, `goblin`, `archer`, `skeleton`, `orc`, `wraith`, `imp`, `troll`, `golem`, `warden`).
 - `weapons/` has one per `model` name in `items/defs.js` (`dagger`, `sword`, `longsword`, `mace`, `spear`, `axe`, `hammer`).
@@ -271,10 +379,12 @@ These models were first built in code by `tools/modelgen/`. It shapes low-poly m
 ```
 src/
   config.js            world scale, themes and floors, boss/shop/shrine floors, the danger curve, tuning constants
+  build.js             which build this is (stamped in by vite.config.js), for the title screen and saves
   game.js              run lifecycle, level transitions, rendering, interaction, traps, endings
-  player.js            movement, attack meter, stats, statuses, hunger/regen, inventory
+  player.js            movement, attack meter, stats, grip, torchlight, statuses, hunger/regen, inventory
   combat.js            player melee resolution
   damage.js            damage types (physical, magic and the elements) and the resistances to them
+  status.js            statuses for the player and monsters alike: what they do, what wards them off, how they meet
   hotbar.js            hotbar bindings and what each slot does when pressed
   input.js / audio.js  pointer-lock input; WebAudio synth sfx + ambient drone
   save.js              the saved run in local storage, and the helpers floors are saved with
@@ -297,12 +407,13 @@ src/
   world/shopkeeper.js  the shop's merchant: idle animation and remarks
   world/trapModels.js  the traps' models: their armed, active and used states, and how they move going off
   monsters/defs.js     bestiary stats, the floors each monster appears on, spawn tables
-  monsters/monster.js  AI state machine (sleep → wander → hunt, fear, ranged kiting), attacks, statuses
+  monsters/monster.js  AI state machine (sleep → wander → hunt by sight or by ear, fear, ranged kiting), allies and brawls, attacks
   monsters/models.js   loads the rigged Blockbench monsters and animates their bones
   items/defs.js        item catalog and unidentified appearances
   items/identify.js    per-run appearance shuffle, naming, descriptions
-  items/generate.js    random items by depth, enchant/curse rolls, shop stock and prices
-  items/use.js         potions, scrolls, wands, equip/curses, throwing, artefact powers
+  items/generate.js    random items by depth, their + and curses, shop stock, what things are worth
+  items/enchant.js     Enchantments and Curses of ___ on weapons and armour, and what a curse's strength means
+  items/use.js         potions, scrolls, wands, equip/curses, grip and off-hand use, throwing, artefact powers
   items/models.js      loads the weapon and item models, tinting each item in its colour
   items/bbmodel.js     loads Blockbench .bbmodel projects (cubes, meshes, groups, textures) into three.js
   fx/                  viewmodel (hands), pixel-art flames, projectiles, particles, drips, haze over channels (the rifts' miasma, the lava's embers), glow sprites
@@ -312,6 +423,7 @@ src/
   ui/devTools.js       the dev tools panel (the ` key): travel, stats, items and monsters for testing
 assets/models/         Blockbench models: monsters/, npcs/, weapons/, items/, props/, the hand torch and the wall sconce
 tools/modelgen/        builds those models from code (npm run models)
+public/                copied into the build as it is: the favicon, and the picture a shared link shows
 ```
 
 Balance numbers live in `monsters/defs.js`, `items/defs.js` and `config.js`. `window.game` is exposed for poking at state from the dev console.

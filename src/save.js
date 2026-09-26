@@ -11,8 +11,15 @@
 // floors are laid out can: each saved floor carries its layout's fingerprint, and one that no longer matches
 // starts afresh (see Game.getLevel).
 
+import { randomBane } from './items/enchant.js';
+import { WAND_ZAPS_TO_ID } from './items/defs.js';
+import { rand } from './rng.js';
+
 const KEY = 'doy.save';
 export const SAVE_VERSION = 1;
+// Changes a save made before them can be brought up to date with (see upgrade): 2, the rework of curses and the
+// scroll of upgrade.
+export const SAVE_FORMAT = 2;
 
 /** Writes a save. False if storage refused it (full, or blocked). */
 export function writeSave(data) {
@@ -29,10 +36,58 @@ export function writeSave(data) {
 export function readSave() {
   try {
     const save = JSON.parse(localStorage.getItem(KEY));
-    return save?.version === SAVE_VERSION ? save : null;
+    return save?.version === SAVE_VERSION ? upgrade(save) : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Brings a save up to date with what's changed since it was made. (Renamed statuses are dealt with as they're
+ * restored: see restoreStatus in status.js.)
+ * - The wand of slowness is now the wand of frost.
+ * - A wand takes a few zaps to know now (item.zapsToId, see zapWand).
+ * - The torch was always in your off hand: now it's a thing you carry, in the off-hand slot (Player.equip.offhand),
+ *   so a save from before gets one there.
+ * - Before format 2, the scroll of enchanting was what's now the scroll of upgrade, and an item's enchantment could be
+ *   negative: now it's a + of 0 or more, a curse is a strength (item.curse), and a cursed weapon or armour has a Curse
+ *   of ___ (see items/enchant.js). A cursed ring's old minus becomes a + that works against you, as before.
+ */
+function upgrade(save) {
+  const old = !(save.format >= 2);
+  const fix = (it) => {
+    if (!it) return;
+    if (it.kind === 'wand' && it.type === 'slow') it.type = 'frost';
+    if (it.kind === 'wand' && 'charges' in it && it.zapsToId === undefined) it.zapsToId = WAND_ZAPS_TO_ID; // not a hotbar binding
+    if (!old) return;
+    if (it.kind === 'scroll' && it.type === 'enchant') it.type = 'upgrade';
+    if ('ench' in it || 'cursed' in it) {
+      const ench = it.ench ?? 0;
+      it.plus = it.kind === 'ring' ? Math.abs(ench) : Math.max(0, ench);
+      it.curse = it.cursed ? 2 : 0;
+      if (it.cursed && (it.kind === 'weapon' || it.kind === 'armor')) it.bane = randomBane(rand, it.kind);
+      delete it.ench;
+      delete it.cursed;
+    }
+  };
+  save.player.inventory.forEach(fix);
+  save.player.hotbar.forEach(fix);
+  for (const level of save.levels) for (const e of level.items) fix(e.item);
+  const rename = (list, from, to) => {
+    const i = list.indexOf(from);
+    if (i >= 0) list[i] = to;
+  };
+  for (const list of [save.knowledge.known.wand, save.knowledge.tried.wand]) rename(list, 'slow', 'frost');
+  if (old) for (const list of [save.knowledge.known.scroll, save.knowledge.tried.scroll]) rename(list, 'enchant', 'upgrade');
+  const pl = save.player;
+  if (!('offhand' in pl.equip)) {
+    // (As makeItem makes it, with the next uid the save has: it always fits, like the Amulet.)
+    const torch = { uid: save.nextUid++, kind: 'offhand', type: 'torch', qty: 1, plus: 0, curse: 0, identified: true, curseKnown: false };
+    pl.inventory.push(torch);
+    pl.equip.offhand = torch.uid;
+  }
+  save.format = SAVE_FORMAT;
+  return save;
 }
 
 export function deleteSave() {
