@@ -10,6 +10,7 @@ import { DAMAGE_TYPES } from '../damage.js';
 import { Logo } from './logo.js';
 import { readSave } from '../save.js';
 import { STATUSES } from '../status.js';
+import { BUILD, buildLabel } from '../build.js';
 
 const $ = (id) => document.getElementById(id);
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
@@ -76,6 +77,8 @@ export class UI {
     fitLogo();
     window.addEventListener('resize', fitLogo);
     $('title-sub').textContent = `${MAX_DEPTH} floors down, the Amulet of Yendor waits. Take it, and climb home, if you can.`;
+    $('title-build').textContent = buildLabel();
+    if (BUILD.sha) $('title-build').title = `Commit ${BUILD.sha}`;
     $('howto-realms').innerHTML = THEMES.map((t, i) => {
       const first = i * FLOORS_PER_THEME + 1, last = first + FLOORS_PER_THEME - 1;
       return `<li>${t.name} <span>· floors ${first}–${last}${last === MAX_DEPTH ? ': the Amulet, and the Warden who keeps it' : ''}</span></li>`;

@@ -14,6 +14,10 @@ npm run build      # static build in dist/, deployable anywhere
 
 The build is plain static files with relative paths (`base: './'` in `vite.config.js`), so it works from any folder on any static host. Pushing to `master` publishes it to GitHub Pages (`.github/workflows/deploy.yml`) at https://astrodogedx.github.io/Depths-of-Yendor/. For that, the repo's Settings → Pages → Build and deployment → Source must be set to **GitHub Actions**. The workflow can also be run by hand from the Actions tab. Add `?dev` to the address to get the dev tools in a published build.
 
+Every build stamps itself with when it was built and from which commit, and on GitHub with the deploy workflow's run number, which counts up with every publish (`vite.config.js`, read by `src/build.js`). The title screen shows it in its bottom-right corner, "Build 42 · 26 Sep 2026, 14:05 UTC" (UTC, so it reads the same for everyone; hover it for the commit). A build made on your own machine says "Local build", and the dev server "Development build".
+
+A shared link to the site shows a preview card (Open Graph tags in `index.html`, which X's cards fall back on too): the title, a line about the game, and `public/og-image.png`, the title screen at 1200×630. Previews need absolute addresses, so the tags name the published site: change them if it moves. The tab's icon is the logo's gold Y (`public/favicon.svg`, with a 32 px PNG for browsers that want one and a 180 px `apple-touch-icon.png` for home screens). Everything in `public/` is copied into the build as it is.
+
 ## Controls
 
 | Key | Action |
@@ -264,7 +268,7 @@ Floors are made from the seed, so a save keeps only what's changed on each floor
 
 With you, your things and what you've learned, a run through all 25 floors saves as about 90 KB, in about 3 ms.
 
-A save whose format is out of date (`SAVE_VERSION`) can't be continued. A floor saved before a change to how floors are laid out starts afresh rather than with things in its walls: each saved floor keeps a fingerprint of its layout to check against.
+A save whose format is out of date (`SAVE_VERSION`) can't be continued. A floor saved before a change to how floors are laid out starts afresh rather than with things in its walls: each saved floor keeps a fingerprint of its layout to check against. Each save also records the build of the game that made it (`save.build`, see *Running*), though nothing reads it back yet.
 
 ## The dungeon
 
@@ -375,6 +379,7 @@ These models were first built in code by `tools/modelgen/`. It shapes low-poly m
 ```
 src/
   config.js            world scale, themes and floors, boss/shop/shrine floors, the danger curve, tuning constants
+  build.js             which build this is (stamped in by vite.config.js), for the title screen and saves
   game.js              run lifecycle, level transitions, rendering, interaction, traps, endings
   player.js            movement, attack meter, stats, grip, torchlight, statuses, hunger/regen, inventory
   combat.js            player melee resolution
@@ -418,6 +423,7 @@ src/
   ui/devTools.js       the dev tools panel (the ` key): travel, stats, items and monsters for testing
 assets/models/         Blockbench models: monsters/, npcs/, weapons/, items/, props/, the hand torch and the wall sconce
 tools/modelgen/        builds those models from code (npm run models)
+public/                copied into the build as it is: the favicon, and the picture a shared link shows
 ```
 
 Balance numbers live in `monsters/defs.js`, `items/defs.js` and `config.js`. `window.game` is exposed for poking at state from the dev console.

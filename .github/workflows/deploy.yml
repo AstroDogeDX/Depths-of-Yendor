@@ -27,6 +27,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # The build stamps itself with GitHub's GITHUB_SHA (its commit) and GITHUB_RUN_NUMBER (this workflow's run,
+      # counting up with every publish), for the title screen's "Build 42 · 26 Sep 2026, 14:05 UTC" (vite.config.js).
       - run: npm run build
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5

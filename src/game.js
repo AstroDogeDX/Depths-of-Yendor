@@ -20,6 +20,7 @@ import { loadTraps } from './world/trapModels.js';
 import { TitleScene } from './ui/titleScene.js';
 import { SAVE_VERSION, SAVE_FORMAT, writeSave, deleteSave, fingerprint } from './save.js';
 import { damageTakenMult, hitStatuses } from './status.js';
+import { BUILD } from './build.js';
 
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, matches stair `dir`
 
@@ -173,7 +174,8 @@ export class Game {
 
   /**
    * Saves the run as it stands (see save.js): what you've learned, you and your things, and every floor you've
-   * been to. False if there's no run to save, or storage refused it.
+   * been to, with the build of the game that saved it (see build.js). False if there's no run to save, or storage
+   * refused it.
    */
   save() {
     if (!this.running || this.over || !this.level) return false;
@@ -181,7 +183,7 @@ export class Game {
     const levels = [...this.levels.values()].map((l) => l.snapshot());
     for (const s of this.savedLevels.values()) levels.push(s); // (from the save we continued, not yet revisited)
     return writeSave({
-      version: SAVE_VERSION, format: SAVE_FORMAT, savedAt: Date.now(),
+      version: SAVE_VERSION, format: SAVE_FORMAT, build: BUILD, savedAt: Date.now(),
       seed: this.seed, name: this.playerName, depth: this.level.depth, time: Math.round(this.time),
       level: p.level, amuletTaken: this.amuletTaken, artefactQueue: this.artefactQueue, nextUid: nextItemUid(),
       knowledge: this.knowledge.snapshot(), player: p.snapshot(), levels,
