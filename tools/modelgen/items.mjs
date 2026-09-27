@@ -203,13 +203,30 @@ export const items = {
   }),
 
   key: defineModel('key', MATS, (m) => {
-    // An old brass key standing on edge: looped bow, collar, shaft and a notched bit.
-    m.mesh('bow', tube(circle(2.6, 10, [-6.5, 0, 0]), { half: 0.65, side: [0, 0, 1], closed: true }), { mat: 'brass' });
-    m.mesh('collar', tube([[-3.9, 0, 0], [-2.8, 0, 0]], { half: 0.95, sides: 8 }), { mat: 'brass' });
-    m.mesh('shaft', tube([[-2.9, 0, 0], [7.6, 0, 0]], { half: 0.55, sides: 8 }), { mat: 'brass' });
-    m.cube('bit', [5.0, -2.6, -0.35], [7.2, -0.3, 0.35], { mat: 'brass' });
-    m.cube('tooth', [5.6, -3.4, -0.35], [6.4, -2.6, 0.35], { mat: 'brass' });
+    // An old iron key standing on edge, for a locked door: looped bow, collar, shaft and a notched bit.
+    m.mesh('bow', tube(circle(2.6, 10, [-6.5, 0, 0]), { half: 0.65, side: [0, 0, 1], closed: true }), { mat: 'iron' });
+    m.mesh('collar', tube([[-3.9, 0, 0], [-2.8, 0, 0]], { half: 0.95, sides: 8 }), { mat: 'iron' });
+    m.mesh('shaft', tube([[-2.9, 0, 0], [7.6, 0, 0]], { half: 0.55, sides: 8 }), { mat: 'iron' });
+    m.cube('bit', [5.0, -2.6, -0.35], [7.2, -0.3, 0.35], { mat: 'iron' });
+    m.cube('tooth', [5.6, -3.4, -0.35], [6.4, -2.6, 0.35], { mat: 'iron' });
   }),
+
+  key_gold: defineModel('key_gold', MATS, (m) => {
+    // A gold key standing on edge, for a locked chest, finely wrought: a trefoil bow set with a ruby, a ringed collar,
+    // and a bit with two teeth.
+    const bow = [-8, 0, 0];
+    [Math.PI, Math.PI / 3, -Math.PI / 3].forEach((a, i) => {
+      const at = [bow[0] + Math.cos(a) * 2.1, Math.sin(a) * 2.1, 0];
+      m.mesh(`bow_${i + 1}`, tube(circle(1.7, 8, at), { half: 0.5, side: [0, 0, 1], closed: true }), { mat: 'gold' });
+    });
+    m.mesh('ruby', loft([apex(4, [bow[0], 0, -0.9]), circle(1.1, 4, bow), apex(4, [bow[0], 0, 0.9])]), { mat: 'ruby' });
+    m.mesh('collar', tube([[-5.6, 0, 0], [-4.5, 0, 0]], { half: 1.0, sides: 8 }), { mat: 'gold' });
+    m.mesh('collar_2', tube([[-3.6, 0, 0], [-3.0, 0, 0]], { half: 0.85, sides: 8 }), { mat: 'gold' });
+    m.mesh('shaft', tube([[-4.6, 0, 0], [7.8, 0, 0]], { half: 0.55, sides: 8 }), { mat: 'gold' });
+    m.cube('bit', [5.0, -2.8, -0.35], [7.6, -0.3, 0.35], { mat: 'gold' });
+    m.cube('tooth_1', [5.0, -3.7, -0.35], [5.8, -2.8, 0.35], { mat: 'gold' });
+    m.cube('tooth_2', [6.8, -3.7, -0.35], [7.6, -2.8, 0.35], { mat: 'gold' });
+  }, { glow: ['ruby'] }),
 
   amulet: defineModel('amulet', MATS, (m) => {
     // The Amulet of Yendor: a heavy gold chain, and a great glowing ruby in a gold frame hanging from it.

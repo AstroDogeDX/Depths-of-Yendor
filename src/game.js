@@ -24,6 +24,19 @@ import { BUILD } from './build.js';
 
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, matches stair `dir`
 
+// What smashing a chest (or burning it) does to a thing in it that's lost with it (see Game.hitChest).
+function ruined(item, fire) {
+  const [one, many] = {
+    potion: fire ? ['bursts in the heat', 'burst in the heat'] : ['shatters', 'shatter'],
+    scroll: fire ? ['burns up', 'burn up'] : ['is torn to shreds', 'are torn to shreds'],
+    wand: fire ? ['burns', 'burn'] : ['snaps in two', 'snap in two'],
+    food: fire ? ['is burnt to a crisp', 'are burnt to a crisp'] : ['is crushed', 'are crushed'],
+    ring: fire ? ['is lost in the flames', 'are lost in the flames'] : ['is crushed', 'are crushed'],
+    weapon: fire ? ['is lost in the flames', 'are lost in the flames'] : ['is broken', 'are broken'],
+  }[item.kind] ?? (fire ? ['is lost in the flames', 'are lost in the flames'] : ['is ruined', 'are ruined']);
+  return item.qty > 1 ? many : one;
+}
+
 export class Game {
   constructor(canvas, ui) {
     this.canvas = canvas;
@@ -533,13 +546,27 @@ export class Game {
   findInteraction() {
     const p = this.player, level = this.level;
     const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
-    let best = null, bestScore = Infinity;
+    let best = null, bestScore = Infinity, chest = null;
     for (const it of level.items) {
       const dx = it.x - p.x, dz = it.z - p.z, d = Math.hypot(dx, dz);
       if (d > (it.onPedestal ? 2.1 : 1.7)) continue;
       const facing = (dx * fx + dz * fz) / (d || 1);
       const score = d - facing * 0.6;
       if (score < bestScore) { bestScore = score; best = it; }
+    }
+    // A shut chest in front of you (its middle is further off than a thing on the floor would be, so it's let off that).
+    for (const c of level.chests) {
+      if (c.state !== 'closed') continue;
+      const dx = c.x - p.x, dz = c.z - p.z, d = Math.hypot(dx, dz);
+      const facing = (dx * fx + dz * fz) / (d || 1);
+      if (d > 1.9 || facing < 0.3) continue;
+      const score = d - 0.35 - facing * 0.6;
+      if (score < bestScore) { bestScore = score; best = null; chest = c; }
+    }
+    if (chest) {
+      if (chest.kind !== 'locked') return { kind: 'chest', chest, label: 'Open the chest' };
+      const keys = p.goldKeys[level.depth] || 0;
+      return { kind: 'chest', chest, label: keys ? 'Unlock the chest (uses a gold key)' : 'Locked. It needs a gold key from this floor' };
     }
     if (best) {
       if (!best.price) return { kind: 'item', entry: best, label: `Pick up ${this.knowledge.name(best.item, { article: true })}` };
@@ -590,6 +617,7 @@ export class Game {
     switch (it.kind) {
       case 'item': this.pickUp(it.entry); break;
       case 'buy': this.buy(it.entry); break;
+      case 'chest': this.useChest(it.chest); break;
       case 'door': this.useDoor(it.door); break;
       case 'down': this.changeLevel(this.level.depth + 1, 'down'); break;
       case 'up': this.changeLevel(this.level.depth - 1, 'up'); break;
@@ -622,7 +650,8 @@ export class Game {
       return;
     }
     if (item.kind === 'key') {
-      this.log('You pick up an iron key. Somewhere on this floor, a lock is waiting for it.', 'good');
+      this.log(item.type === 'gold' ? 'You pick up a gold key. Somewhere on this floor, a locked chest is waiting for it.'
+        : 'You pick up an iron key. Somewhere on this floor, a lock is waiting for it.', 'good');
       return;
     }
     this.log(`You pick up ${k.name(item, { article: true })}.`);
@@ -711,6 +740,90 @@ export class Game {
     this.level.openDoor(door, p);
   }
 
+  /**
+   * Opens a chest you used (E): out comes what's in it. A locked one takes a gold key for this floor. A mimic springs
+   * at you as you reach for it.
+   */
+  useChest(chest) {
+    const p = this.player, level = this.level, depth = level.depth;
+    if (chest.state !== 'closed') return;
+    if (chest.kind === 'mimic') {
+      this.revealMimic(chest, true);
+      return;
+    }
+    let how = 'You open the chest.';
+    if (chest.kind === 'locked') {
+      if (!((p.goldKeys[depth] || 0) > 0)) {
+        if (this.time - (chest.lastRattle ?? -Infinity) > 2) {
+          chest.lastRattle = this.time;
+          this.audio.locked();
+          this.log('The chest is locked. Its gold key must be somewhere on this floor.', 'warn');
+        }
+        return;
+      }
+      p.goldKeys[depth]--;
+      this.audio.unlock();
+      how = 'You turn the gold key in the lock and lift the lid.';
+    }
+    const items = level.openChest(chest);
+    this.audio.chestOpen();
+    this.log(items.length ? `${how} Inside: ${this.listItems(items)}.` : `${how} It's empty.`, chest.kind === 'locked' ? 'good' : '');
+  }
+
+  /**
+   * A mimic gives itself away: `ambush` if you reached for it, and it bites before you can pull back; otherwise
+   * something you did woke it (a blow, a bolt, a splash). Returns it, now a monster.
+   */
+  revealMimic(chest, ambush = false) {
+    const m = this.level.wakeMimic(chest);
+    this.audio.mimic();
+    this.popup(m.headPos(), '!', 'alert');
+    if (ambush) {
+      this.log('You reach for the chest, and it lunges at you with a mouthful of teeth. A mimic!', 'danger');
+      m.startAttack(false, this.player);
+      m.attack.t = m.def.windup * 0.4; // (it was ready for you)
+    } else this.log('The chest shrieks and lurches open. A mimic!', 'danger');
+    return m;
+  }
+
+  /**
+   * An attack of yours reaching a shut chest: a blow at it, a bolt, lightning or a splash. A mimic wakes to it, and is
+   * returned, so the attack lands on the monster instead. A chest is smashed, and some of what's in it may be lost
+   * with it (see Level.breakChest); `type` 'fire' burns it. Nothing gets through the ironwork of a locked chest.
+   * A `harmless` bolt (teleport other) wakes a mimic, but does nothing to a chest.
+   */
+  hitChest(chest, { type = null, harmless = false } = {}) {
+    if (chest.state !== 'closed') return null;
+    if (chest.kind === 'mimic') return this.revealMimic(chest);
+    if (harmless) return null;
+    if (chest.kind === 'locked') {
+      this.audio.block();
+      burst(this.level, chest.x, 0.45, chest.z, 0xffd070, 5, 2, 0.3);
+      if (this.time - (chest.lastClang ?? -Infinity) > 2) {
+        chest.lastClang = this.time;
+        this.log('It glances off the iron-bound chest. Only its key will open it.', 'info');
+      }
+      return null;
+    }
+    const fire = type === 'fire';
+    const lost = this.level.breakChest(chest);
+    this.audio.chestBreak();
+    this.shake(0.08);
+    this.log(fire ? 'The chest bursts into flame and falls to pieces!' : 'The chest splinters apart!', 'warn');
+    if (lost.length) {
+      const said = lost.map((it) => `${this.knowledge.name(it, { article: true })} ${ruined(it, fire)}`);
+      const line = said.length > 1 ? `${said.slice(0, -1).join(', ')} and ${said[said.length - 1]}` : said[0];
+      this.log(`${line[0].toUpperCase()}${line.slice(1)}.`, 'warn');
+    }
+    return null;
+  }
+
+  /** Things as a list for the log: "a crimson potion, a gold key and 14 gold". */
+  listItems(items) {
+    const names = items.map((it) => this.knowledge.name(it, { article: true }));
+    return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] ?? '';
+  }
+
   quickHeal() {
     const p = this.player;
     const potion = p.inventory.find((i) => i.kind === 'potion' && i.type === 'healing' && this.knowledge.isKnown(i));
@@ -787,7 +900,12 @@ export class Game {
       p.gainXp(Math.round(m.def.xp * (1 + (m.maxHp / m.def.hp - 1) * 0.5)), this);
     }
     const level = this.level;
-    // Whatever it carried falls where it died, or onto the bank if it flew over water.
+    // A mimic spills what its chest held out of its maw. Anything else may have carried something, which falls where
+    // it died, or onto the bank if it flew over water.
+    if (m.loot) {
+      level.spill(m.loot, m, { from: 0.4, delay: 0.3 });
+      return;
+    }
     const at = level.landSpot(m.x, m.z);
     if (m.guardian || rand.chance(0.12)) level.addItem(randomItem(rand, level.depth), at.x, at.z);
     if (rand.chance(0.15)) level.addItem(makeItem('gold', 'gold', { qty: rand.int(4, 12) + Math.round(danger(level.depth) * 3) }), at.x + 0.3, at.z + 0.2);

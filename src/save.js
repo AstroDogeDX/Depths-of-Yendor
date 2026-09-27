@@ -4,7 +4,7 @@
 // still ends when it ends.
 //
 // Floors are made from the seed, so a save keeps only what's changed on each one you've seen (Level.snapshot):
-// its monsters and things, doors, traps and how much of it you've mapped. With the player, what you've learned
+// its monsters and things, chests, doors, traps and how much of it you've mapped. With the player, what you've learned
 // and a few odds and ends, a whole run is a few hundred KB at most.
 //
 // A save from an older version of its format (SAVE_VERSION) can't be continued. One from before a change to how
@@ -72,7 +72,11 @@ function upgrade(save) {
   };
   save.player.inventory.forEach(fix);
   save.player.hotbar.forEach(fix);
-  for (const level of save.levels) for (const e of level.items) fix(e.item);
+  for (const level of save.levels) {
+    for (const e of level.items) fix(e.item);
+    for (const c of level.chests ?? []) c.items?.forEach(fix);
+    for (const m of level.monsters) m.loot?.forEach(fix);
+  }
   const rename = (list, from, to) => {
     const i = list.indexOf(from);
     if (i >= 0) list[i] = to;

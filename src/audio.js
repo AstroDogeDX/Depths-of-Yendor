@@ -129,6 +129,30 @@ export class Sfx {
     this.tone({ f: 900, f2: 1400, dur: 0.06, type: 'square', vol: 0.08 });
     this.noise({ dur: 0.12, vol: 0.2, freq: 2400, q: 3, delay: 0.08 });
   }
+  /** A chest's lid creaking up on its hinges, and falling back against them. */
+  chestOpen() {
+    this.tone({ f: 190, f2: 120, dur: 0.38, type: 'sawtooth', vol: 0.045 });
+    this.noise({ dur: 0.3, vol: 0.1, freq: 900, freq2: 420, q: 4 });
+    this.noise({ dur: 0.12, vol: 0.2, freq: 220, type: 'lowpass', q: 0.8, delay: 0.42 });
+  }
+  /** A chest smashed: a crunch of wood, and splinters snapping. */
+  chestBreak() {
+    this.noise({ dur: 0.22, vol: 0.34, freq: 380, type: 'lowpass', q: 0.7 });
+    this.tone({ f: 120, f2: 50, dur: 0.16, type: 'square', vol: 0.16 });
+    for (let i = 0; i < 3; i++) this.noise({ dur: 0.04, vol: 0.14, freq: 1800 + Math.random() * 1400, q: 3, delay: 0.04 + i * 0.05 + Math.random() * 0.03 });
+  }
+  /** A mimic giving itself away: a wet snarl, and its jaws snapping. */
+  mimic() {
+    this.tone({ f: 95, f2: 60, dur: 0.55, type: 'sawtooth', vol: 0.16 });
+    this.tone({ f: 142, f2: 88, dur: 0.5, type: 'sawtooth', vol: 0.08 });
+    this.noise({ dur: 0.5, vol: 0.16, freq: 600, freq2: 260, q: 2 });
+    this.noise({ dur: 0.06, vol: 0.24, freq: 1500, q: 1.5, delay: 0.45 });
+  }
+  /** A mimic licking its lips, `vol` 0..1 by how near it is: a faint, wet smack. */
+  lick(vol = 1) {
+    this.noise({ dur: 0.18, vol: 0.05 * vol, freq: 700, freq2: 1600, q: 5 });
+    this.noise({ dur: 0.05, vol: 0.05 * vol, freq: 2400, q: 2, delay: 0.5 });
+  }
   equip() { this.noise({ dur: 0.12, vol: 0.18, freq: 1500, q: 2 }); }
   stairs() { this.noise({ dur: 0.9, vol: 0.3, freq: 300, freq2: 60, type: 'lowpass', q: 0.7 }); }
   drink() { for (let i = 0; i < 4; i++) this.tone({ f: 380 + i * 90, f2: 260, dur: 0.07, type: 'sine', vol: 0.12, delay: i * 0.08 }); }

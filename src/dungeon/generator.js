@@ -1,11 +1,11 @@
 import { RNG } from '../rng.js';
 import { MAX_DEPTH, themeForDepth, isShopDepth, danger } from '../config.js';
-import { spawnTable } from '../monsters/defs.js';
-import { randomItem, makeItem } from '../items/generate.js';
+import { MONSTERS, spawnTable } from '../monsters/defs.js';
+import { randomItem, makeItem, chestLoot, goldPile } from '../items/generate.js';
 import { T } from './tiles.js';
 import { ROOM_TYPES } from './rooms.js';
 import { digChannels } from './channels.js';
-import { decorate } from './decor.js';
+import { decorate, faceKey } from './decor.js';
 
 export { T };
 
@@ -14,7 +14,10 @@ const H = 52;
 const GAP = 3;  // min tiles between room interiors: each room's wall plus one corridor lane
 const EDGE = 3; // min distance from a room interior to the map border
 const SIDES = { N: [0, -1], S: [0, 1], W: [-1, 0], E: [1, 0] };
+const FACING = { N: 0, S: Math.PI, W: Math.PI / 2, E: -Math.PI / 2 }; // turns a prop against the wall on that side to face into the room
 const STEPS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, as stairs' `dir`
+const FIXTURES = new Set([T.STAIRS_UP, T.STAIRS_DOWN, T.PEDESTAL]);
+const CHEST_BACK = 0.25; // tiles a chest stands back from the middle of its tile, toward the wall behind it
 
 /**
  * Pixel Dungeon-style layout, built graph-first:
@@ -27,7 +30,7 @@ const STEPS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, as stairs' `dir`
  *     them. Rooms are sealed boxes corridors can never cut through, so a room can only be entered
  *     through its own doorways. That is what makes a lock mean something, and why locked doors
  *     can only ever sit on a branch, never the loop.
- *  4. Furnish each room by type, then populate.
+ *  4. Furnish each room by type, then populate: chests, monsters, the odd thing lying loose, traps.
  *
  * opts.artefact       artefact type for this floor's shrine, if any
  * opts.extraBranches  extra branch specs, e.g. [{ type: 'standard', locked: true }]
@@ -306,18 +309,72 @@ function attemptLevel(rng, depth, opts) {
   };
   const monsterRooms = rooms.filter((r) => ROOM_TYPES[r.type].monsters && !r.locked);
   const itemRooms = rooms.filter((r) => ROOM_TYPES[r.type].items && !r.locked);
+  const d = danger(depth);
+  const items = [];
+
+  // Chests: most of what there is to find is in them. Each stands against a wall of a room the population pass may
+  // fill, facing into it, on a tile of its own clear of doorways, stairs and pedestals and of anything hung on the
+  // wall behind it; they spread across the rooms before any room gets two. From the mimic's first floor on, some are
+  // mimics (never in the room you arrive in). Now and then there's a locked chest too, likeliest in a side room, whose
+  // gold key is in one of the others (never a mimic) or lying loose.
+  const chests = [];
+  const chestSpot = (room) => {
+    const faces = [];
+    for (let x = room.x; x < room.x + room.w; x++) faces.push([x, room.y, 'N'], [x, room.y + room.h - 1, 'S']);
+    for (let y = room.y; y < room.y + room.h; y++) faces.push([room.x, y, 'W'], [room.x + room.w - 1, y, 'E']);
+    for (const [x, y, side] of rng.shuffle(faces)) {
+      const [nx, ny] = SIDES[side];
+      if (ctx.get(x, y) !== T.FLOOR || occupied.has(idx(x, y)) || ctx.get(x + nx, y + ny) !== T.WALL) continue;
+      if (decor.wallUsed.has(faceKey(x, y, side)) || room.doorways.some((dw) => Math.max(Math.abs(dw.x - x), Math.abs(dw.y - y)) <= 1)) continue;
+      if ([-1, 0, 1].some((dy) => [-1, 0, 1].some((dx) => FIXTURES.has(ctx.get(x + dx, y + dy))))) continue;
+      occupied.add(idx(x, y));
+      const along = rng.range(-0.2, 0.2);
+      return {
+        x, y, // its tile; where it stands in it, in tiles:
+        px: x + 0.5 + nx * CHEST_BACK + (ny ? along : 0), py: y + 0.5 + ny * CHEST_BACK + (nx ? along : 0),
+        yaw: FACING[side] + rng.range(-0.12, 0.12),
+      };
+    }
+    return null;
+  };
+  const chestRooms = rng.shuffle([...itemRooms]);
+  const mimicChance = depth < MONSTERS.mimic.depth[0] ? 0 : Math.min(0.2, 0.05 + d * 0.015);
+  const chestCount = rng.int(2, 4) + (d > 5 ? 1 : 0);
+  for (let i = 0; i < chestCount && chestRooms.length; i++) {
+    const room = chestRooms[i % chestRooms.length], at = chestSpot(room);
+    if (!at) continue;
+    const kind = room.type !== 'entrance' && rng.chance(mimicChance) ? 'mimic' : 'chest';
+    chests.push({ ...at, kind, items: chestLoot(rng, depth, kind) });
+  }
+  if (itemRooms.length && rng.chance(0.3 + d * 0.02)) {
+    const side = itemRooms.filter((r) => !r.onLoop);
+    const at = chestSpot(rng.pick(side.length ? side : itemRooms));
+    if (at) {
+      const key = makeItem('key', 'gold', { depth });
+      const holders = chests.filter((c) => c.kind === 'chest');
+      let hidden = holders.length > 0 && rng.chance(0.5);
+      if (hidden) rng.pick(holders).items.push(key);
+      for (let k = 0; k < 10 && !hidden; k++) {
+        const t = freeTileIn(rng.pick(itemRooms));
+        if (t) {
+          items.push({ item: key, ...t });
+          hidden = true;
+        }
+      }
+      if (hidden) chests.push({ ...at, kind: 'locked', items: chestLoot(rng, depth, 'locked') });
+    }
+  }
 
   const monsters = ctx.monsters;
   const table = spawnTable(depth);
-  const d = danger(depth);
   const monsterCount = 4 + Math.floor(d * 1.3) + rng.int(0, 2);
   for (let i = 0; i < monsterCount && monsterRooms.length; i++) {
     const t = freeTileIn(rng.pick(monsterRooms), 7);
     if (t) monsters.push({ type: rng.weighted(table), x: t.x, y: t.y });
   }
 
-  const items = [];
-  const itemCount = rng.int(4, 6) + (d > 5 ? 1 : 0);
+  // A few things still lie loose, and food and gold.
+  const itemCount = rng.int(0, 2);
   for (let i = 0; i < itemCount; i++) {
     const t = freeTileIn(rng.pick(itemRooms));
     if (t) items.push({ item: randomItem(rng, depth), ...t });
@@ -326,10 +383,10 @@ function attemptLevel(rng, depth, opts) {
     const t = freeTileIn(rng.pick(itemRooms));
     if (t) items.push({ item: makeItem('food', 'ration'), ...t });
   }
-  const goldCount = rng.int(2, 4);
+  const goldCount = rng.int(1, 3);
   for (let i = 0; i < goldCount; i++) {
     const t = freeTileIn(rng.pick(itemRooms));
-    if (t) items.push({ item: makeItem('gold', 'gold', { qty: rng.int(8, 20) + Math.round(d * rng.int(3, 8)) }), ...t });
+    if (t) items.push({ item: goldPile(rng, depth), ...t });
   }
   // Every locked room's key lies somewhere on the loop, which is always reachable without keys.
   const loopRooms = rooms.filter((r) => r.onLoop && r.type !== 'vault');
@@ -361,7 +418,7 @@ function attemptLevel(rng, depth, opts) {
     doors: doorways.filter((d) => d.style === 'door'),
     up: ctx.up, down: ctx.down, amulet: ctx.amulet, shrine: ctx.shrine, shop: ctx.shop,
     channels, decor: decor.props, wallUsed: decor.wallUsed,
-    monsters, items, traps, theme,
+    monsters, items, chests, traps, theme,
   };
 }
 

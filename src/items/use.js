@@ -8,6 +8,7 @@ import { burst, ring, transient, lightningMesh } from '../fx/particles.js';
 import { spawnTable } from '../monsters/defs.js';
 import { sellPrice, refusedAsCursed } from './generate.js';
 import { cure } from '../status.js';
+import { lookDir } from '../combat.js';
 
 // --- Inventory actions shown in the pack screen ---
 
@@ -87,7 +88,7 @@ export function drinkPotion(game, item) {
       break;
     case 'mindvision':
       p.addStatus('mindvision', 45, game);
-      game.log(game.level.monsters.some((m) => !m.dead)
+      game.log(game.level.monsters.some((m) => !m.dead) || game.level.chests.some((c) => c.kind === 'mimic')
         ? 'You can somehow sense the minds of the creatures on this floor!' : 'You sense... nothing. You are alone here.', 'good');
       break;
     case 'poison': p.addStatus('poisoned', 10, game); break;
@@ -103,13 +104,22 @@ export function drinkPotion(game, item) {
   return false;
 }
 
-/** Area effect where a potion shatters. */
+// Splashes that do a monster harm, and so give away a mimic they catch (see potionSplash).
+const HARMFUL = new Set(['poison', 'confusion', 'blindness', 'paralysis', 'flame']);
+
+/**
+ * Area effect where a potion shatters. A harmful splash on a mimic, still passing for a chest, wakes it (and catches
+ * it too); fire burns a chest to pieces.
+ */
 export function potionSplash(game, type, x, z, thrown = true) {
   const level = game.level, k = game.knowledge, p = game.player;
   const color = k.appearance.potion[type].color;
   const R = 2.6;
   burst(level, x, 0.4, z, color, 18, 3, 0.7);
   ring(level, x, z, color, R, 0.6);
+  for (const c of level.chestsNear(x, z, R)) {
+    if (c.kind === 'mimic' ? HARMFUL.has(type) : c.kind === 'chest' && type === 'flame') game.hitChest(c, { type: type === 'flame' ? 'fire' : null });
+  }
   const hit = level.monsters.filter((m) => !m.dead && Math.hypot(m.x - x, m.z - z) < R + m.radius);
   const playerHit = Math.hypot(p.x - x, p.z - z) < R;
   let obvious = hit.length > 0;
@@ -149,11 +159,6 @@ export function potionSplash(game, type, x, z, thrown = true) {
       k.tried.potion.add(type);
     }
   }
-}
-
-function lookDir(p) {
-  const cp = Math.cos(p.pitch);
-  return { x: -Math.sin(p.yaw) * cp, y: Math.sin(p.pitch), z: -Math.cos(p.yaw) * cp };
 }
 
 export function throwPotion(game, item) {
@@ -380,13 +385,17 @@ export function zapWand(game, item) {
   const power = item.plus;
   const d = lookDir(p);
   const ox = p.x + d.x * 0.5, oy = EYE_H - 0.15 + d.y * 0.5, oz = p.z + d.z * 0.5;
-  const bolt = (color, speed, onHit) => spawnProjectile(level, {
+  // (What the bolt's `spell` does to a chest it hits, see Game.hitChest: burns it, if it's fire; nothing, if it's harmless.)
+  const bolt = (color, speed, onHit, spell) => spawnProjectile(level, {
     x: ox, y: oy, z: oz, vx: d.x * speed, vy: d.y * speed, vz: d.z * speed,
-    owner: 'player', kind: 'bolt', color, size: 0.14, life: 2,
+    owner: 'player', kind: 'bolt', color, size: 0.14, life: 2, type: WANDS[spell].dmgType, harmless: !WANDS[spell].dmg,
     onImpact: (g, pr, target) => {
       burst(level, pr.x, pr.y, pr.z, color, 10, 2.5, 0.4);
       if (target && target !== 'player') onHit(target, pr);
-      else if (!k.isKnown(item)) { k.tried.wand.add(item.type); g.log('The bolt fizzles against the wall.', 'info'); }
+      else if (!k.isKnown(item)) {
+        k.tried.wand.add(item.type);
+        if (!pr.chest) g.log('The bolt fizzles against the wall.', 'info');
+      }
     },
   });
   const learn = () => { if (k.learn(item)) game.log(`This must be a ${k.name(item)}!`, 'info'); };
@@ -396,16 +405,23 @@ export function zapWand(game, item) {
   else if (item.type === 'lightning') {
     const len = 16;
     let ex = ox, ey = oy, ez = oz;
-    const hitSet = new Set();
+    const hitSet = new Set(), chests = new Set();
     for (let s = 0; s < len / 0.2; s++) {
       ex += d.x * 0.2; ey += d.y * 0.2; ez += d.z * 0.2;
       if (level.blocksSight(level.toTile(ex), level.toTile(ez)) || ey < 0 || ey > 2.8) break;
       for (const m of level.monsters) {
         if (!m.dead && !m.isAlly() && !hitSet.has(m) && Math.hypot(m.x - ex, m.z - ez) < m.radius + 0.35) hitSet.add(m);
       }
+      const c = level.chestAt(ex, ey, ez);
+      if (c) chests.add(c);
     }
     transient(level, lightningMesh(ox, oy - 0.1, oz, ex, ey, ez), 0.18);
     transient(level, lightningMesh(ox, oy - 0.1, oz, ex, ey, ez, 0xffffff), 0.12);
+    // It tears through the chests in its way: a mimic among them wakes, to be struck with the rest.
+    for (const c of chests) {
+      const m = game.hitChest(c, { type: 'lightning' });
+      if (m) hitSet.add(m);
+    }
     const w = WANDS.lightning;
     for (const m of hitSet) m.takeDamage(game, rand.int(w.dmg[0], w.dmg[1]) + power * WAND_PLUS_DMG, { type: w.dmgType });
     game.flash('#c0e0ff', 0.25);
@@ -415,7 +431,7 @@ export function zapWand(game, item) {
     bolt(b.color, b.speed, (m, pr) => {
       b.hit(game, m, power, pr);
       learn();
-    });
+    }, item.type);
     if (b.known) learn();
   }
 
@@ -435,7 +451,7 @@ export function zapWand(game, item) {
  */
 function wildZap(game, item, power, bolt) {
   const k = game.knowledge, p = game.player;
-  const spell = WAND_BOLTS[rand.pick(Object.keys(WAND_BOLTS))];
+  const key = rand.pick(Object.keys(WAND_BOLTS)), spell = WAND_BOLTS[key];
   const roll = rand.next();
   if (!k.isKnown(item)) k.tried.wand.add(item.type);
   if (roll < 0.2) game.log('The wand sputters, and fizzles out.', 'warn');
@@ -445,7 +461,7 @@ function wildZap(game, item, power, bolt) {
     spell.hit(game, p, power);
   } else {
     game.log('The wand spits out a wild, flickering bolt!', 'warn');
-    bolt(WILD_BOLT, 11, (m, pr) => spell.hit(game, m, power, pr));
+    bolt(WILD_BOLT, 11, (m, pr) => spell.hit(game, m, power, pr), key);
   }
   if (!item.curseKnown) {
     item.curseKnown = true;

@@ -1,6 +1,6 @@
 import { THEMES, FLOORS_PER_THEME, TILE, HUNGER_MAX, isBossDepth, isShopDepth } from '../config.js';
 import { WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS, WAND_ZAPS_TO_ID } from '../items/defs.js';
-import { makeItem, stackable } from '../items/generate.js';
+import { makeItem, stackable, chestLoot } from '../items/generate.js';
 import { MONSTERS } from '../monsters/defs.js';
 import { generateLevel } from '../dungeon/generator.js';
 import { disposeGroup } from '../dungeon/levelBuilder.js';
@@ -22,8 +22,9 @@ const KINDS = [
   ['weapon', 'Weapons', WEAPONS], ['offhand', 'Off hand', OFFHANDS], ['armor', 'Armour', ARMORS], ['potion', 'Potions', POTIONS],
   ['scroll', 'Scrolls', SCROLLS], ['wand', 'Wands', WANDS], ['ring', 'Rings', RINGS], ['artefact', 'Artefacts', ARTEFACTS],
   ['food', 'Food', FOOD],
-  ['special', 'Other', { amulet: { name: 'Amulet of Yendor' }, key: { name: 'iron key (this floor)' } }],
+  ['special', 'Other', { amulet: { name: 'Amulet of Yendor' }, key: { name: 'iron key (this floor)' }, goldkey: { name: 'gold key (this floor)' } }],
 ];
+const CHESTS = { chest: 'Chest', locked: 'Locked chest', mimic: 'Mimic (passing for a chest)' };
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
 const SHOTS = { arrow: 'Arrows', bolt: 'Bolts', fire: 'Fireballs' }; // monsters' ranged attacks, by kind
 
@@ -79,6 +80,9 @@ export class DevTools {
             <h3>Traps</h3>
             <div class="dev-opts"><span>Lay one on the floor in front of you, armed and in plain sight</span></div>
             <div class="dev-grid dev-traps"></div>
+            <h3>Chests</h3>
+            <div class="dev-opts"><span>Set one down in front of you, facing you, with what this floor's would hold</span></div>
+            <div class="dev-grid dev-chests"></div>
           </div>
           <div>
             <h3>Items</h3>
@@ -123,6 +127,8 @@ export class DevTools {
       .map(([key, def]) => `<button class="alt" data-status="${key}">${def.label}</button>`).join('');
     this.$('.dev-traps').innerHTML = ['spike', 'poison', 'teleport', 'alarm']
       .map((type) => `<button class="alt" data-trap="${type}">${cap(type)}</button>`).join('');
+    this.$('.dev-chests').innerHTML = Object.entries(CHESTS)
+      .map(([kind, label]) => `<button class="alt" data-chest="${kind}">${label}</button>`).join('');
     this.$('.dev-tabs').innerHTML = KINDS.map(([kind, label]) => `<button class="alt" data-kind="${kind}">${label}</button>`).join('');
     this.renderItems();
 
@@ -138,6 +144,7 @@ export class DevTools {
       else if (d.type) this.give(d.type);
       else if (d.monster) this.spawn(d.monster);
       else if (d.trap) this.layTrap(d.trap);
+      else if (d.chest) this.setChest(d.chest);
       else if (d.status) this.giveStatus(d.status);
       else if (d.stat) this.stat(d.stat);
       else if (d.act) this.act(d.act);
@@ -289,7 +296,7 @@ export class DevTools {
         break;
       }
       case 'special':
-        item = type === 'amulet' ? g.makeAmulet() : makeItem('key', 'iron', { depth: g.level.depth });
+        item = type === 'amulet' ? g.makeAmulet() : makeItem('key', type === 'goldkey' ? 'gold' : 'iron', { depth: g.level.depth });
         if (type === 'amulet') g.amuletTaken = true;
         break;
       default: item = makeItem(kind, type);
@@ -327,6 +334,15 @@ export class DevTools {
     lvl.traps.push(trap);
     lvl.revealTrap(trap);
     this.note(`Laid a ${type} trap in front of you. Close the panel and step on it to set it off.`);
+  }
+
+  /** Sets a chest of `kind` down on the floor in front of you, facing you, holding what one on this floor might. */
+  setChest(kind) {
+    const g = this.game, p = g.player, lvl = g.level;
+    const x = p.x - Math.sin(p.yaw) * 1.3, z = p.z - Math.cos(p.yaw) * 1.3;
+    if (lvl.isSolid(lvl.toTile(x), lvl.toTile(z)) || !lvl.clearPath(p.x, p.z, x, z)) return this.note('There\'s no room in front of you: face some open floor.');
+    lvl.addChest({ x, z, yaw: Math.atan2(p.x - x, p.z - z), kind, items: chestLoot(rand, lvl.depth, kind) }).seen = true;
+    this.note(`Set down ${kind === 'locked' ? 'a locked chest (its gold key is under Items, Other)' : kind === 'mimic' ? 'a mimic, passing for a chest' : 'a chest'}. Close the panel to meet it.`);
   }
 
   /**

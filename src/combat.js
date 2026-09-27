@@ -1,8 +1,14 @@
 import { rand } from './rng.js';
-import { EYE_H } from './config.js';
+import { EYE_H, CROUCH_DROP } from './config.js';
 import { damageMult } from './damage.js';
 
 const CONE = Math.cos(0.75); // ~43° either side of the crosshair
+
+/** Which way you're looking, as a unit vector. */
+export function lookDir(p) {
+  const cp = Math.cos(p.pitch);
+  return { x: -Math.sin(p.yaw) * cp, y: Math.sin(p.pitch), z: -Math.cos(p.yaw) * cp };
+}
 
 /** Resolve the player's melee swing at the moment the blade connects. power is 0.3..1 from the attack meter. */
 export function playerStrike(game, power) {
@@ -23,11 +29,21 @@ export function playerStrike(game, power) {
     const key = d + (m.isAlly() ? 100 : 0);
     if (key < bestKey) { best = m; bestD = d; bestKey = key; }
   }
-  if (!best) return false;
+  // No monster in reach: the blow lands on a chest, if the crosshair's on one (so a swing at something else never
+  // smashes one by chance), and a blade that burns burns it. A mimic wakes to it, and takes it unawares.
+  let revealed = false;
+  if (!best) {
+    const d = lookDir(p);
+    const chest = level.chestInSight(p.x, EYE_H - p.crouch * CROUCH_DROP, p.z, d.x, d.y, d.z, Math.hypot(w.reach, 1.1));
+    best = chest && game.hitChest(chest, { type: w.onHit?.ignite || p.hasArtefact('ember') ? 'fire' : w.dmgType });
+    if (!best) return !!chest;
+    bestD = Math.hypot(best.x - p.x, best.z - p.z);
+    revealed = true;
+  }
 
   const m = best;
-  // Unaware: asleep, wandering, or still searching for a noise it hasn't traced to you.
-  const sneak = m.state !== 'hunt' || !m.seen || m.held();
+  // Unaware: asleep, wandering, or still searching for a noise it hasn't traced to you (or a mimic you've found out).
+  const sneak = revealed || m.state !== 'hunt' || !m.seen || m.held();
   const acc = Math.max(0.35, Math.min(0.98, 0.88 + w.accuracy - m.def.dodge + (p.level - m.danger) * 0.015));
   if (!sneak && !rand.chance(acc)) {
     game.popup(m.headPos(), 'miss', 'miss');
@@ -42,7 +58,8 @@ export function playerStrike(game, power) {
   dmg -= rand.int(0, m.def.def);
   dmg = Math.max(1, dmg);
 
-  if (sneak) game.log(`You strike the unsuspecting ${m.name}!`, 'good');
+  if (revealed) game.log(`Your blow catches the ${m.name} before it can spring!`, 'good');
+  else if (sneak) game.log(`You strike the unsuspecting ${m.name}!`, 'good');
   const dist = Math.max(0.01, bestD);
   const dealt = m.takeDamage(game, dmg, { type: w.dmgType, knockback: { x: (m.x - p.x) / dist, z: (m.z - p.z) / dist }, sneak });
   const mult = damageMult(m.def, w.dmgType);

@@ -60,7 +60,10 @@ const FITTINGS = {
   skull_sconce: { flame: { width: 0.3, height: 0.46, pixel: 0.025 }, halo: 0.9, fire: FIRE },
 };
 // The colour of the glow about props that shine (glow_N anchors).
-const GLOWS = { crystals: 0x50d8ff, void_shards: 0xa050ff, rune_circle: 0x9050ff, obelisk: 0x9050ff, demon_face: 0xff5020, demon_statue: 0xff5020, lava_mouth: 0xff6020 };
+const GLOWS = {
+  crystals: 0x50d8ff, void_shards: 0xa050ff, rune_circle: 0x9050ff, obelisk: 0x9050ff, demon_face: 0xff5020, demon_statue: 0xff5020,
+  lava_mouth: 0xff6020, magma_crack: 0xff6020,
+};
 let sconceTemplate = null; // built once; every sconce is a clone sharing its geometry and materials
 let blueSconceTemplate = null; // the same, its embers burning blue
 
@@ -151,13 +154,15 @@ const DIR_ANGLE = [Math.PI, Math.PI / 2, 0, -Math.PI / 2]; // N, E, S, W: rotate
 const doorModel = (theme) => `door_${theme.style}`;
 
 /**
- * Every prop a floor of `theme` might use: its doors', its decorations', its channels', its wall lights and, in
- * every theme after the first, the shop's. They must be loaded (loadProps) before one of its floors is built.
+ * Every prop a floor of `theme` might use: its doors', the chests (see Level.addChest), its decorations', its
+ * channels', its wall lights and, in every theme after the first, the shop's. They must be loaded (loadProps) before
+ * one of its floors is built.
  */
 export function propsForTheme(theme) {
   const fill = FILLS[theme.channels?.fill];
   return [...new Set([
     doorModel(theme),
+    'chest', 'chest_locked',
     ...decorProps(theme.style),
     ...(fill ? [fill.bridge, fill.end, fill.bed, ...(fill.lips ?? [])].filter(Boolean) : []),
     ...(THEMES.indexOf(theme) > 0 ? SHOP_PROPS : []),
@@ -172,10 +177,12 @@ export function buildLevelMeshes(data) {
   const get = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? T.WALL : grid[y * w + x]);
   const isWall = (x, y) => get(x, y) === T.WALL;
 
-  // Rough rock (see roughRock.js), calm round whatever is fixed flat to a wall and about the shop. A theme whose
-  // `rough` is 'tunnels' is a temple dug into the rock: rough passages between rooms of masonry.
+  // Rough rock (see roughRock.js), calm round whatever is fixed flat to a wall, the chests backed up against them, and
+  // about the shop. A theme whose `rough` is 'tunnels' is a temple dug into the rock: rough passages between rooms of
+  // masonry.
   const rough = theme.rough ? roughRock(data, [
     ...(data.decor ?? []).filter((p) => p.wall).map((p) => ({ x: p.x * TILE, z: p.y * TILE, r: 1.6 })),
+    ...(data.chests ?? []).map((c) => ({ x: c.px * TILE, z: c.py * TILE, r: 1.5 })),
     ...(data.shop ? [...data.shop.props, data.shop.keeper].map((p) => ({ x: p.x * TILE, z: p.y * TILE, r: 2 })) : []),
     ...(data.shop?.sconces ?? []).map((s) => ({ x: s.x, z: s.z, r: 1.4 })),
   ], { builtRooms: theme.rough === 'tunnels' }) : null;

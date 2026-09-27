@@ -311,8 +311,9 @@ export class UI {
     const p = g.player, lvl = g.level, k = g.knowledge;
 
     this.set('depth-line', `Depth ${lvl.depth} · ${lvl.theme.name}${p.hasAmulet() ? '  ✦ Amulet' : ''}`);
-    const keys = p.keys[lvl.depth] || 0;
-    this.set('stat-line', `Lv ${p.level}   XP ${p.xp}/${p.xpToNext()}   Str ${p.str}   Def ${p.defense}   Gold ${p.gold}${keys ? `   Keys ${keys}` : ''}`);
+    // Keys for this floor's locks: iron for doors, gold for chests.
+    const keys = [[p.keys[lvl.depth], 'iron'], [p.goldKeys[lvl.depth], 'gold']].filter(([n]) => n > 0).map(([n, kind]) => `${n} ${kind}`).join(', ');
+    this.set('stat-line', `Lv ${p.level}   XP ${p.xp}/${p.xpToNext()}   Str ${p.str}   Def ${p.defense}   Gold ${p.gold}${keys ? `   Keys: ${keys}` : ''}`);
 
     const hpFrac = Math.max(0, p.hp / p.maxHp);
     $('hp-fill').style.width = `${hpFrac * 100}%`;
@@ -455,7 +456,15 @@ export class UI {
       const s = Math.max(2, scale * 0.4);
       ctx.fillRect(ox + (it.x / TS) * scale - s / 2, oy + (it.z / TS) * scale - s / 2, s, s);
     }
+    // Chests you've seen: shut ones tan (a locked one gold, like a locked door), open or smashed ones dim. A mimic passes
+    // for one.
     const sense = p.status.mindvision > 0 || p.hasArtefact('eye');
+    for (const c of lvl.chests) {
+      if (!c.seen) continue;
+      ctx.fillStyle = c.state !== 'closed' ? '#5a4632' : c.kind === 'locked' ? '#f0c040' : '#dca064';
+      const s = Math.max(2, scale * 0.55);
+      ctx.fillRect(ox + (c.x / TS) * scale - s / 2, oy + (c.z / TS) * scale - s / 2, s, s * 0.7);
+    }
     for (const m of lvl.monsters) {
       if (m.dead) continue;
       const seen = lvl.isVisibleWorld(m.x, m.z) && p.status.blind <= 0;
@@ -463,6 +472,13 @@ export class UI {
       ctx.fillStyle = m.isAlly() ? '#ff8ac8' : m.boss ? '#ff40ff' : seen ? '#ff4030' : '#b03060';
       const s = Math.max(3, scale * (m.boss ? 0.9 : 0.6));
       ctx.fillRect(ox + (m.x / TS) * scale - s / 2, oy + (m.z / TS) * scale - s / 2, s, s);
+    }
+    // A mimic passing for a chest has a mind all the same: sensed, it shows as the monster it is.
+    for (const c of sense ? lvl.chests : []) {
+      if (c.kind !== 'mimic') continue;
+      ctx.fillStyle = '#b03060';
+      const s = Math.max(3, scale * 0.6);
+      ctx.fillRect(ox + (c.x / TS) * scale - s / 2, oy + (c.z / TS) * scale - s / 2, s, s);
     }
     // Player arrow
     const ax = ox + (p.x / TS) * scale, ay = oy + (p.z / TS) * scale;

@@ -2,13 +2,15 @@ import * as THREE from 'three';
 import { TILE, VIEW_RADIUS_TILES, MAX_DEPTH, PLAYER_RADIUS, danger } from '../config.js';
 import { T } from '../dungeon/tiles.js';
 import { buildLevelMeshes, flowWater, poseDoor } from '../dungeon/levelBuilder.js';
+import { propRig } from '../dungeon/props.js';
 import { TrapView, loadTraps, trapsLoaded } from './trapModels.js';
 import { buildItemModel } from '../items/models.js';
 import { shopPrice, stackable } from '../items/generate.js';
 import { Monster } from '../monsters/monster.js';
+import { buildMonsterModel } from '../monsters/models.js';
 import { spawnTable } from '../monsters/defs.js';
 import { updateProjectiles } from '../fx/projectiles.js';
-import { updateParticles } from '../fx/particles.js';
+import { updateParticles, burst } from '../fx/particles.js';
 import { rand } from '../rng.js';
 import { glowSprite } from '../fx/glow.js';
 import { Drips } from '../fx/drips.js';
@@ -20,6 +22,55 @@ const N8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]
 
 // Traps on the map: grey spikes, green gas, azure teleport, yellow alarm (as their models; see trapModels.js).
 export const TRAP_COLORS = { spike: 0xa0a0a0, poison: 0x40c040, teleport: 0x3aa0ff, alarm: 0xe0c020 };
+
+// Chests (see addChest): how far a lid swings open (radians) and how long it takes; how long things take to fly out of
+// one, and how far they land in front of it; how long a mimic's lick of its lips takes, and how long it waits between
+// them while you're about; and what shatters when a chest is smashed.
+const LID_OPEN = 1.85;
+const LID_TIME = 0.5;
+const SPILL_TIME = 0.45;
+const SPILL_OUT = 0.5;
+const LICK_TIME = 1.6;
+const LICK_WAIT = [15, 35];
+const SMASH = 0.5; // the chance each thing in a chest you smash is lost with it (gold and keys never are)
+const footprints = new Map();
+
+/** A chest's size where it stands (not counting the wreck a smashed one leaves): its model's bounds, without `broken`. */
+function chestBounds(type) {
+  if (!footprints.has(type)) {
+    const b = new THREE.Box3();
+    for (const part of propRig(type).children) if (part.name !== 'broken') b.expandByObject(part);
+    footprints.set(type, b);
+  }
+  return footprints.get(type);
+}
+
+/**
+ * How far along a ray (from o in the direction d) it first meets a chest's box, a little bigger than the chest: 0 if
+ * it starts inside, null if it misses. (With d all 0, whether a point is inside.)
+ */
+function rayChest(c, ox, oy, oz, dx, dy, dz) {
+  const cs = Math.cos(c.yaw), sn = Math.sin(c.yaw), b = c.bounds, pad = 0.06;
+  const rx = ox - c.x, rz = oz - c.z;
+  // Into the chest's own frame, where its box lines up with the axes.
+  const o = [rx * cs - rz * sn, oy, rx * sn + rz * cs], d = [dx * cs - dz * sn, dy, dx * sn + dz * cs];
+  const lo = [b.min.x - pad, b.min.y, b.min.z - pad], hi = [b.max.x + pad, b.max.y + pad, b.max.z + pad];
+  let t0 = 0, t1 = Infinity;
+  for (let i = 0; i < 3; i++) {
+    if (Math.abs(d[i]) < 1e-9) {
+      if (o[i] < lo[i] || o[i] > hi[i]) return null;
+      continue;
+    }
+    const a = (lo[i] - o[i]) / d[i], e = (hi[i] - o[i]) / d[i];
+    t0 = Math.max(t0, Math.min(a, e));
+    t1 = Math.min(t1, Math.max(a, e));
+    if (t0 > t1) return null;
+  }
+  return t0;
+}
+
+/** A chest as the generator lays it out (see generator.js), as addChest takes it. */
+const chestFromData = (c) => ({ x: c.px * TILE, z: c.py * TILE, yaw: c.yaw, kind: c.kind, items: c.items });
 
 export class Level {
   /** A floor from its generated `data`: as new, or as a save left it (`saved`, from snapshot()). */
@@ -71,6 +122,7 @@ export class Level {
 
     this.monsters = [];
     this.items = [];
+    this.chests = [];
     this.traps = [];
     this.projectiles = [];
     this.particles = [];
@@ -108,6 +160,7 @@ export class Level {
     for (const it of data.items) {
       this.addItem(it.item, (it.x + 0.5 + rand.range(-0.2, 0.2)) * TILE, (it.y + 0.5 + rand.range(-0.2, 0.2)) * TILE);
     }
+    for (const c of data.chests) this.addChest(chestFromData(c));
     if (data.shrine) this.addItem(data.shrine.item, (data.shrine.x + 0.5) * TILE, (data.shrine.y + 0.5) * TILE, { onPedestal: true });
     if (data.amulet) {
       this.addItem(this.game.makeAmulet(), (data.amulet.x + 0.5) * TILE, (data.amulet.y + 0.5) * TILE, { onPedestal: true });
@@ -120,7 +173,8 @@ export class Level {
   /**
    * What a save keeps of this floor: what's changed since it was made (the rest comes back from the seed), with
    * its layout's fingerprint to check it against when it's restored. Doors and traps are a digit each, in order:
-   * doors 1 locked + 2 open; traps 1 found + 2 spent.
+   * doors 1 locked + 2 open; traps 1 found + 2 spent. Chests are kept whole, what's in them and all (a mimic that
+   * has woken is a monster, and carries what was in it: see Monster.loot).
    */
   snapshot() {
     return {
@@ -133,6 +187,10 @@ export class Level {
       items: this.items.map((e) => ({
         item: e.item, x: round2(e.x), z: round2(e.z), y0: round2(e.y0), onPedestal: e.onPedestal || undefined,
         price: e.price || undefined, spot: e.spot, resale: e.resale, seen: e.seen || undefined,
+      })),
+      chests: this.chests.map((c) => ({
+        x: round2(c.x), z: round2(c.z), yaw: round2(c.yaw), kind: c.kind, state: c.state,
+        items: c.items.length ? c.items : undefined, seen: c.seen || undefined,
       })),
       spawnT: Math.round(this.spawnT),
       resales: this.resales,
@@ -156,11 +214,15 @@ export class Level {
       if (d.parts.lock) d.parts.lock.visible = d.locked;
       this.poseDoor(d);
     });
-    this.traps.forEach((t, i) => {
-      const v = +s.traps[i] || 0;
-      t.triggered = !!(v & 2);
-      if (v & 1) this.revealTrap(t);
-    });
+    // (Traps are kept by their order, so a floor saved before there were chests, which moved them, keeps none of them
+    // found or spent: they're somewhere else now.)
+    if (s.chests) {
+      this.traps.forEach((t, i) => {
+        const v = +s.traps[i] || 0;
+        t.triggered = !!(v & 2);
+        if (v & 1) this.revealTrap(t);
+      });
+    }
     for (const ms of s.monsters) {
       this.addMonster(ms.type, ms.x, ms.z, { asleep: ms.state === 'sleep', boss: ms.boss, guardian: ms.guardian }).restore(ms);
     }
@@ -170,6 +232,8 @@ export class Level {
       if (e.resale) entry.resale = e.resale;
       entry.seen = !!e.seen;
     }
+    // (A floor saved before there were chests gets the ones the seed gives it now.)
+    for (const c of s.chests ?? this.data.chests.map(chestFromData)) this.addChest(c).seen = !!c.seen;
     this.spawnT = s.spawnT;
     this.resales = s.resales;
     this.leftAt = s.leftAt ?? null;
@@ -477,6 +541,195 @@ export class Level {
 
   trapAt(tx, ty) { return this.traps.find((t) => t.x === tx && t.y === ty && !t.triggered); }
 
+  // --- Chests ---
+
+  /**
+   * Sets a chest down: { x, z (metres), yaw, kind: 'chest' | 'locked' | 'mimic', state: 'closed' | 'open' | 'broken',
+   * items }. Its model's parts move and show by name (see tools/modelgen/chests.mjs): its `lid`, a locked chest's
+   * `lock`, and the `broken` wreck a smashed one leaves in place of its `body` and lid. A mimic is a chest like any
+   * other until something wakes it (see wakeMimic): its model is the mimic's own, at rest (but for the odd lick of its
+   * lips: see updateChests), and it stands and blocks exactly as a chest does. Returns the chest.
+   */
+  addChest({ x, z, yaw, kind, state = 'closed', items = [] }) {
+    const model = kind === 'mimic' ? buildMonsterModel('mimic') : null;
+    const root = model ? model.root : propRig(kind === 'locked' ? 'chest_locked' : 'chest').clone();
+    const parts = {};
+    root.traverse((o) => {
+      if (!o.isGroup || !o.name) return;
+      parts[o.name] = o;
+      if (!model) o.userData.rest = { p: o.position.clone(), r: o.rotation.clone() }; // (a monster model's has them)
+    });
+    root.position.set(x, 0, z);
+    root.rotation.y = yaw;
+    this.group.add(root);
+    const bounds = chestBounds(kind === 'locked' ? 'chest_locked' : 'chest');
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    const mx = (bounds.min.x + bounds.max.x) / 2, mz = (bounds.min.z + bounds.max.z) / 2;
+    const hw = (bounds.max.x - bounds.min.x) / 2, hd = (bounds.max.z - bounds.min.z) / 2;
+    const obstacle = { x: x + mx * c + mz * s, z: z - mx * s + mz * c, hw: Math.abs(c) * hw + Math.abs(s) * hd, hd: Math.abs(s) * hw + Math.abs(c) * hd };
+    this.obstacles.push(obstacle);
+    const chest = {
+      x, z, yaw, kind, state, items, root, parts, model, obstacle, bounds, seen: false,
+      openT: state === 'open' ? 1 : -1, lick: -1, lickT: rand.range(...LICK_WAIT) * 0.5,
+    };
+    this.chests.push(chest);
+    this.poseChest(chest);
+    return chest;
+  }
+
+  /** Shows a chest as it is: shut, its lid swinging open (`openT`, 0..1) or open, locked, or smashed. */
+  poseChest(chest) {
+    const { parts: { lid, lock, body, broken }, state } = chest;
+    if (chest.model) {
+      chest.model.animate({ t: 0, walk: 0, windup: -1, strike: -1, dormant: true, lick: chest.lick });
+      return;
+    }
+    const k = chest.openT <= 0 ? 0 : 1 + 2.1 * (chest.openT - 1) ** 3 + 1.1 * (chest.openT - 1) ** 2; // (overshooting a little)
+    if (lid) lid.rotation.x = lid.userData.rest.r.x - LID_OPEN * k;
+    if (lock) lock.visible = state === 'closed';
+    if (broken) {
+      broken.visible = state === 'broken';
+      body.visible = lid.visible = state !== 'broken';
+    }
+  }
+
+  /** Opens a chest (unlocked by now, if it was locked): its lid swings up and what's in it flies out. Returns what was. */
+  openChest(chest) {
+    const items = chest.items;
+    chest.items = [];
+    chest.state = 'open';
+    chest.openT = 0;
+    this.poseChest(chest);
+    this.spill(items, chest, { delay: LID_TIME * 0.45 });
+    return items;
+  }
+
+  /**
+   * Smashes a chest: a wreck is left where it stood, and what was in it is thrown out, but for what's lost with it
+   * (each thing by the chance SMASH; gold and keys never are). Returns what's lost.
+   */
+  breakChest(chest) {
+    const kept = [], lost = [];
+    for (const it of chest.items) (it.kind === 'gold' || it.kind === 'key' || !rand.chance(SMASH) ? kept : lost).push(it);
+    chest.items = [];
+    chest.state = 'broken';
+    this.poseChest(chest);
+    burst(this, chest.x, 0.35, chest.z, 0x6b4a2c, 18, 3.4, 0.8); // splinters
+    burst(this, chest.x, 0.35, chest.z, 0x3c4148, 5, 2.6, 0.6); // and bits of its ironwork
+    this.spill(kept, chest, { from: 0.25, scatter: 0.35 });
+    return lost;
+  }
+
+  /**
+   * A mimic wakes: the chest it was is gone, and in its place is the monster, turned as the chest stood, hunting you
+   * and carrying what was in it (see Monster.loot). Returns the monster.
+   */
+  wakeMimic(chest) {
+    this.removeChest(chest);
+    const m = this.addMonster('mimic', chest.x, chest.z, { asleep: false });
+    m.yaw = chest.yaw;
+    m.mesh.rotation.y = m.yaw;
+    m.loot = chest.items;
+    m.state = 'hunt';
+    m.seen = true;
+    m.revealT = 0;
+    m.cooldown = 0.9;
+    return m;
+  }
+
+  removeChest(chest) {
+    this.group.remove(chest.root);
+    for (const m of chest.model?.materials ?? []) m.dispose(); // (a mimic's own copies: see buildMonsterModel)
+    this.obstacles.splice(this.obstacles.indexOf(chest.obstacle), 1);
+    this.chests.splice(this.chests.indexOf(chest), 1);
+  }
+
+  /**
+   * Throws things out of a chest (or a dead mimic's maw) at { x, z, yaw }, to land on the floor in front of it, side by
+   * side, each a moment after the last: from `from` metres up, `out` metres ahead of it, starting after `delay` seconds.
+   * `scatter` throws them about more.
+   */
+  spill(items, { x, z, yaw }, { from = 0.5, out = SPILL_OUT, delay = 0, scatter = 0 } = {}) {
+    const fx = Math.sin(yaw), fz = Math.cos(yaw);
+    items.forEach((item, i) => {
+      const side = (i - (items.length - 1) / 2) * 0.4 + rand.range(-0.08, 0.08) + rand.range(-scatter, scatter);
+      const ahead = out + rand.range(0, 0.25) + rand.range(0, scatter);
+      const at = this.landSpot(x + fx * ahead + fz * side, z + fz * ahead - fx * side);
+      this.collide(at, 0.2);
+      const entry = this.addItem(item, at.x, at.z);
+      entry.fly = { x, y: from, z, t: -delay - i * 0.12 };
+      entry.mesh.visible = false;
+      entry.mesh.position.set(x, from, z);
+    });
+  }
+
+  /** Moves a thing along its arc out of a chest to where it lands (see spill). False once it has landed. */
+  fly(it, dt) {
+    const f = it.fly;
+    if ((f.t += dt) < 0) return true;
+    const k = Math.min(1, f.t / SPILL_TIME);
+    it.mesh.visible = true;
+    it.mesh.position.set(f.x + (it.x - f.x) * k, f.y + (it.y0 - f.y) * k + 0.45 * Math.sin(Math.PI * k), f.z + (it.z - f.z) * k);
+    it.mesh.rotation.y += dt * 7;
+    if (k < 1) return true;
+    delete it.fly;
+    return false;
+  }
+
+  /**
+   * Lids swinging open, and the dormant mimics' licks of their lips: rare, and only while you're about and can see
+   * them (with a wet little sound, if you're close).
+   */
+  updateChests(dt, game) {
+    const p = game.player;
+    for (const c of this.chests) {
+      if (c.openT >= 0 && c.openT < 1) {
+        c.openT = Math.min(1, c.openT + dt / LID_TIME);
+        this.poseChest(c);
+      }
+      if (!c.model) continue;
+      if (c.lick >= 0) {
+        c.lick += dt / LICK_TIME;
+        if (c.lick >= 1) c.lick = -1;
+        this.poseChest(c);
+        continue;
+      }
+      const d = Math.hypot(p.x - c.x, p.z - c.z);
+      if (d < 12 && this.isVisibleWorld(c.x, c.z) && (c.lickT -= dt) <= 0) {
+        c.lickT = rand.range(...LICK_WAIT);
+        c.lick = 0;
+        if (d < 7) game.audio.lick(1 - d / 7);
+      }
+    }
+  }
+
+  /**
+   * The nearest shut chest along a ray from (ox, oy, oz) in the direction (dx, dy, dz), a unit vector, within `max`
+   * metres: what a blow at the crosshair lands on (see playerStrike). Null if there's none, or a wall is in the way.
+   */
+  chestInSight(ox, oy, oz, dx, dy, dz, max) {
+    let best = null, bestT = max;
+    for (const c of this.chests) {
+      if (c.state !== 'closed') continue;
+      const t = rayChest(c, ox, oy, oz, dx, dy, dz);
+      if (t !== null && t < bestT && this.los(ox, oz, c.x, c.z)) {
+        best = c;
+        bestT = t;
+      }
+    }
+    return best;
+  }
+
+  /** The shut chest a point (a shot in flight) is in, if any. */
+  chestAt(x, y, z) {
+    return this.chests.find((c) => c.state === 'closed' && rayChest(c, x, y, z, 0, 0, 0) === 0) ?? null;
+  }
+
+  /** The shut chests within `r` of (x, z): what a splash catches. */
+  chestsNear(x, z, r) {
+    return this.chests.filter((c) => c.state === 'closed' && Math.hypot(c.x - x, c.z - z) < r + 0.3);
+  }
+
   // --- Doors ---
 
   /** The closed door just ahead of something at (x, z) moving along (dx, dz), if any. */
@@ -563,11 +816,13 @@ export class Level {
       game.audio[this.channelSound](Math.max(0, 1 - d / 16) ** 2);
     }
     for (const it of this.items) {
+      if (it.fly && this.fly(it, dt)) continue;
       it.mesh.position.y = it.y0 + Math.sin(t * 2 + it.phase) * 0.05;
       it.mesh.rotation.y += dt * (it.onPedestal ? 1.2 : 0.6);
     }
 
     this.updateDoors(dt);
+    this.updateChests(dt, game);
 
     // Monsters hunting the player as they step into the shop may follow them in; any others must wait
     // outside, unless the player picks a fight with them from in there (see Monster.takeDamage).
@@ -584,6 +839,7 @@ export class Level {
       this.visT = 0.12;
       this.updateVisibility(p.x, p.z);
       for (const it of this.items) if (!it.seen && this.isVisibleWorld(it.x, it.z)) it.seen = true;
+      for (const c of this.chests) if (!c.seen && this.isVisibleWorld(c.x, c.z)) c.seen = true;
     }
 
     const ptile = this.idx(this.toTile(p.x), this.toTile(p.z));

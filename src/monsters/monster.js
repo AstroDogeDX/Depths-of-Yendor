@@ -13,7 +13,7 @@ import {
 
 const BLOOD = {
   rat: 0x901010, bat: 0x901010, slime: 0x40c040, goblin: 0x902010, archer: 0x902010, skeleton: 0xe0d8c0,
-  orc: 0x801010, wraith: 0x6040a0, imp: 0xff6010, troll: 0x406020, golem: 0x909090, warden: 0xffc040,
+  orc: 0x801010, wraith: 0x6040a0, imp: 0xff6010, troll: 0x406020, golem: 0x909090, mimic: 0x7a1830, warden: 0xffc040,
 };
 
 const STRIKE_TIME = 0.3;
@@ -36,9 +36,10 @@ export class Monster {
     // Tougher the more dangerous the floor is than the first one it appears on (see `danger` in config.js).
     this.danger = danger(depth);
     const over = def.boss ? 0 : Math.max(0, this.danger - danger(def.depth[0]));
-    this.maxHp = Math.round(def.hp * (1 + over * 0.08));
+    const [hpGrow, dmgGrow] = def.grow ?? [0.08, 0.05];
+    this.maxHp = Math.round(def.hp * (1 + over * hpGrow));
     this.hp = this.maxHp;
-    this.dmgMult = 1 + over * 0.05;
+    this.dmgMult = 1 + over * dmgGrow;
     this.x = x;
     this.z = z;
     this.radius = def.radius;
@@ -83,6 +84,8 @@ export class Monster {
     this.idleT = 0;
     this.zzzT = rand.range(1, 3);
     this.summoned = false;
+    this.loot = null; // what it drops when it dies, if not the usual chance of something (a mimic's: what its chest held)
+    this.revealT = null; // seconds since it gave itself away, for the first moments after (a mimic waking)
   }
 
   /** What a save keeps of it (see Level.snapshot). Only statuses in effect are kept. */
@@ -92,7 +95,7 @@ export class Monster {
       type: this.type, x: round2(this.x), z: round2(this.z), yaw: round2(this.yaw), hp: round2(this.hp), maxHp: this.maxHp,
       danger: this.danger, dmgMult: this.dmgMult, state: this.state, seen: this.seen || undefined, status,
       boss: this.boss || undefined, guardian: this.guardian || undefined, summoned: this.summoned || undefined,
-      weakBase: this.weakBase ?? undefined,
+      weakBase: this.weakBase ?? undefined, loot: this.loot ?? undefined,
     };
   }
 
@@ -108,6 +111,7 @@ export class Monster {
     this.state = s.state;
     this.seen = !!s.seen;
     this.summoned = !!s.summoned;
+    this.loot = s.loot ?? null;
     this.mesh.rotation.y = this.yaw;
     return this;
   }
@@ -214,6 +218,7 @@ export class Monster {
     }
 
     if (moving) this.walk += dt * this.def.speed * speedMult * 3;
+    if (this.revealT !== null && (this.revealT += dt) > 1) this.revealT = null;
     this.mesh.position.set(this.x, this.baseY, this.z);
     this.mesh.rotation.y = this.yaw;
     const a = this.attack;
@@ -222,6 +227,7 @@ export class Monster {
       walk: this.walk,
       windup: a.phase === 'windup' ? Math.min(1, a.t / this.def.windup) : -1,
       strike: a.phase === 'strike' ? Math.min(1, a.t / STRIKE_TIME) : -1,
+      reveal: this.revealT ?? -1,
     });
     this.updateTint(dt);
 

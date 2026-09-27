@@ -15,8 +15,8 @@ import { round2 } from './save.js';
 // What a save keeps of you as it is (see snapshot): the rest is either rebuilt or not worth keeping.
 const SAVED = [
   'x', 'z', 'yaw', 'pitch', 'maxHp', 'hp', 'baseStr', 'level', 'xp', 'gold', 'hunger', 'hungerState', 'charge',
-  'maxStamina', 'stamina', 'winded', 'sneaking', 'twoHanded', 'artefactCD', 'teleT', 'kills', 'maxDepth', 'keys', 'hotbar',
-  'inventory',
+  'maxStamina', 'stamina', 'winded', 'sneaking', 'twoHanded', 'artefactCD', 'teleT', 'kills', 'maxDepth', 'keys', 'goldKeys',
+  'hotbar', 'inventory',
 ];
 
 const FISTS = { name: 'fists', dmgType: 'bash', dmg: [1, 3], recharge: 0.6, reach: 1.4, str: 0, model: null };
@@ -35,7 +35,8 @@ export class Player {
     // lights less (see torchLight). Only ever with a weapon in hand.
     this.twoHanded = false;
     this.hotbar = new Array(HOTBAR_SIZE).fill(null);
-    this.keys = {}; // depth -> iron keys held for that floor
+    this.keys = {}; // depth -> iron keys held for that floor (for its locked doors)
+    this.goldKeys = {}; // depth -> gold keys held for that floor (for its locked chests)
     this.charge = 1;
     this.maxStamina = STAMINA_BASE;
     this.stamina = STAMINA_BASE;
@@ -227,7 +228,8 @@ export class Player {
       return true;
     }
     if (item.kind === 'key') {
-      this.keys[item.depth] = (this.keys[item.depth] || 0) + 1;
+      const keys = item.type === 'gold' ? this.goldKeys : this.keys;
+      keys[item.depth] = (keys[item.depth] || 0) + 1;
       return true;
     }
     if (stackable(item)) {

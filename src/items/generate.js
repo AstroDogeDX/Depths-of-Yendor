@@ -82,6 +82,58 @@ export function randomItem(rng, depth) {
   return makeItem('food', 'ration');
 }
 
+/** A pile of gold, as one lies about a floor of this depth: `mult` times as much in a locked chest. */
+export function goldPile(rng, depth, mult = 1) {
+  return makeItem('gold', 'gold', { qty: Math.round((rng.int(8, 20) + Math.round(danger(depth) * rng.int(3, 8))) * mult) });
+}
+
+/**
+ * What a chest holds (see generator.js): a chest, or a mimic (which drops it when it dies), one thing most often, two
+ * now and then and three rarely, with a pile of gold about a third of the time; a locked chest a treasure and a bigger
+ * pile of gold.
+ */
+export function chestLoot(rng, depth, kind) {
+  if (kind === 'locked') return [treasure(rng, depth), goldPile(rng, depth, 2)];
+  const n = +rng.weighted({ 1: 72, 2: 22, 3: 6 });
+  const items = Array.from({ length: n }, () => randomItem(rng, depth));
+  if (rng.chance(0.3)) items.push(goldPile(rng, depth));
+  return items;
+}
+
+// A locked chest's treasure: mostly equipment, +2 or better (+3 or +4 deeper down) and from a little deeper than the
+// floor, which may still be cursed or, if not, enchanted; otherwise something as precious.
+const TREASURE_CURSE = 0.12;
+const TREASURE_ENCHANT = 0.3;
+function treasure(rng, depth) {
+  const d = danger(depth);
+  const kind = rng.weighted({ weapon: 34, armor: 30, ring: 11, wand: 10, rare: 15 });
+  const plus = 2 + (rng.chance(0.2 + d * 0.04) ? 1 : 0) + (d >= 6 && rng.chance(0.3) ? 1 : 0);
+  switch (kind) {
+    case 'weapon': case 'armor': {
+      const it = makeItem(kind, pickTiered(rng, kind === 'weapon' ? WEAPONS : ARMORS, depth + 3), { hitsToId: kind === 'weapon' ? 20 : 14, plus });
+      if (rng.chance(TREASURE_CURSE)) {
+        it.curse = 2;
+        it.bane = randomBane(rng, kind);
+      } else if (rng.chance(TREASURE_ENCHANT)) it.enchant = randomEnchant(rng, kind);
+      return it;
+    }
+    case 'ring': {
+      const it = makeItem('ring', rng.weighted({ ...freqTable(RINGS), teleportation: 0 }), { wornTime: 0, plus });
+      if (rng.chance(TREASURE_CURSE)) it.curse = 2;
+      return it;
+    }
+    case 'wand': {
+      const type = rng.weighted(freqTable(WANDS)), [a, b] = WANDS[type].charges;
+      const it = makeItem('wand', type, { maxCharges: rng.int(a, b) + plus, rechargeT: 0, zapsToId: WAND_ZAPS_TO_ID, plus });
+      it.charges = it.maxCharges;
+      if (rng.chance(TREASURE_CURSE)) it.curse = 2;
+      return it;
+    }
+  }
+  const rare = rng.weighted({ strength: 30, experience: 20, upgrade: 30, enchant: 20 });
+  return rare === 'upgrade' || rare === 'enchant' ? makeItem('scroll', rare, { qty: rare === 'upgrade' ? 2 : 1 }) : makeItem('potion', rare);
+}
+
 // What the shop charges never depends on what's hidden about a thing, so a price can't give it away: potions,
 // scrolls, wands and rings are one price a kind, and weapons, armour and off-hand things (whose kind you can always
 // see) go by their `value` in items/defs.js. What the shopkeeper pays depends on what you know of a thing (see worth).
