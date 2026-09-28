@@ -80,7 +80,8 @@ export class TitleScene {
 
     this.built = buildLevelMeshes(data);
     this.drips = new Drips(this.built.group, this.built.drips);
-    for (const d of this.built.doors) poseDoor(d, 1); // every door stands open
+    // Every door stands open, but the locked ones (the walk never goes through them: they only lead to dead ends).
+    this.built.doors.forEach((d, i) => { if (!data.doors[i].locked) poseDoor(d, 1); });
     this.scene.add(this.built.group);
     this.scene.fog.color.setHex(theme.fog);
     this.scene.fog.near = theme.fogNear;

@@ -36,7 +36,7 @@ export function decorate({ style, rng, grid, w, rooms, channels, occupied }) {
   if (!set) return { props, wallUsed };
 
   for (const room of rooms) {
-    if (room.type === 'shop' || room.type === 'vault' || room.type === 'shrine' || room.locked) continue;
+    if (room.type === 'shop' || room.type === 'vault' || room.type === 'shrine') continue;
     // The ways in, and round the stairs and pedestals, stay clear.
     const nearDoor = (x, y) => room.doorways.some((d) => Math.max(Math.abs(d.x - x), Math.abs(d.y - y)) <= 2) ||
       [-1, 0, 1].some((dy) => [-1, 0, 1].some((dx) => FIXTURES.has(at(x + dx, y + dy))));

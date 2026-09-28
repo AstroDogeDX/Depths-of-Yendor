@@ -1,5 +1,5 @@
 import { RNG } from '../rng.js';
-import { MAX_DEPTH, themeForDepth, isShopDepth, danger } from '../config.js';
+import { MAX_DEPTH, THEMES, themeForDepth, isShopDepth, danger } from '../config.js';
 import { MONSTERS, spawnTable } from '../monsters/defs.js';
 import { randomItem, makeItem, chestLoot, goldPile } from '../items/generate.js';
 import { T } from './tiles.js';
@@ -9,8 +9,10 @@ import { decorate, faceKey } from './decor.js';
 
 export { T };
 
-const W = 52;
-const H = 52;
+// The map, in tiles: the Sewers' 52 across, and a little more for each theme down, room for its extra side rooms
+// (see planRooms). The loop of rooms keeps the Sewers' size in the middle of it, so the room goes to the wings.
+const MAP = 52;
+const MAP_GROWTH = 5;
 const GAP = 3;  // min tiles between room interiors: each room's wall plus one corridor lane
 const EDGE = 3; // min distance from a room interior to the map border
 const SIDES = { N: [0, -1], S: [0, 1], W: [-1, 0], E: [1, 0] };
@@ -18,6 +20,7 @@ const FACING = { N: 0, S: Math.PI, W: Math.PI / 2, E: -Math.PI / 2 }; // turns a
 const STEPS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, as stairs' `dir`
 const FIXTURES = new Set([T.STAIRS_UP, T.STAIRS_DOWN, T.PEDESTAL]);
 const CHEST_BACK = 0.25; // tiles a chest stands back from the middle of its tile, toward the wall behind it
+const SPRAWL = 0.6; // the chance of each extra side room a theme may add (see planRooms)
 
 /**
  * Pixel Dungeon-style layout, built graph-first:
@@ -35,7 +38,8 @@ const CHEST_BACK = 0.25; // tiles a chest stands back from the middle of its til
  * opts.artefact       artefact type for this floor's shrine, if any
  * opts.extraBranches  extra branch specs, e.g. [{ type: 'standard', locked: true }]
  *
- * A branch spec may name its parent room's type, e.g. { type: 'shop', parent: 'entrance' }.
+ * A branch spec may name its parent room's type, e.g. { type: 'shop', parent: 'entrance' }, or with `offBranch` hang
+ * off another branch where there is one. A `locked` branch is behind a locked door, and nothing hangs off it.
  */
 export function generateLevel(seed, depth, opts = {}) {
   const rng = new RNG(`${seed}:depth:${depth}`);
@@ -58,12 +62,21 @@ function planRooms(rng, depth, opts) {
   if (isShopDepth(depth)) branches.push({ type: 'shop', required: true, parent: 'entrance' });
   if (opts.artefact) branches.push({ type: 'shrine', required: true });
   for (const b of opts.extraBranches ?? []) branches.push({ required: true, ...b });
+  // Locked side rooms, from the second floor on: often one, and deeper down now and then a second. Each is a dead
+  // end (nothing ever hangs off a locked room), so its iron key can always be put somewhere you can reach without one.
+  const locked = depth < 2 ? 0 : (rng.chance(0.3 + d * 0.04) ? 1 : 0) + (d >= 6 && rng.chance(0.3) ? 1 : 0);
+  for (let i = 0; i < locked; i++) branches.push({ type: 'standard', locked: true });
   const optional = rng.int(1, 3) + (d >= 6 ? 1 : 0);
   for (let i = 0; i < optional; i++) branches.push({ type: 'standard' });
+  // Each theme after the first sprawls further: a chance of one more side room for each theme down, hung off another
+  // side room where there is one, so the deeper floors grow wings of rooms off the loop.
+  const sprawl = THEMES.indexOf(themeForDepth(depth));
+  for (let i = 0; i < sprawl; i++) if (rng.chance(SPRAWL)) branches.push({ type: 'standard', offBranch: true });
   return { loop, branches };
 }
 
 function attemptLevel(rng, depth, opts) {
+  const W = MAP + MAP_GROWTH * THEMES.indexOf(themeForDepth(depth)), H = W;
   const grid = new Uint8Array(W * H); // all WALL
   const foot = new Int16Array(W * H).fill(-1); // owning room id for interior + wall-ring tiles
   const corr = new Uint8Array(W * H); // 1 = loop corridor, 2 = branch corridor
@@ -202,7 +215,7 @@ function attemptLevel(rng, depth, opts) {
 
   const plan = planRooms(rng, depth, opts);
   const n = plan.loop.length;
-  const rx = W * rng.range(0.25, 0.3), ry = H * rng.range(0.25, 0.3);
+  const rx = MAP * rng.range(0.25, 0.3), ry = MAP * rng.range(0.25, 0.3);
   const a0 = rng.range(0, Math.PI * 2);
   const turn = rng.chance(0.5) ? 1 : -1;
   for (let i = 0; i < n; i++) {
@@ -227,14 +240,14 @@ function attemptLevel(rng, depth, opts) {
     let placed = false;
     for (let tries = 0; tries < 40 && !placed; tries++) {
       const parents = rooms.filter((r) => ROOM_TYPES[r.type].branchable && !r.locked && (!spec.parent || r.type === spec.parent));
-      const loopParents = parents.filter((r) => r.onLoop);
-      const parent = rng.pick(rng.chance(0.7) && loopParents.length ? loopParents : parents);
+      const loopParents = parents.filter((r) => r.onLoop), sideParents = spec.offBranch ? parents.filter((r) => !r.onLoop) : [];
+      const parent = sideParents.length ? rng.pick(sideParents) : rng.pick(rng.chance(0.7) && loopParents.length ? loopParents : parents);
       const { w, h } = def.size(rng, depth);
       const a = rng.range(0, Math.PI * 2);
       const dist = (Math.max(parent.w, parent.h) + Math.max(w, h)) / 2 + rng.int(GAP + 1, GAP + 5);
       const x = Math.round(parent.cx + Math.cos(a) * dist - w / 2), y = Math.round(parent.cy + Math.sin(a) * dist - h / 2);
       if (!fits(x, y, w, h)) continue;
-      const r = makeRoom(spec.type, x, y, w, h, { onLoop: false, locked: !!spec.locked, parent: parent.id });
+      const r = makeRoom(spec.type, x, y, w, h, { onLoop: false, locked: !!spec.locked, sprawl: !!spec.offBranch, parent: parent.id });
       rooms.push(r);
       claim(r, r.id);
       if (connect(parent, r, 'branch', spec.locked)) placed = true;
@@ -346,9 +359,21 @@ function attemptLevel(rng, depth, opts) {
     const kind = room.type !== 'entrance' && rng.chance(mimicChance) ? 'mimic' : 'chest';
     chests.push({ ...at, kind, items: chestLoot(rng, depth, kind) });
   }
+  // Behind each locked door, a stash worth its key: a chest or two (never a mimic), and a heap of gold.
+  const lockedRooms = rooms.filter((r) => r.locked);
+  for (const room of lockedRooms) {
+    for (let i = rng.int(1, 2); i > 0; i--) {
+      const at = chestSpot(room);
+      if (at) chests.push({ ...at, kind: 'chest', items: chestLoot(rng, depth, 'chest') });
+    }
+    const t = freeTileIn(room);
+    if (t) items.push({ item: goldPile(rng, depth, 1.5), ...t });
+  }
   if (itemRooms.length && rng.chance(0.3 + d * 0.02)) {
+    // Likeliest in a side room, and half the time, where there is one, behind a locked door too.
     const side = itemRooms.filter((r) => !r.onLoop);
-    const at = chestSpot(rng.pick(side.length ? side : itemRooms));
+    const room = lockedRooms.length && rng.chance(0.5) ? rng.pick(lockedRooms) : rng.pick(side.length ? side : itemRooms);
+    const at = chestSpot(room);
     if (at) {
       const key = makeItem('key', 'gold', { depth });
       const holders = chests.filter((c) => c.kind === 'chest');
@@ -367,7 +392,8 @@ function attemptLevel(rng, depth, opts) {
 
   const monsters = ctx.monsters;
   const table = spawnTable(depth);
-  const monsterCount = 4 + Math.floor(d * 1.3) + rng.int(0, 2);
+  // (A floor that sprawls has more to fill: a monster more for each of its extra side rooms.)
+  const monsterCount = 4 + Math.floor(d * 1.3) + rng.int(0, 2) + rooms.filter((r) => r.sprawl).length;
   for (let i = 0; i < monsterCount && monsterRooms.length; i++) {
     const t = freeTileIn(rng.pick(monsterRooms), 7);
     if (t) monsters.push({ type: rng.weighted(table), x: t.x, y: t.y });
@@ -388,11 +414,11 @@ function attemptLevel(rng, depth, opts) {
     const t = freeTileIn(rng.pick(itemRooms));
     if (t) items.push({ item: goldPile(rng, depth), ...t });
   }
-  // Every locked room's key lies somewhere on the loop, which is always reachable without keys.
-  const loopRooms = rooms.filter((r) => r.onLoop && r.type !== 'vault');
-  for (const r of rooms.filter((q) => q.locked)) {
+  // Every locked door's iron key lies loose in a room you can reach without one: any room but the locked ones, since
+  // nothing ever hangs off a locked room (see planRooms), so no other room is behind a lock.
+  for (let i = 0; i < lockedRooms.length; i++) {
     let t = null;
-    for (let k = 0; k < 10 && !t; k++) t = freeTileIn(rng.pick(loopRooms));
+    for (let k = 0; k < 20 && !t; k++) t = freeTileIn(rng.pick(itemRooms));
     if (!t) return null;
     items.push({ item: makeItem('key', 'iron', { depth }), ...t });
   }

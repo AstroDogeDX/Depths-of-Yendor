@@ -14,8 +14,9 @@ import { makeItem, shopStock } from '../items/generate.js';
  *   traps              whether hidden traps may be placed in it
  *   furnish(ctx, room) place stairs, pedestals, pillars, guardians, loot... (see ctx in generator.js)
  *
- * Locked rooms are never used as branch parents and are skipped by the general population pass,
- * so a locked specialist room decides its own contents in furnish().
+ * Locked rooms are dead ends: never branch parents. The general population pass leaves them out (no monsters,
+ * traps or loose things); a locked standard room gets a stash of chests and gold instead (see generator.js), and a
+ * locked specialist room decides its own contents in furnish().
  */
 export const ROOM_TYPES = {
   entrance: {
