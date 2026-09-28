@@ -36,12 +36,12 @@ export function buildWeaponMesh(model) {
   return weaponCache.get(model).clone();
 }
 
-// Floor items are Blockbench projects too: one per kind, except armour and artefacts (one per type), food (one per
-// kind of food) and keys (the iron key's `key`, and `key_gold`).
+// Floor items are Blockbench projects too: one per kind, except armour and artefacts (one per type), food and pack
+// expansions (one per type) and keys (the iron key's `key`, and `key_gold`).
 const ITEM_FILES = import.meta.glob('../../assets/models/items/*.bbmodel', { import: 'default', eager: true });
 const itemCache = new Map();
 const itemModelName = (item) =>
-  item.kind === 'armor' ? `armor_${item.type}` : item.kind === 'food' || item.kind === 'artefact' ? item.type
+  item.kind === 'armor' ? `armor_${item.type}` : ['food', 'artefact', 'container'].includes(item.kind) ? item.type
     : item.kind === 'key' && item.type === 'gold' ? 'key_gold' : item.kind;
 // Parts on a "_tint" texture are painted in greys and take the item's colour; some also glow in it.
 const TINT_GLOW = { potion: 0.25, ring: 0.6 };

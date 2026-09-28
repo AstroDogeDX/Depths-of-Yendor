@@ -3,7 +3,7 @@ import {
   STAMINA_BASE, STAMINA_PER_LEVEL, STAMINA_DRAIN, STAMINA_REGEN, STAMINA_REGEN_DELAY, STAMINA_RECOVER, MODE_SPEED, NOISE,
   TWO_HAND_STR,
 } from './config.js';
-import { WEAPONS, ARMORS, ARTEFACTS, OFFHANDS, wandRecharge } from './items/defs.js';
+import { WEAPONS, ARMORS, ARTEFACTS, OFFHANDS, CONTAINERS, CONTAINER_SIZE, wandRecharge } from './items/defs.js';
 import { enchantOf, baneOf } from './items/enchant.js';
 import { stackable } from './items/generate.js';
 import { playerStrike } from './combat.js';
@@ -16,7 +16,7 @@ import { round2 } from './save.js';
 const SAVED = [
   'x', 'z', 'yaw', 'pitch', 'maxHp', 'hp', 'baseStr', 'level', 'xp', 'gold', 'hunger', 'hungerState', 'charge',
   'maxStamina', 'stamina', 'winded', 'sneaking', 'twoHanded', 'artefactCD', 'teleT', 'kills', 'maxDepth', 'keys', 'goldKeys',
-  'hotbar', 'inventory',
+  'containers', 'hotbar', 'inventory',
 ];
 
 const FISTS = { name: 'fists', dmgType: 'bash', dmg: [1, 3], recharge: 0.6, reach: 1.4, str: 0, model: null };
@@ -30,6 +30,7 @@ export class Player {
     this.gold = 0;
     this.hunger = HUNGER_MAX;
     this.inventory = [];
+    this.containers = []; // the pack expansions you have (see bags), by type
     this.equip = { weapon: null, offhand: null, armor: null, rings: [null, null], artefacts: [null, null] };
     // Your weapon gripped in both hands (F), with whatever's in your off hand stowed: it can't be used, and a torch
     // lights less (see torchLight). Only ever with a weapon in hand.
@@ -219,12 +220,33 @@ export class Player {
 
   // --- Inventory ---
 
-  packCount() { return this.inventory.length; }
+  /**
+   * Your pack by its tabs: the pack itself (INVENTORY_SIZE slots, for anything) and each expansion you have, in the
+   * order of CONTAINERS (CONTAINER_SIZE slots, for the kinds of thing it holds): [{ key ('pack', or the expansion's type), size, holds (the
+   * kinds, or null), items }]. Everything you carry is in `inventory`, in the order you got it, and where each thing is
+   * follows from that: in the first expansion that holds its kind and has room, or else the pack. So a new expansion
+   * takes in what it holds at once, and one with room to spare takes in any of its kinds that had to go in the pack.
+   */
+  bags() {
+    const bags = [{ key: 'pack', size: INVENTORY_SIZE, holds: null, items: [] }];
+    for (const type in CONTAINERS) if (this.containers.includes(type)) bags.push({ key: type, size: CONTAINER_SIZE, holds: CONTAINERS[type].holds, items: [] });
+    for (const it of this.inventory) (bags.find((b) => b.holds?.includes(it.kind) && b.items.length < b.size) ?? bags[0]).items.push(it);
+    return bags;
+  }
 
-  /** Adds an item, stacking where possible. Returns false if the pack is full. */
+  /** Whether there's a free slot for `item`, in an expansion that holds its kind or the pack. */
+  hasRoom(item) {
+    return this.bags().some((b) => (!b.holds || b.holds.includes(item.kind)) && b.items.length < b.size);
+  }
+
+  /** Adds an item, stacking where possible. Returns false if there's no room for it. */
   addItem(item) {
     if (item.kind === 'gold') {
       this.gold += item.qty;
+      return true;
+    }
+    if (item.kind === 'container') {
+      if (!this.containers.includes(item.type)) this.containers.push(item.type);
       return true;
     }
     if (item.kind === 'key') {
@@ -240,7 +262,7 @@ export class Player {
       }
     }
     // The Amulet always fits: a full pack must never block the end of the quest.
-    if (this.inventory.length >= INVENTORY_SIZE && item.kind !== 'amulet') return false;
+    if (!this.hasRoom(item) && item.kind !== 'amulet') return false;
     this.inventory.push(item);
     return true;
   }

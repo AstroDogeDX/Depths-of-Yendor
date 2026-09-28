@@ -102,6 +102,9 @@ export const isBossDepth = (depth) => depth % FLOORS_PER_THEME === 0;
 /** A shop opens off the entrance room on the first floor of every theme after the first. */
 export const isShopDepth = (depth) => depth > 1 && themeForDepth(depth) !== themeForDepth(depth - 1);
 
+/** The floors with shops, in order. */
+export const SHOP_DEPTHS = Array.from({ length: MAX_DEPTH }, (_, i) => i + 1).filter(isShopDepth);
+
 // An artefact shrine on the third floor of each theme.
 export const ARTEFACT_DEPTHS = THEMES.map((_, i) => i * FLOORS_PER_THEME + 3);
 

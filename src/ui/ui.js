@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { KIND_GLYPH, ARTEFACTS, ARMORS, wandRecharge } from '../items/defs.js';
+import { KIND_GLYPH, ARTEFACTS, ARMORS, CONTAINERS, wandRecharge } from '../items/defs.js';
 import { equipSlotFor } from '../items/use.js';
 import { T } from '../dungeon/tiles.js';
 import { TRAP_COLORS } from '../world/level.js';
-import { HUNGER_HUNGRY, HUNGER_FAMISHED, INVENTORY_SIZE, TILE, HOTBAR_SIZE, PLAYER_SPEED, MAX_DEPTH, THEMES, FLOORS_PER_THEME, TWO_HAND_STR, themeForDepth } from '../config.js';
+import { HUNGER_HUNGRY, HUNGER_FAMISHED, TILE, HOTBAR_SIZE, PLAYER_SPEED, MAX_DEPTH, THEMES, FLOORS_PER_THEME, TWO_HAND_STR, themeForDepth } from '../config.js';
 import { canHotbar, slotItem, slotHolds, slotAction, assignSlot, clearSlot } from '../hotbar.js';
 import { stackable } from '../items/generate.js';
 import { DAMAGE_TYPES } from '../damage.js';
@@ -65,7 +65,8 @@ export class UI {
   constructor() {
     this.popups = [];
     this.logEntries = [];
-    this.invSel = 0;
+    this.invTab = 'pack'; // the tab of the pack on show (see Player.bags)
+    this.invSel = 0; // the thing selected on it, by its place there
     this.selectMode = null;
     this.cache = {};
     this.v = new THREE.Vector3();
@@ -176,7 +177,7 @@ export class UI {
       // Clicking a filled slot selects that item in the list; equipping still goes through the action buttons.
       el.addEventListener('click', () => {
         const it = equippedIn(this.game.player, d.key);
-        if (it) this.selectRow(this.game.player.inventory.indexOf(it));
+        if (it) this.showItem(it);
       });
       $('inv-doll').appendChild(el);
       this.dollEls[d.key] = el;
@@ -192,6 +193,8 @@ export class UI {
     this.popups = [];
     this.closeMenus();
     this.hotKeys = [];
+    this.invTab = 'pack';
+    this.invSel = 0;
     $('hud').hidden = false;
     $('end').hidden = true;
   }
@@ -567,38 +570,93 @@ export class UI {
   // --- Inventory ---
 
   openInventory() {
-    this.invSel = Math.min(this.invSel, Math.max(0, this.game.player.inventory.length - 1));
     $('inventory').hidden = false;
+    this.renderInventory();
+  }
+
+  /** The tab of the pack on show: one of Player.bags. */
+  shownBag() {
+    const bags = this.game.player.bags();
+    return bags.find((b) => b.key === this.invTab) ?? bags[0];
+  }
+
+  /** The thing selected, if any. */
+  selected() {
+    return this.shownBag().items[this.invSel] ?? null;
+  }
+
+  /** Shows the tab `it` is on, with it selected. */
+  showItem(it) {
+    const bag = this.game.player.bags().find((b) => b.items.includes(it));
+    if (!bag) return;
+    if (bag.key === this.invTab) {
+      this.selectRow(bag.items.indexOf(it));
+      return;
+    }
+    this.invTab = bag.key;
+    this.invSel = bag.items.indexOf(it);
+    this.renderInventory();
+  }
+
+  /** Shows the tab `step` tabs on from the one on show (wrapping round). */
+  switchTab(step) {
+    const bags = this.game.player.bags();
+    const i = Math.max(0, bags.findIndex((b) => b.key === this.invTab));
+    const next = bags[(i + step + bags.length) % bags.length].key;
+    if (next === this.invTab) return;
+    this.invTab = next;
+    this.invSel = 0;
     this.renderInventory();
   }
 
   selectItem(prompt, filter, cb) {
     this.selectMode = { prompt, filter, cb };
-    const inv = this.game.player.inventory;
-    const first = inv.findIndex(filter);
-    if (first >= 0) this.invSel = first;
+    // The first thing that will do: on the tab on show, if there's one there.
+    const bags = this.game.player.bags(), shown = this.shownBag();
+    const bag = shown.items.some(filter) ? shown : bags.find((b) => b.items.some(filter));
+    if (bag) {
+      this.invTab = bag.key;
+      this.invSel = bag.items.findIndex(filter);
+    }
     if (this.game.menu !== 'inventory') this.game.openMenu('inventory');
     else this.renderInventory();
   }
 
   /**
-   * Full rebuild — only when the pack's contents may have changed. The pack is a grid of tiles, one for every slot it
-   * has, in the order things went in: each shows the item's glyph, and in its corners and tint what you know of it
-   * (see tiles.js). Equipped things are framed in gold.
+   * Full rebuild — only when the pack's contents may have changed. The pack has a tab for itself and one for each
+   * expansion you have (see Player.bags), each showing how full it is; the one on show is a grid of tiles, one for
+   * every slot it has, in the order things went in. Each tile shows the item's glyph, and in its corners and tint what
+   * you know of it (see tiles.js). Equipped things are framed in gold.
    */
   renderInventory() {
     const g = this.game, p = g.player, k = g.knowledge;
-    const inv = p.inventory;
+    const bags = p.bags(), bag = bags.find((b) => b.key === this.invTab) ?? bags[0];
+    this.invTab = bag.key;
+    const inv = bag.items;
+    const tabs = $('inv-tabs');
+    tabs.innerHTML = '';
+    for (const b of bags) {
+      const el = document.createElement('div');
+      el.className = `tab${b === bag ? ' on' : ''}${this.selectMode && !b.items.some(this.selectMode.filter) ? ' dim' : ''}`;
+      el.innerHTML = `<span>${b.holds ? CONTAINERS[b.key].tab : 'Pack'}</span><span class="n">${b.items.length}/${b.size}</span>`;
+      el.addEventListener('click', () => {
+        if (b.key === this.invTab) return;
+        this.invTab = b.key;
+        this.invSel = 0;
+        this.renderInventory();
+      });
+      tabs.appendChild(el);
+    }
     const grid = $('inv-list');
     grid.innerHTML = '';
     this.invSel = Math.max(0, Math.min(this.invSel, inv.length - 1));
-    $('inv-count').textContent = `${inv.length} / ${INVENTORY_SIZE}   ·   ${p.gold} gold`;
+    $('inv-count').textContent = `${p.gold} gold`;
     // The prompt's space is always reserved so the pack never shifts when it appears.
     const shop = g.level.shopkeeper && g.level.playerInShop ? 'The shopkeeper is buying: pick an item and choose Sell.' : '';
     $('inv-prompt').textContent = this.selectMode ? this.selectMode.prompt : shop;
     $('inv-prompt').classList.toggle('off', !this.selectMode && !shop);
 
-    for (let i = 0; i < Math.max(INVENTORY_SIZE, inv.length); i++) {
+    for (let i = 0; i < Math.max(bag.size, inv.length); i++) {
       const it = inv[i], tile = document.createElement('div');
       grid.appendChild(tile);
       if (!it) {
@@ -622,8 +680,8 @@ export class UI {
   /** Change the selection without rebuilding the pack. */
   selectRow(i) {
     this.invSel = i;
-    const tiles = $('inv-list').children;
-    for (let r = 0; r < tiles.length; r++) tiles[r].classList.toggle('sel', r === i && r < this.game.player.inventory.length);
+    const tiles = $('inv-list').children, n = this.shownBag().items.length;
+    for (let r = 0; r < tiles.length; r++) tiles[r].classList.toggle('sel', r === i && r < n);
     this.renderDetail();
     this.renderHotStrip();
     this.renderDoll();
@@ -631,7 +689,7 @@ export class UI {
 
   renderDetail() {
     const g = this.game, p = g.player, k = g.knowledge;
-    const it = p.inventory[this.invSel];
+    const it = this.selected();
     const acts = $('inv-actions');
     acts.innerHTML = '';
     if (it) {
@@ -655,13 +713,14 @@ export class UI {
       }
     } else {
       $('inv-name').textContent = '';
-      $('inv-desc').textContent = p.inventory.length ? '' : 'Your pack is empty.';
+      const bag = this.shownBag();
+      $('inv-desc').textContent = bag.items.length ? '' : bag.holds ? `Your ${CONTAINERS[bag.key].name} is empty.` : 'Your pack is empty.';
     }
   }
 
   renderDoll() {
     const g = this.game, p = g.player, k = g.knowledge;
-    const sel = p.inventory[this.invSel];
+    const sel = this.selected();
     // Where the selected, not-yet-equipped item would go (same rule equipItem uses).
     const target = sel && !this.selectMode && !p.isEquipped(sel) ? equipSlotFor(p, sel) : null;
     for (const d of DOLL_SLOTS) {
@@ -717,7 +776,7 @@ export class UI {
 
   activate(actionIndex) {
     const g = this.game, p = g.player;
-    const it = p.inventory[this.invSel];
+    const it = this.selected();
     if (!it) return;
     if (!g.canAct()) {
       g.closeMenu();
@@ -748,18 +807,19 @@ export class UI {
       return;
     }
     if (!g || g.menu !== 'inventory') return;
-    const n = g.player.inventory.length;
+    const n = this.shownBag().items.length;
     const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
     if (digit && +digit[1] <= HOTBAR_SIZE) { this.assignSelected(+digit[1] - 1); return; }
     // Arrows (or W and S, up and down) move about the grid of tiles, wrapping round the things in the pack.
     const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -PACK_COLUMNS, KeyW: -PACK_COLUMNS, ArrowDown: PACK_COLUMNS, KeyS: PACK_COLUMNS }[e.code];
     if (step && n) this.selectRow((((this.invSel + step) % n) + n) % n);
+    else if (e.code === 'KeyQ') this.switchTab(e.shiftKey ? -1 : 1);
     else if (e.code === 'Enter' || e.code === 'KeyE') this.activate(0);
     else if (e.code === 'KeyD' && !this.selectMode) {
-      const it = g.player.inventory[this.invSel];
+      const it = this.selected();
       if (it) this.activate(g.actionsFor(it).length - 1);
     } else if (e.code === 'KeyT' && !this.selectMode) {
-      const it = g.player.inventory[this.invSel];
+      const it = this.selected();
       if (it && it.kind === 'potion') this.activate(1);
     }
   }
@@ -823,7 +883,7 @@ export class UI {
 
   renderHotStrip() {
     const g = this.game, p = g.player, k = g.knowledge;
-    const sel = p.inventory[this.invSel];
+    const sel = this.selected();
     const box = $('inv-hot-slots');
     box.innerHTML = '';
     for (let i = 0; i < HOTBAR_SIZE; i++) {
@@ -852,7 +912,7 @@ export class UI {
 
   assignSelected(i) {
     const p = this.game.player;
-    const it = p.inventory[this.invSel];
+    const it = this.selected();
     if (this.selectMode || !it) return;
     if (!canHotbar(it)) {
       this.hotNote(it.kind === 'artefact' ? 'That artefact has no power to invoke.' : 'Only potions, scrolls, food, wands and artefact powers go on the hotbar.');

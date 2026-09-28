@@ -1,5 +1,5 @@
 import {
-  WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS,
+  WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS, CONTAINERS,
   POTION_COLORS, SCROLL_SYLLABLES, WAND_MATERIALS, RING_GEMS,
 } from './defs.js';
 import { DAMAGE_TYPES, damageType, describeResist } from '../damage.js';
@@ -121,6 +121,7 @@ export class Knowledge {
       case 'gold': return 0xf0c040;
       case 'amulet': return 0xffd040;
       case 'key': return item.type === 'gold' ? 0xffd040 : 0xb8b0a0;
+      case 'container': return 0xb07840;
     }
     return 0xffffff;
   }
@@ -184,6 +185,7 @@ export class Knowledge {
       case 'amulet': return 'the Amulet of Yendor';
       case 'gold': return `${q} gold`;
       case 'key': return `${item.type} key`;
+      case 'container': return CONTAINERS[item.type].name;
     }
     return 'strange object';
   }
@@ -243,6 +245,7 @@ export class Knowledge {
       case 'food': return FOOD[item.type].desc;
       case 'offhand': return OFFHANDS[item.type].desc;
       case 'artefact': return ARTEFACTS[item.type].desc;
+      case 'container': return CONTAINERS[item.type].desc;
       case 'amulet': return 'The Amulet of Yendor. It thrums with the heartbeat of the dungeon itself. Invoke it to escape now, or carry it back to the surface for true glory.';
       case 'gold': return 'Shiny.';
       case 'key': return item.type === 'gold' ? `A finely wrought gold key. It opens a locked chest somewhere on depth ${item.depth}.`

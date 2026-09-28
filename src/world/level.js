@@ -135,9 +135,10 @@ export class Level {
 
     for (const t of data.traps) this.traps.push({ ...t, hidden: true, triggered: false, view: null });
 
-    // Where the shop's wares rest: the counter and display tables hold its stock, and things the player sells
-    // go in any free spot, filling the rug last.
+    // Where the shop's wares rest: the counter, plinths and display tables hold its stock, and things the player sells
+    // go in any free spot but the plinths', filling the rug last.
     this.shopSpots = built.shopSlots;
+    this.shopKept = built.shopKept;
     this.resales = 0;
     this.shopkeeper = null;
     if (data.shop) {
@@ -165,7 +166,7 @@ export class Level {
     if (data.amulet) {
       this.addItem(this.game.makeAmulet(), (data.amulet.x + 0.5) * TILE, (data.amulet.y + 0.5) * TILE, { onPedestal: true });
     }
-    data.shop?.stock.forEach(({ item, price }, i) => this.shelve(item, price, i));
+    data.shop?.stock.forEach((w, i) => w && this.shelve(w.item, w.price, i));
   }
 
   // --- Saving (see save.js) ---
@@ -485,7 +486,8 @@ export class Level {
 
   /**
    * Puts something the player sold on display, so they can buy it back at the shop's price. Potions, scrolls
-   * and food join a pile of the same kind the player already sold; anything else takes the first free spot.
+   * and food join a pile of the same kind the player already sold; anything else takes the first free spot (not a
+   * plinth's).
    * When there's none, the thing that has been on sale longest of those the player sold makes way.
    */
   displaySold(item) {
@@ -496,7 +498,7 @@ export class Level {
       return;
     }
     const taken = new Set(this.items.map((e) => e.spot));
-    let spot = this.shopSpots.findIndex((_, i) => !taken.has(i));
+    let spot = this.shopSpots.findIndex((_, i) => !taken.has(i) && !this.shopKept.has(i));
     if (spot < 0) {
       const oldest = this.items.filter((e) => e.resale).sort((a, b) => a.resale - b.resale)[0];
       if (!oldest) return;

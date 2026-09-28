@@ -36,6 +36,7 @@ const SPRAWL = 0.6; // the chance of each extra side room a theme may add (see p
  *  4. Furnish each room by type, then populate: chests, monsters, the odd thing lying loose, traps.
  *
  * opts.artefact       artefact type for this floor's shrine, if any
+ * opts.wares          what its shop has on its plinths, if it has a shop: { container, artefact } (see shopStock)
  * opts.extraBranches  extra branch specs, e.g. [{ type: 'standard', locked: true }]
  *
  * A branch spec may name its parent room's type, e.g. { type: 'shop', parent: 'entrance' }, or with `offBranch` hang
@@ -269,7 +270,7 @@ function attemptLevel(rng, depth, opts) {
   for (const r of rooms) for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) inRoom[idx(x, y)] = r.id;
 
   const ctx = {
-    rng, depth, artefact: opts.artefact,
+    rng, depth, artefact: opts.artefact, wares: opts.wares ?? {},
     up: null, down: null, amulet: null, shrine: null, shop: null, monsters: [],
     get: (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? T.WALL : grid[idx(x, y)]),
     set: (x, y, v) => { if (x > 0 && y > 0 && x < W - 1 && y < H - 1) grid[idx(x, y)] = v; },

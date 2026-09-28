@@ -1,5 +1,5 @@
 import { THEMES, FLOORS_PER_THEME, TILE, HUNGER_MAX, isBossDepth, isShopDepth } from '../config.js';
-import { WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS, WAND_ZAPS_TO_ID } from '../items/defs.js';
+import { WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS, CONTAINERS, WAND_ZAPS_TO_ID } from '../items/defs.js';
 import { makeItem, stackable, chestLoot } from '../items/generate.js';
 import { MONSTERS } from '../monsters/defs.js';
 import { generateLevel } from '../dungeon/generator.js';
@@ -21,7 +21,7 @@ const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, as stairs' `dir`
 const KINDS = [
   ['weapon', 'Weapons', WEAPONS], ['offhand', 'Off hand', OFFHANDS], ['armor', 'Armour', ARMORS], ['potion', 'Potions', POTIONS],
   ['scroll', 'Scrolls', SCROLLS], ['wand', 'Wands', WANDS], ['ring', 'Rings', RINGS], ['artefact', 'Artefacts', ARTEFACTS],
-  ['food', 'Food', FOOD],
+  ['food', 'Food', FOOD], ['container', 'Pack expansions', CONTAINERS],
   ['special', 'Other', { amulet: { name: 'Amulet of Yendor' }, key: { name: 'iron key (this floor)' }, goldkey: { name: 'gold key (this floor)' } }],
 ];
 const CHESTS = { chest: 'Chest', locked: 'Locked chest', mimic: 'Mimic (passing for a chest)' };
@@ -205,7 +205,7 @@ export class DevTools {
   newLayout() {
     const g = this.game, depth = g.level.depth, old = g.level;
     this.layouts++;
-    g.levels.set(depth, new Level(g, generateLevel(`${g.seed}~${this.layouts}`, depth, { artefact: g.artefactFor(depth) })));
+    g.levels.set(depth, new Level(g, generateLevel(`${g.seed}~${this.layouts}`, depth, g.floorOpts(depth))));
     g.closeMenu();
     g.ui.fadeTransition();
     g.arrive(depth, 'down');

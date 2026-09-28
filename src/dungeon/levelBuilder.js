@@ -267,13 +267,17 @@ export function buildLevelMeshes(data) {
     obstacles.push({ x: (p.x + 0.5) * TILE, z: (p.y + 0.5) * TILE, r: 0.55 });
   }
 
-  // The shop's furniture. Items for sale rest in the slots of the counter and display tables, in order.
-  const shopSlots = [];
+  // The shop's furniture. Items for sale rest in the slots of the counter, plinths and display tables, in order; the
+  // plinths' are kept for the shop's own wares (see layoutShop).
+  const shopSlots = [], shopKept = new Set();
   for (const p of data.shop?.props ?? []) {
     const prop = placeProp(p);
     group.add(prop.mesh);
     if (prop.obstacle) obstacles.push(prop.obstacle);
-    shopSlots.push(...prop.slots);
+    for (const slot of prop.slots) {
+      if (p.resale === false) shopKept.add(shopSlots.length);
+      shopSlots.push(slot);
+    }
   }
 
   const candles = [], glows = [], drips = [], fires = []; // from props' candle_N, glow_N, drip_N and fire_N anchors
@@ -388,7 +392,7 @@ export function buildLevelMeshes(data) {
     group.add(built.group);
     return built;
   });
-  return { group, flames, lights, obstacles, doors, shopSlots, water, haze, rough, drips: dripSources(data, rng, drips) };
+  return { group, flames, lights, obstacles, doors, shopSlots, shopKept, water, haze, rough, drips: dripSources(data, rng, drips) };
 }
 
 /**

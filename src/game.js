@@ -1,11 +1,11 @@
 import * as THREE from 'three';
-import { TILE, EYE_H, MAX_DEPTH, ARTEFACT_DEPTHS, RENDER_HEIGHTS, HOTBAR_SIZE, CROUCH_DROP, danger, themeForDepth } from './config.js';
+import { TILE, EYE_H, MAX_DEPTH, ARTEFACT_DEPTHS, SHOP_DEPTHS, RENDER_HEIGHTS, HOTBAR_SIZE, CROUCH_DROP, danger, themeForDepth } from './config.js';
 import { RNG, rand } from './rng.js';
 import { generateLevel } from './dungeon/generator.js';
 import { Level } from './world/level.js';
 import { Player } from './player.js';
 import { Knowledge } from './items/identify.js';
-import { ARTEFACTS, WEAPONS } from './items/defs.js';
+import { ARTEFACTS, WEAPONS, CONTAINERS } from './items/defs.js';
 import { makeItem, randomItem, nextItemUid, reserveUids } from './items/generate.js';
 import { itemActions, drinkPotion, activateArtefact, toggleGrip, useOffhand } from './items/use.js';
 import { ViewModel } from './fx/viewmodel.js';
@@ -117,6 +117,9 @@ export class Game {
     const rng = new RNG(`${this.seed}:run`);
     this.knowledge = new Knowledge(rng);
     this.artefactQueue = rng.shuffle(Object.keys(ARTEFACTS));
+    // What the shops have on their plinths (see shopWares): the pack expansions, one to a shop in an order of their
+    // own, and the artefact no shrine has (there being one more artefact than shrines), in one of them.
+    this.shops = { containers: rng.shuffle(Object.keys(CONTAINERS).filter((t) => CONTAINERS[t].shop)), artefact: rng.int(0, SHOP_DEPTHS.length - 1) };
 
     if (this.level) this.scene.remove(this.level.group);
     for (const lvl of this.levels?.values() ?? []) disposeGroup(lvl.group);
@@ -166,6 +169,7 @@ export class Game {
     this.beginRun(s.seed, s.name);
     this.knowledge.restore(s.knowledge);
     this.artefactQueue = s.artefactQueue;
+    if (s.shops) this.shops = s.shops;
     this.savedLevels = new Map(s.levels.map((l) => [l.depth, l]));
     reserveUids(s.nextUid);
     this.player.restore(s.player);
@@ -198,7 +202,8 @@ export class Game {
     return writeSave({
       version: SAVE_VERSION, format: SAVE_FORMAT, build: BUILD, savedAt: Date.now(),
       seed: this.seed, name: this.playerName, depth: this.level.depth, time: Math.round(this.time),
-      level: p.level, amuletTaken: this.amuletTaken, artefactQueue: this.artefactQueue, nextUid: nextItemUid(),
+      level: p.level, amuletTaken: this.amuletTaken, artefactQueue: this.artefactQueue, shops: this.shops,
+      nextUid: nextItemUid(),
       knowledge: this.knowledge.snapshot(), player: p.snapshot(), levels,
     });
   }
@@ -259,13 +264,26 @@ export class Game {
     return i >= 0 ? this.artefactQueue[i] : null;
   }
 
+  /** What the shop on this floor has on its plinths, if it has a shop: { container, artefact } (see shopStock). */
+  shopWares(depth) {
+    const i = SHOP_DEPTHS.indexOf(depth);
+    if (i < 0) return undefined;
+    const spare = this.artefactQueue[ARTEFACT_DEPTHS.length] ?? null;
+    return { container: this.shops.containers[i] ?? null, artefact: i === this.shops.artefact ? spare : null };
+  }
+
+  /** What a floor is generated with besides its seed and depth (see generateLevel). */
+  floorOpts(depth) {
+    return { artefact: this.artefactFor(depth), wares: this.shopWares(depth) };
+  }
+
   makeAmulet() {
     return makeItem('amulet', 'yendor');
   }
 
   getLevel(depth) {
     if (!this.levels.has(depth)) {
-      const data = generateLevel(this.seed, depth, { artefact: this.artefactFor(depth) });
+      const data = generateLevel(this.seed, depth, this.floorOpts(depth));
       // A floor from a save comes back as it was left, unless floors are laid out differently since it was saved
       // (a newer version of the game): then it starts afresh, rather than with things in its walls.
       const saved = this.savedLevels.get(depth);
@@ -658,6 +676,7 @@ export class Game {
     if (item.kind === 'artefact') {
       this.log(`${ARTEFACTS[item.type].name}: ${ARTEFACTS[item.type].desc} Put it on from your pack.`, 'good');
     }
+    this.noteContainer(item);
     if (item.kind === 'amulet' && !this.amuletTaken) {
       this.amuletTaken = true;
       this.audio.victory();
@@ -665,6 +684,13 @@ export class Game {
       this.shake(0.4);
       this.amuletDialog(true);
     }
+  }
+
+  /** Says what a pack expansion you've just got does. */
+  noteContainer(item) {
+    if (item.kind !== 'container') return;
+    const c = CONTAINERS[item.type];
+    this.log(`You fasten the ${c.name} to your pack. Your ${c.what} go in it now, on a tab of their own.`, 'good');
   }
 
   /** Buys an item from the shop: gold for goods, no haggling, no refunds. */
@@ -685,6 +711,7 @@ export class Game {
     else entry.item.qty--;
     this.audio.coins();
     this.log(`You buy ${this.knowledge.name(one, { article: true })} for ${entry.price} gold.`, 'good');
+    this.noteContainer(one);
     level.shopkeeper?.sold(this, level);
   }
 

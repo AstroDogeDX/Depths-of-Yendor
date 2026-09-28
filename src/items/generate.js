@@ -1,4 +1,4 @@
-import { WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, FOOD, OFFHANDS, WAND_ZAPS_TO_ID } from './defs.js';
+import { WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, FOOD, OFFHANDS, CONTAINERS, WAND_ZAPS_TO_ID } from './defs.js';
 import { randomBane, randomEnchant } from './enchant.js';
 import { danger } from '../config.js';
 
@@ -22,7 +22,7 @@ export function makeItem(kind, type, extra = {}) {
     qty: 1,
     plus: 0,
     curse: 0,
-    identified: kind === 'food' || kind === 'offhand' || kind === 'artefact' || kind === 'amulet' || kind === 'gold' || kind === 'key',
+    identified: ['food', 'offhand', 'artefact', 'amulet', 'gold', 'key', 'container'].includes(kind),
     curseKnown: false,
     ...extra,
   };
@@ -136,9 +136,13 @@ function treasure(rng, depth) {
 
 // What the shop charges never depends on what's hidden about a thing, so a price can't give it away: potions,
 // scrolls, wands and rings are one price a kind, and weapons, armour and off-hand things (whose kind you can always
-// see) go by their `value` in items/defs.js. What the shopkeeper pays depends on what you know of a thing (see worth).
-const BUY = { food: 15, potion: 35, scroll: 30, wand: 110, ring: 130, artefact: 400 };
-const DEFS = { weapon: WEAPONS, armor: ARMORS, potion: POTIONS, scroll: SCROLLS, wand: WANDS, ring: RINGS, food: FOOD, offhand: OFFHANDS };
+// see) go by their `value` in items/defs.js, as do pack expansions. An artefact is very dear. What the shopkeeper pays
+// depends on what you know of a thing (see worth).
+const BUY = { food: 15, potion: 35, scroll: 30, wand: 110, ring: 130, artefact: 1500 };
+const ARTEFACT_WORTH = 400; // what the shopkeeper counts an artefact worth, buying one from you
+const DEFS = {
+  weapon: WEAPONS, armor: ARMORS, potion: POTIONS, scroll: SCROLLS, wand: WANDS, ring: RINGS, food: FOOD, offhand: OFFHANDS, container: CONTAINERS,
+};
 const UNKNOWN = { potion: 15, scroll: 12, wand: 55, ring: 60 }; // what a potion, scroll, wand or ring of a kind you don't know is worth
 const UNKNOWN_GEAR = 0.4; // equipment you know nothing about (not even whether it's cursed) is worth this share
 const PER_PLUS = { weapon: 30, armor: 30, ring: 35, wand: 30 }; // what each + adds, once you know it
@@ -148,7 +152,7 @@ const SELL_RATE = 0.4; // the shopkeeper pays 40% of what a thing is worth
 const markup = (depth) => 1 + Math.max(0, danger(depth) - 3) * 0.1; // deeper merchants charge (and pay) more
 
 function buyBase(item) {
-  return item.kind === 'weapon' || item.kind === 'armor' || item.kind === 'offhand' ? DEFS[item.kind][item.type].value : BUY[item.kind];
+  return ['weapon', 'armor', 'offhand', 'container'].includes(item.kind) ? DEFS[item.kind][item.type].value : BUY[item.kind];
 }
 
 /**
@@ -163,7 +167,7 @@ export function worth(item, k) {
   switch (item.kind) {
     case 'potion': case 'scroll': return k.isKnown(item) ? DEFS[item.kind][item.type].value : UNKNOWN[item.kind];
     case 'food': case 'offhand': return DEFS[item.kind][item.type].value;
-    case 'artefact': return BUY.artefact;
+    case 'artefact': return ARTEFACT_WORTH;
     case 'weapon': case 'armor': case 'wand': case 'ring': {
       if (item.curseKnown && item.curse >= 2) return 0;
       if (!(item.kind === 'weapon' || item.kind === 'armor' || k.isKnown(item))) return UNKNOWN[item.kind];
@@ -192,27 +196,49 @@ export function shopPrice(item, depth) {
   return Math.round((buyBase(item) * markup(depth)) / 5) * 5;
 }
 
-/** Wares for a shop on this floor: [{ item, price }]. Never cursed. */
-export function shopStock(rng, depth) {
-  const gear = rng.chance(0.5)
+/**
+ * Wares for a shop on this floor, in the order of its display slots (see layoutShop): [{ item, price }], or null for a
+ * slot left empty. Never cursed.
+ *   the counter        a ration, a potion and a scroll
+ *   the two plinths    `wares.container` (a pack expansion), and `wares.artefact` or, without one, a prize: a piece of
+ *                      equipment you can see is fine work (identified, +2 or better and often enchanted), dearly priced
+ *   the six tables     three pieces of equipment, and three wands and rings
+ */
+export function shopStock(rng, depth, wares = {}) {
+  const gear = (kind) => kind === 'weapon'
     ? makeItem('weapon', pickTiered(rng, WEAPONS, depth + 3), { hitsToId: 20, plus: rng.chance(0.3) ? 1 : 0 })
     : makeItem('armor', pickTiered(rng, ARMORS, depth + 3), { hitsToId: 14, plus: rng.chance(0.3) ? 1 : 0 });
-  const trinket = rng.chance(0.5) ? randomWand(rng)
+  const trinket = (kind) => kind === 'wand' ? randomWand(rng)
     : makeItem('ring', rng.weighted({ ...freqTable(RINGS), teleportation: 0 }), { wornTime: 0, plus: rng.int(1, 2) });
-  const wares = [
-    makeItem('food', 'ration'),
-    makeItem('potion', rng.chance(0.5) ? 'healing' : rng.weighted(freqTable(POTIONS))),
-    makeItem('scroll', rng.chance(0.4) ? 'identify' : rng.weighted(freqTable(SCROLLS))),
-    gear,
-    trinket,
+  const priced = (item) => item && { item, price: shopPrice(item, depth) };
+  return [
+    priced(makeItem('food', 'ration')),
+    priced(makeItem('potion', rng.chance(0.5) ? 'healing' : rng.weighted(freqTable(POTIONS)))),
+    priced(makeItem('scroll', rng.chance(0.4) ? 'identify' : rng.weighted(freqTable(SCROLLS)))),
+    priced(wares.container && makeItem('container', wares.container)),
+    wares.artefact ? priced(makeItem('artefact', wares.artefact)) : prize(rng, depth),
+    ...['weapon', 'armor', rng.chance(0.5) ? 'weapon' : 'armor'].map((k) => priced(gear(k))),
+    ...['wand', 'ring', rng.chance(0.5) ? 'wand' : 'ring'].map((k) => priced(trinket(k))),
   ];
-  return wares.map((item) => ({ item, price: shopPrice(item, depth) }));
+}
+
+// A shop's prize (see shopStock) costs PRIZE_MARKUP times what it's worth: its kind's value and what its + and
+// enchantment add.
+const PRIZE_MARKUP = 2;
+function prize(rng, depth) {
+  const d = danger(depth), kind = rng.chance(0.5) ? 'weapon' : 'armor';
+  const plus = 2 + (rng.chance(0.3 + d * 0.04) ? 1 : 0);
+  const item = makeItem(kind, pickTiered(rng, kind === 'weapon' ? WEAPONS : ARMORS, depth + 4), {
+    hitsToId: kind === 'weapon' ? 20 : 14, plus, identified: true, curseKnown: true,
+  });
+  if (rng.chance(0.5)) item.enchant = randomEnchant(rng, kind);
+  const worth = DEFS[kind][item.type].value + plus * PER_PLUS[kind] + (item.enchant ? ENCHANTED : 0);
+  return { item, price: Math.round((worth * PRIZE_MARKUP * markup(depth)) / 5) * 5 };
 }
 
 /**
  * A wand, full of charges. One found at `depth` is cursed (so it misfires: see zapWand) about one time in eight, and
- * may have a + (a charge more for each), as a weapon might. A shop's (no depth) has neither, and takes no more draws
- * from the floor's generator than it always has, so floors with shops keep their layouts.
+ * may have a + (a charge more for each), as a weapon might. A shop's (no depth) has neither.
  */
 function randomWand(rng, depth) {
   const type = rng.weighted(freqTable(WANDS));

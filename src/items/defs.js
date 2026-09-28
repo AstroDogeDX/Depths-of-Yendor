@@ -125,6 +125,24 @@ export const OFFHANDS = {
            desc: 'A pitch-soaked brand, burning steadily. Held up in your off hand, it lights your way. While you grip your weapon in both hands, it hangs at your belt, and lights far less.' },
 };
 
+// Pack expansions (kind 'container'). Each has CONTAINER_SIZE slots of its own, on a tab of the pack, for the kinds of
+// thing it `holds` (see Player.bags): once you have one it's part of your pack for good, and things of its kinds go in
+// it while it has room, the rest in the pack itself. Every one with `shop` is sold in one of the shops, one to a shop
+// and in an order each run draws (see Game.shopWares); one without comes some other way. `tab`: its tab's name; `what`: what
+// it holds, in words. Its model is assets/models/items/<its type>.bbmodel.
+export const CONTAINER_SIZE = 10;
+export const CONTAINERS = {
+  scroll_holder:    { name: 'scroll holder', tab: 'Scrolls', what: 'scrolls', holds: ['scroll'], shop: true, value: 300,
+                      desc: 'A leather case of stiff tubes, each keeping a scroll dry and uncreased. It holds ten kinds of scroll, in their own slots, apart from your pack.' },
+  potion_bandolier: { name: 'potion bandolier', tab: 'Potions', what: 'potions', holds: ['potion'], shop: true, value: 300,
+                      desc: 'A leather belt worn across the chest, with padded loops for flasks. It holds ten kinds of potion, in their own slots, apart from your pack.' },
+  wand_holster:     { name: 'wand holster', tab: 'Wands', what: 'wands', holds: ['wand'], shop: true, value: 300,
+                      desc: 'A sheath of oiled leather worn at the hip, with a sleeve for each wand. It holds ten wands, in their own slots, apart from your pack.' },
+  // (Thrown weapons, kind 'thrown', are still to come: until then it has nothing to hold.)
+  bullet_pouch:     { name: 'bullet pouch', tab: 'Pouch', what: 'things to throw', holds: ['thrown'], shop: true, value: 300,
+                      desc: 'A drawstring pouch of thick hide for things to throw. It holds ten piles of them, in their own slots, apart from your pack.' },
+};
+
 // --- Unidentified appearances, shuffled per run ---
 
 export const POTION_COLORS = [
@@ -153,5 +171,5 @@ export const RING_GEMS = [
 
 export const KIND_GLYPH = {
   weapon: ')', offhand: '(', armor: '[', potion: '!', scroll: '?', wand: '/', ring: '=', food: '%',
-  artefact: '*', amulet: '"', gold: '$', key: '-',
+  artefact: '*', amulet: '"', gold: '$', key: '-', container: '&',
 };

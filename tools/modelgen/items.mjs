@@ -15,6 +15,15 @@ const ITEM_PAL = {
   twine: P('#3a2c18', '#5a4526', '#7a6036', '#997a48', '#b08f58'),
   crystal: P('#1c3a55', '#2f6690', '#4f9ac8', '#8cc8ec', '#d0eeff', '#ffffff'),
   ruby: P('#3a0008', '#6a0010', '#a0081c', '#d8203a', '#ff5a6e', '#ffc0c8'),
+  emerald: P('#022414', '#064a26', '#0c7a3a', '#1eae56', '#5ee08a', '#c0ffd8'),
+  hide: P('#24170c', '#362312', '#4c321c', '#634227', '#7a5534', '#906a44'),
+  tan: P('#2e1a0c', '#452814', '#5e381d', '#7a4b28', '#955f35', '#ad7443'),
+  bone: P('#4a4234', '#6e6450', '#9a8e72', '#c4b898', '#e2d8bc'),
+  ebony: P('#0a0808', '#161111', '#241c1b', '#342927', '#463834'),
+  lead: P('#1e2024', '#2e3136', '#42464c', '#585d64', '#72777e', '#90959c'),
+  wine: P('#1c0206', '#38040c', '#5c0a16', '#861424', '#b02a36', '#e0707a'),
+  sea: P('#020c1c', '#061a38', '#0c2c5c', '#164486', '#2c64b0', '#80b0e0'),
+  moss: P('#041406', '#0a260c', '#124016', '#1e5e22', '#348232', '#7abc6a'),
 };
 
 const MATS = {
@@ -98,6 +107,45 @@ const MATS = {
     const { p } = c;
     return ramp(ITEM_PAL.twine, fract((p.x + p.y + p.z) * 1.4) < 0.4 ? 0.3 : 0.65, c.ax, c.ay);
   },
+  // Pack expansions' leather: tan hide, darker toward the edges of each piece, with a row of stitches round them
+  // where `info.stitch(p)` says (a distance from the seam, in pixels).
+  tan(c) {
+    const { p, info } = c;
+    let v = 0.5 + 0.14 * patches(p, 201, 0.35) + bevel(c, 0.18);
+    const d = info.stitch?.(p);
+    if (d !== undefined && Math.abs(d - 1.2) < 0.35 && fract((p.x + p.y + p.z) * 0.7) < 0.5) v = 0.9;
+    return ramp(ITEM_PAL.tan, v, c.ax, c.ay);
+  },
+  strap(c) {
+    return ramp(PAL.leather, 0.42 + 0.14 * patches(c.p, 203, 0.5) + bevel(c, 0.2), c.ax, c.ay);
+  },
+  // A scroll standing on end: the end shows a spiral of paper edges round `info` (cx, cz), the side plain paper.
+  paperEnd(c) {
+    const { p, n, info } = c;
+    if (Math.abs(n.y) > 0.9) {
+      const dx = p.x - info.cx, dz = p.z - info.cz;
+      const spiral = fract(Math.hypot(dx, dz) / 0.8 - Math.atan2(dz, dx) / (2 * Math.PI));
+      return ramp(ITEM_PAL.parchment, spiral < 0.3 ? 0.25 : 0.72, c.ax, c.ay);
+    }
+    return ramp(ITEM_PAL.parchment, 0.62 + 0.14 * patches(p, 205, 0.4), c.ax, c.ay);
+  },
+  // Rough hide for a pouch, creased where it's gathered in at the neck (`info.neck`).
+  hide(c) {
+    const { p, info } = c;
+    let v = 0.5 + 0.18 * patches(p, 207, 0.3) + 0.1 * c.n.y;
+    if (p.y > info.neck - 5 && fract(Math.atan2(p.z, p.x) * 1.9) < 0.22) v -= 0.22; // gathers
+    if (rand(c.ax, c.ay, 208) > 0.96) v -= 0.14;
+    return ramp(ITEM_PAL.hide, v, c.ax, c.ay);
+  },
+  lead: (c) => ramp(ITEM_PAL.lead, 0.5 + 0.2 * c.n.y + 0.1 * patches(c.p, 209, 0.9), c.ax, c.ay),
+  bone: (c) => ramp(ITEM_PAL.bone, 0.55 + 0.12 * patches(c.p, 211, 0.6) + bevel(c, 0.15), c.ax, c.ay),
+  ebony: (c) => ramp(ITEM_PAL.ebony, 0.5 + 0.15 * patches(c.p, 213, 0.6) + bevel(c, 0.2), c.ax, c.ay),
+  emerald: gem(ITEM_PAL.emerald),
+  // The potions in a bandolier, each a colour of its own (not tinted: you can't tell which they are anyway).
+  wine: (c) => vial('wine', c),
+  sea: (c) => vial('sea', c),
+  moss: (c) => vial('moss', c),
+
   // Coin with a raised rim and a boss in the middle; its edge is milled. `info.center`/`info.axis` place it.
   coin(c) {
     const { p, n, info } = c;
@@ -122,6 +170,13 @@ const MATS = {
     return ramp(PAL.gold, v, c.ax, c.ay);
   },
 };
+
+function vial(pal, c) {
+  const { p, info } = c;
+  let v = 0.55 + 0.1 * patches(p, 215, 0.5);
+  if (Math.cos(Math.atan2(p.z - info.cz, p.x - info.cx) - 0.8) > 0.8) v = 0.95;
+  return ramp(ITEM_PAL[pal], v, c.ax, c.ay);
+}
 
 const circle = (r, n, [cx, cy, cz] = [0, 0, 0]) =>
   Array.from({ length: n }, (_, k) => [cx + r * Math.cos((k / n) * 2 * Math.PI), cy + r * Math.sin((k / n) * 2 * Math.PI), cz]);
@@ -238,5 +293,69 @@ export const items = {
     const ring6 = (r, z) => circle(r, 6, [0, -9, z]);
     m.mesh('ruby', loft([apex(6, [0, -9, -2.0]), ring6(3.1, 0), ring6(1.9, 1.5)]), { mat: 'ruby' });
   }, { glow: ['ruby'] }),
+
+  // --- Pack expansions (CONTAINERS in src/items/defs.js) ---
+
+  scroll_holder: defineModel('scroll_holder', MATS, (m) => {
+    // Three stiff leather tubes bound side by side with two straps, brass-capped at each end, a rolled scroll standing
+    // in each, and a strap over the top to carry it by.
+    const X = [-6.2, 0, 6.2], rise = [3.4, 4.8, 2.6];
+    X.forEach((x, i) => {
+      const o = { origin: [x, 0, 0] };
+      m.mesh(`tube_${i + 1}`, lathe([[-8.4, 2.8], [8.2, 2.8]], { capStart: false, capEnd: false }), { mat: 'tan', ...o });
+      m.mesh(`cap_${i + 1}`, lathe([[-9.4, 3.05], [-8.2, 3.05]]), { mat: 'brass', ...o });
+      m.mesh(`rim_${i + 1}`, lathe([[7.8, 3.05], [8.8, 3.05]]), { mat: 'brass', ...o });
+      m.mesh(`scroll_${i + 1}`, lathe([[8.8, 2.1], [8.8 + rise[i], 2.1]], { capStart: false }), { mat: 'paperEnd', info: { cx: x, cz: 0 }, ...o });
+    });
+    for (const [i, y] of [-4, 3].entries()) {
+      m.mesh(`band_${i + 1}`, tube(roundLoop(9.35, 3.15, 2.95, (u, v) => [u, y, v]), { half: 0.55, side: [0, 1, 0], closed: true }), { mat: 'strap' });
+      m.cube(`buckle_${i + 1}`, [-1.3, y - 1.0, 3.0], [1.3, y + 1.0, 3.9], { mat: 'brass' });
+    }
+    m.mesh('handle', tube([[-9.4, 3, 0], [-9.9, 9, 0], [-7.6, 15.8, 0], [0, 18.4, 0], [7.6, 15.8, 0], [9.9, 9, 0], [9.4, 3, 0]],
+      { half: 0.6, side: [0, 0, 1] }), { mat: 'strap' });
+  }),
+
+  potion_bandolier: defineModel('potion_bandolier', MATS, (m) => {
+    // A leather belt lying in a loop, brass-buckled, with a padded loop for a flask every so often round it: five
+    // stoppered flasks in them, and one loop empty.
+    m.mesh('belt', revolve([[8.2, -1.6], [9, -1.6], [9, 1.6], [8.2, 1.6], [8.2, -1.6]], { sides: 16 }), { mat: 'strap' });
+    m.cube('buckle', [-9.8, -2.0, -1.8], [-8.8, 2.0, 1.8], { mat: 'brass' });
+    m.cube('tongue', [-9.95, -0.3, -0.35], [-9.75, 0.3, 2.6], { mat: 'brass' });
+    const liquids = ['wine', 'sea', 'moss', 'wine', 'moss'];
+    for (let k = 0; k < 6; k++) {
+      const a = ((k * 60 + 30) * Math.PI) / 180, cx = Math.cos(a) * 10.9, cz = Math.sin(a) * 10.9, o = { origin: [cx, 0, cz] };
+      m.mesh(`loop_${k + 1}`, lathe([[-0.2, 2.05], [1.8, 2.05]], { capStart: false, capEnd: false }), { mat: 'tan', ...o });
+      if (k === 5) continue;
+      const liquid = liquids[k];
+      m.mesh(`flask_${k + 1}`, revolve([[0, -1.9], [1.5, -1.7], [1.8, -0.6], [1.8, 3.6], [1.0, 4.6], [0.8, 5.6], [1.1, 5.9], [0, 6.3]],
+        { sides: 6, mat: (i) => (i <= 2 ? liquid : i <= 4 ? 'glass' : 'cork') }), { info: { cx, cz }, ...o });
+    }
+  }),
+
+  wand_holster: defineModel('wand_holster', MATS, (m) => {
+    // A flat sheath of stitched leather, narrowing to its tip, with a belt loop behind and a strap round its mouth,
+    // and three wands standing in it: oak, bone and ebony, each with its gem.
+    m.mesh('sheath', lathe([[-10, 1.6, 1.1], [-8, 3.0, 1.8], [2, 4.6, 2.3], [6, 4.8, 2.4]], { sides: 10 }),
+      { mat: 'tan', info: { stitch: (p) => (p.z > 0.5 ? Math.abs(p.x) + 1.2 : undefined) } });
+    m.mesh('mouth', lathe([[4.8, 5.05, 2.65], [6.3, 5.05, 2.65]], { sides: 10, capEnd: false }), { mat: 'strap' });
+    m.cube('loop', [-1.6, -2, -3.2], [1.6, 5.4, -2.3], { mat: 'strap' });
+    [[-2.4, 9, 'wood', 'crystal', 11], [0.2, -2, 'bone', 'ruby', 13.5], [2.6, -11, 'ebony', 'emerald', 10]].forEach(([x, tilt, wood, gemMat, L], i) => {
+      const o = { origin: [x, 2, 0], rotation: [0, 0, tilt] };
+      m.mesh(`wand_${i + 1}`, lathe([[0, 0.75], [L - 1, 0.75], [L, 0.9]], { capStart: false }), { mat: wood, ...o });
+      m.mesh(`gem_${i + 1}`, loft([latheRing(L, 0.85, 0.85, 6), latheRing(L + 1.2, 1.1, 1.1, 6), apex(6, [0, L + 3, 0])], { capStart: false }),
+        { mat: gemMat, ...o });
+    });
+  }, { glow: ['crystal', 'ruby', 'emerald'] }),
+
+  bullet_pouch: defineModel('bullet_pouch', MATS, (m) => {
+    // A pouch of rough hide gathered in at the neck by a drawstring, its mouth frilled open on a few lead bullets.
+    m.mesh('pouch', revolve([[0, -6], [4.5, -5.8], [6.4, -4.2], [6.8, -1.5], [6.0, 1.2], [4.2, 3.2], [2.3, 4.4], [2.0, 5.2], [3.0, 6.2],
+      [3.4, 7.2], [2.8, 7.4], [1.6, 5.9], [0, 5.9]], { sides: 10 }), { mat: 'hide', info: { neck: 4.4 } });
+    m.mesh('drawstring', tube(circle(2.35, 8).map(([x, z]) => [x, 4.8, z]), { half: 0.42, side: [0, 1, 0], closed: true }), { mat: 'twine' });
+    m.mesh('string_end', tube([[2.4, 4.8, 0], [3.9, 3.4, 0.8], [4.6, 0.8, 1.3]], { half: 0.38 }), { mat: 'twine' });
+    m.cube('knot', [3.9, -0.1, 0.6], [5.3, 1.1, 2.0], { mat: 'twine' });
+    [[-0.6, 6.5, 0.4], [0.7, 6.4, -0.3], [0, 7.1, -0.6]].forEach((at, i) =>
+      m.mesh(`bullet_${i + 1}`, lathe([[-0.9, 0], [-0.6, 0.7], [0, 0.9], [0.6, 0.7], [0.9, 0]], { sides: 6 }), { mat: 'lead', origin: at }));
+  }),
 };
 
