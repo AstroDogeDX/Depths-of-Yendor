@@ -28,7 +28,7 @@ A shared link to the site shows a preview card (Open Graph tags in `index.html`,
 | Mouse | Look (click the view to capture the pointer) |
 | Click / Space | Attack. Click swings once the meter is past 20%; holding re-swings only at full charge |
 | E | Pick up, open a chest or door, use stairs |
-| I or Tab | Pack (click or ↑↓ select, double-click or Enter use, T throw, D drop) |
+| I or Tab | Pack (click or arrow keys select, double-click or Enter use, T throw, D drop) |
 | M | Full map |
 | 1–6 | Hotbar slots (see below) |
 | F | Grip your weapon in both hands, or back in one (see *Off hand and two hands*) |
@@ -54,6 +54,17 @@ For testing by hand, press **`** (the key left of 1) during a run to open the de
 ## The pack
 
 The left of the pack shows a paper doll of what you have equipped: weapon in hand, what's in your off hand (the torch), armor on the chest (tinting the figure), two rings and two artefact attunements. A weapon gripped in both hands is marked *2H*, and what's in your off hand meanwhile *stowed*. A known curse gives the slot a red border. Clicking a filled slot selects that item. Selecting something you haven't equipped highlights the slot it would go into. Underneath are your derived stats (damage and its type, recovery, reach, defense, speed, strength), with anything too heavy for you shown in red. An unidentified weapon's + stays hidden: its damage shows as *(+?)*. A curse on it you don't know of stays hidden too.
+
+What you carry is a grid of tiles, one for each of the pack's 20 slots, with a gold frame round what you have equipped. Each tile shows the item's glyph, and in its corners what you know of it (`ui/tiles.js`):
+
+| Corner | Shows |
+| --- | --- |
+| Top left | a weapon's, armour's, ring's or wand's +, or **?** until you know it (a cursed ring's as the minus it gives you) |
+| Top right | how many there are, or a wand's charges (**?** until you know the wand) |
+| Bottom right | a mark for what it does: its element or enchantment (a long sword of flames, a wand of firebolt, a potion of liquid flame), or what a potion, scroll, wand or ring you know does (a # for magic mapping). Coloured letters for now, until they have sprites: `MARKS` in `ui/tiles.js` names each for what it stands for, so the art pass only changes that table |
+| Bottom left | nothing yet |
+
+A tile's colour says what you know of a curse. **Blue** is equipment you don't know yet: not identified, and whether it's cursed unknown too. **Red** is a curse you know of. Identified, or known to be clean (a scroll of remove curse, or an enchantment showing itself), it looks like anything that can't be cursed.
 
 ## Off hand and two hands
 

@@ -11,6 +11,7 @@ import { Logo } from './logo.js';
 import { readSave } from '../save.js';
 import { STATUSES } from '../status.js';
 import { BUILD, buildLabel } from '../build.js';
+import { tileInfo } from './tiles.js';
 
 const $ = (id) => document.getElementById(id);
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
@@ -40,6 +41,7 @@ const POPUPS = {
 // Channels on the map by what fills them, [in sight, remembered]; any other fill is a dark pit.
 const CHANNEL_COLORS = { water: ['#2f5f66', '#1f3c40'], lava: ['#a8400e', '#5a2208'] };
 const HOT_HINT = `Press 1–${HOTBAR_SIZE} or click a slot to put the selected item there · right-click a slot to clear it`;
+const PACK_COLUMNS = 5; // tiles across the pack (see renderInventory)
 // Paper-doll slots, positioned over the 240x300 figure in index.html.
 const DOLL_SLOTS = [
   { key: 'art0', label: 'Artefact', x: 14, y: 12 },
@@ -180,6 +182,7 @@ export class UI {
       this.dollEls[d.key] = el;
     }
     $('inv-hot-slots').style.gridTemplateColumns = `repeat(${HOTBAR_SIZE}, minmax(0, 1fr))`;
+    $('inv-list').style.gridTemplateColumns = `repeat(${PACK_COLUMNS}, var(--tile))`;
   }
 
   reset() {
@@ -578,44 +581,49 @@ export class UI {
     else this.renderInventory();
   }
 
-  /** Full rebuild — only when the pack's contents may have changed. Keeps the list's scroll position. */
+  /**
+   * Full rebuild — only when the pack's contents may have changed. The pack is a grid of tiles, one for every slot it
+   * has, in the order things went in: each shows the item's glyph, and in its corners and tint what you know of it
+   * (see tiles.js). Equipped things are framed in gold.
+   */
   renderInventory() {
     const g = this.game, p = g.player, k = g.knowledge;
     const inv = p.inventory;
-    const list = $('inv-list');
-    const scroll = list.scrollTop;
-    list.innerHTML = '';
+    const grid = $('inv-list');
+    grid.innerHTML = '';
     this.invSel = Math.max(0, Math.min(this.invSel, inv.length - 1));
     $('inv-count').textContent = `${inv.length} / ${INVENTORY_SIZE}   ·   ${p.gold} gold`;
-    // The prompt's space is always reserved so the list never shifts when it appears.
+    // The prompt's space is always reserved so the pack never shifts when it appears.
     const shop = g.level.shopkeeper && g.level.playerInShop ? 'The shopkeeper is buying: pick an item and choose Sell.' : '';
     $('inv-prompt').textContent = this.selectMode ? this.selectMode.prompt : shop;
     $('inv-prompt').classList.toggle('off', !this.selectMode && !shop);
 
-    inv.forEach((it, i) => {
-      const li = document.createElement('li');
-      const ok = !this.selectMode || this.selectMode.filter(it);
-      li.className = ok ? '' : 'dim';
-      const color = glyphColor(k, it);
-      const eq = equipTag(p, it);
-      li.innerHTML = `<span class="glyph" style="color:${color}">${KIND_GLYPH[it.kind]}</span><span class="nm"></span>${eq ? `<span class="eq">${eq}</span>` : ''}`;
-      li.querySelector('.nm').textContent = k.name(it);
+    for (let i = 0; i < Math.max(INVENTORY_SIZE, inv.length); i++) {
+      const it = inv[i], tile = document.createElement('div');
+      grid.appendChild(tile);
+      if (!it) {
+        tile.className = 'tile empty';
+        continue;
+      }
+      const t = tileInfo(it, k), eq = equipTag(p, it);
+      tile.className = `tile ${t.tint}${eq ? ' eq' : ''}${!this.selectMode || this.selectMode.filter(it) ? '' : ' dim'}`;
+      tile.innerHTML = `<span class="tg" style="color:${glyphColor(k, it)}">${KIND_GLYPH[it.kind]}</span>` +
+        `<span class="c tl">${t.level}</span><span class="c tr">${t.count}</span><span class="c bl"></span>` +
+        (t.mark ? `<span class="c br" style="color:${t.mark.color}"></span>` : '');
+      if (t.mark) tile.querySelector('.br').textContent = t.mark.text;
+      tile.title = k.name(it) + (eq ? ` (${eq})` : '');
       // Click selects; double-click performs the first action. Hover only highlights.
-      li.addEventListener('click', () => this.selectRow(i));
-      li.addEventListener('dblclick', () => { this.selectRow(i); this.activate(0); });
-      list.appendChild(li);
-    });
-    if (!inv.length) list.innerHTML = '<li class="dim">Your pack is empty.</li>';
-    list.scrollTop = scroll;
+      tile.addEventListener('click', () => this.selectRow(i));
+      tile.addEventListener('dblclick', () => { this.selectRow(i); this.activate(0); });
+    }
     this.selectRow(this.invSel);
   }
 
-  /** Change the selection without rebuilding the list. */
+  /** Change the selection without rebuilding the pack. */
   selectRow(i) {
     this.invSel = i;
-    const rows = $('inv-list').children;
-    for (let r = 0; r < rows.length; r++) rows[r].classList.toggle('sel', r === i);
-    rows[i]?.scrollIntoView({ block: 'nearest' });
+    const tiles = $('inv-list').children;
+    for (let r = 0; r < tiles.length; r++) tiles[r].classList.toggle('sel', r === i && r < this.game.player.inventory.length);
     this.renderDetail();
     this.renderHotStrip();
     this.renderDoll();
@@ -627,7 +635,8 @@ export class UI {
     const acts = $('inv-actions');
     acts.innerHTML = '';
     if (it) {
-      $('inv-name').textContent = k.name(it);
+      const eq = equipTag(p, it);
+      $('inv-name').textContent = k.name(it) + (eq ? ` (${eq})` : '');
       $('inv-desc').textContent = k.describe(it);
       if (this.selectMode) {
         const ok = this.selectMode.filter(it);
@@ -646,7 +655,7 @@ export class UI {
       }
     } else {
       $('inv-name').textContent = '';
-      $('inv-desc').textContent = '';
+      $('inv-desc').textContent = p.inventory.length ? '' : 'Your pack is empty.';
     }
   }
 
@@ -742,8 +751,9 @@ export class UI {
     const n = g.player.inventory.length;
     const digit = /^(?:Digit|Numpad)([1-9])$/.exec(e.code);
     if (digit && +digit[1] <= HOTBAR_SIZE) { this.assignSelected(+digit[1] - 1); return; }
-    if (e.code === 'ArrowUp' || e.code === 'KeyW') this.selectRow((this.invSel - 1 + n) % Math.max(1, n));
-    else if (e.code === 'ArrowDown' || e.code === 'KeyS') this.selectRow((this.invSel + 1) % Math.max(1, n));
+    // Arrows (or W and S, up and down) move about the grid of tiles, wrapping round the things in the pack.
+    const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -PACK_COLUMNS, KeyW: -PACK_COLUMNS, ArrowDown: PACK_COLUMNS, KeyS: PACK_COLUMNS }[e.code];
+    if (step && n) this.selectRow((((this.invSel + step) % n) + n) % n);
     else if (e.code === 'Enter' || e.code === 'KeyE') this.activate(0);
     else if (e.code === 'KeyD' && !this.selectMode) {
       const it = g.player.inventory[this.invSel];
