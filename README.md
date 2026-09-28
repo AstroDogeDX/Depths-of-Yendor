@@ -28,9 +28,9 @@ A shared link to the site shows a preview card (Open Graph tags in `index.html`,
 | Mouse | Look (click the view to capture the pointer) |
 | Click / Space | Attack. Click swings once the meter is past 20%; holding re-swings only at full charge |
 | E | Pick up, open a chest or door, use stairs |
-| I or Tab | Pack (click or arrow keys select, Q next tab, double-click or Enter use, T throw, D drop) |
+| I or Tab | Pack (click or arrow keys select, drag to the doll or hotbar, 1–6 put on the hotbar, Q next tab, double-click or Enter use, T throw, D drop) |
 | M | Full map |
-| 1–6 | Hotbar slots (see below) |
+| 1–6 | Hotbar slots (see below). For a potion, hold the key: click throws it, right-click drinks it |
 | F | Grip your weapon in both hands, or back in one (see *Off hand and two hands*) |
 | Right-click | Use what's in your off hand, or, gripping your weapon in both hands, its special (none yet) |
 | Q | Drink a potion you *know* is healing |
@@ -53,9 +53,13 @@ For testing by hand, press **`** (the key left of 1) during a run to open the de
 
 ## The pack
 
-The left of the pack shows a paper doll of what you have equipped: weapon in hand, what's in your off hand (the torch), armor on the chest (tinting the figure), two rings and two artefact attunements. A weapon gripped in both hands is marked *2H*, and what's in your off hand meanwhile *stowed*. A known curse gives the slot a red border. Clicking a filled slot selects that item. Selecting something you haven't equipped highlights the slot it would go into. Underneath are your derived stats (damage and its type, recovery, reach, defense, speed, strength), with anything too heavy for you shown in red. An unidentified weapon's + stays hidden: its damage shows as *(+?)*. A curse on it you don't know of stays hidden too.
+The left of the pack shows a paper doll of what you have equipped: weapon in hand, what's in your off hand (the torch), armor on the chest (tinting the figure), two rings and two artefact attunements. A weapon gripped in both hands is marked *2H*, and what's in your off hand meanwhile *stowed*. A known curse gives the slot a red border, and something you know is clean but haven't identified a blue one. Clicking a filled slot selects that item. Selecting something you haven't equipped highlights the slot it would go into. Underneath are your derived stats (damage and its type, recovery, reach, defense, speed, strength), with anything too heavy for you shown in red. An unidentified weapon's + stays hidden: its damage shows as *(+?)*. A curse on it you don't know of stays hidden too.
 
-What you carry is a grid of tiles, one for each of the pack's 20 slots, with a gold frame round what you have equipped. Each tile shows the item's glyph, and in its corners what you know of it (`ui/tiles.js`):
+**What's equipped or on the hotbar is out of the pack.** It takes no slot, and you get at it from its doll or hotbar slot: click one to select what's in it, like a tile. Taking something off (or off the hotbar) puts it back in the pack, so that needs a free slot; the pack says so when there isn't one. Swapping one thing for another (a new weapon for the old) always works, since the one coming out makes room for the one going in. A hotbar slot waiting for more of a stack you ran out of (see *Hotbar*) takes a new one straight back, full pack or not.
+
+**Moving things about.** Drag a tile to a doll slot to put it on (a ring or artefact to the slot you choose; a ring dragged from one hand to the other swaps them), or to a hotbar slot to put it there. Drag from a doll or hotbar slot back onto the pack to put it away, or from one hotbar slot to another to swap them. The old ways work too: select a thing and use its buttons (**Wield**, **Put on**, **Remove**, **Off the hotbar**...), press 1–6 to put it in that hotbar slot (again to take it off), or double-click it. While the pack is open, the HUD's hotbar below it is live for all of this, and right-clicking a hotbar slot empties it.
+
+What's in the pack is a grid of tiles, one for each of its 20 slots. It keeps things of a kind together (weapons, off-hand things, armour, rings, artefacts, wands, potions, scrolls, food: `packOrder` in `player.js`), so you know roughly where to look. Weapons, armour and the like go by type within their group, weakest first; potions, scrolls, wands and rings by when you got them, since an order by type would give away what you don't know. Each tile shows the item's glyph, and in its corners what you know of it (`ui/tiles.js`):
 
 | Corner | Shows |
 | --- | --- |
@@ -64,9 +68,9 @@ What you carry is a grid of tiles, one for each of the pack's 20 slots, with a g
 | Bottom right | a mark for what it does: its element or enchantment (a long sword of flames, a wand of firebolt, a potion of liquid flame), or what a potion, scroll, wand or ring you know does (a # for magic mapping). Coloured letters for now, until they have sprites: `MARKS` in `ui/tiles.js` names each for what it stands for, so the art pass only changes that table |
 | Bottom left | nothing yet |
 
-A tile's colour says what you know of a curse. **Blue** is equipment you don't know yet: not identified, and whether it's cursed unknown too. **Red** is a curse you know of. Identified, or known to be clean (a scroll of remove curse, or an enchantment showing itself), it looks like anything that can't be cursed.
+A tile's colour says what you know of a curse. Equipment you know nothing about has no tint at all: a tint would tell you something. You find out by trying it: putting on a weapon, armour or ring tells you whether it's cursed (a curse binds it to you, or taints you if it's weakened, and otherwise it's clean), and so does zapping a wand (a cursed one never casts its own spell). A scroll of remove curse, identify or upgrade tells you too. **Blue** is something you know is free of curses but haven't identified: safe to use, though its + is still a mystery. **Red** is a curse you know of, and stays red once you know everything else about it. Identified and clean, it looks like anything that can't be cursed. The same tints show on the doll and the hotbar.
 
-**Pack expansions.** Each shop sells one of four expansions (`CONTAINERS` in `items/defs.js`): the **scroll holder**, the **potion bandolier**, the **wand holster** and the **bullet pouch**, the last for thrown weapons once there are some. Each adds 10 slots for its own kinds of thing, on a tab of its own above the grid (**Pack**, **Scrolls**, **Potions**, **Wands**, **Pouch**), with how full it is. Click a tab or press **Q** (Shift+Q goes back) to switch. An expansion isn't something you carry: once you have one it's part of your pack for good, and doesn't take a slot. Where each thing goes follows from the order you got things in (`Player.bags`): into the expansion for its kind while that has room, otherwise into the pack. So what you already carry moves in the moment you get an expansion, anything you find later goes straight in, and when an expansion fills up (only wands can, one to a slot) the rest go in the pack and move over as room frees up. Stacks work as before, one stack to a slot. Asked to choose an item (to identify, say), the pack opens on the tab with the first thing that will do, and dims tabs with nothing that will. New expansions (a quiver for arrows, say) are an entry in `CONTAINERS` naming the kinds they hold; one without `shop` isn't sold, and comes some other way.
+**Pack expansions.** Each shop sells one of four expansions (`CONTAINERS` in `items/defs.js`): the **scroll holder**, the **potion bandolier**, the **wand holster** and the **bullet pouch**, the last for thrown weapons once there are some. Each adds 10 slots for its own kinds of thing, on a tab of its own above the grid (**Pack**, **Scrolls**, **Potions**, **Wands**, **Pouch**), with how full it is. Click a tab or press **Q** (Shift+Q goes back) to switch. An expansion isn't something you carry: once you have one it's part of your pack for good, and doesn't take a slot. Where each thing goes follows from the pack's order (`Player.bags`): into the expansion for its kind while that has room, otherwise into the pack. So what you already carry moves in the moment you get an expansion, anything you find later goes straight in, and when an expansion fills up (only wands can, one to a slot) the rest go in the pack and move over as room frees up. Stacks work as before, one stack to a slot. Asked to choose an item (to identify, say), the pack opens on the tab with the first thing that will do, and dims tabs with nothing that will. New expansions (a quiver for arrows, say) are an entry in `CONTAINERS` naming the kinds they hold; one without `shop` isn't sold, and comes some other way.
 
 ## Off hand and two hands
 
@@ -83,9 +87,9 @@ Wands no longer have a key of their own: put them on the hotbar.
 
 ## Hotbar
 
-Open your pack, select a potion, scroll, food, wand or artefact, then press 1–6 (or click a slot on the pack's hotbar row) to bind it. Pressing the same number on the same item unbinds it, and right-clicking a slot clears it. In play, the number key uses the item:
+Open your pack, select a potion, scroll, food, wand or artefact, then press 1–6 to put it in that slot, or drag it onto the hotbar under the pack. Pressing the same number on the same item takes it off again, as does dragging it back onto the pack or right-clicking the slot. What's on the hotbar is out of the pack (see *The pack*). In play, the number key uses the item:
 
-- **Potions** are drunk, unless you've identified them as harmful (poison, confusion, darkness, paralysis, liquid flame), in which case they're **thrown** where you're looking. Unidentified potions are always drunk, so the hotbar never gives away what a potion is.
+- **Potions** wait for you to choose: hold the key down, then **click** to throw the potion where you're looking, or **right-click** to drink it (click again for another, while you hold the key). The slot lifts and the prompt says so while you hold it, and meanwhile the mouse does nothing else: no swing, nothing from your off hand. Let go without clicking and nothing happens. The choice is always yours, so the hotbar never gives away what a potion is, and you can throw a good one where that helps (at allies, one day).
 - **Scrolls** are read, **food** is eaten, and **wands** are zapped at the crosshair.
 - **Artefacts** trigger their active power if you're attuned to them. The slot shows the cooldown.
 
@@ -171,14 +175,14 @@ Equipment has a **+N** (never below 0), which the scroll of **upgrade** raises. 
 
 Now and then a weapon or armour you find is already enchanted: about 5% of those that aren't cursed on the first floor, rising to about 10% on the last. A wand you find may have a +, as often as a weapon does. The shop's weapons and armour on its tables are never enchanted, and its wands never have a +.
 
-You learn an Enchantment or Curse of ___ the moment you put the thing on ("Power stirs in the long sword: an Enchantment of Flames!"), and so, with an enchantment, that it's free of curses. Its + you only learn by using it (or a scroll of identify).
+You learn an Enchantment or Curse of ___ the moment you put the thing on ("Power stirs in the long sword: an Enchantment of Flames!"). Putting something on always tells you whether it's cursed: if nothing binds or taints you, it's clean. Its + you only learn by using it (or a scroll of identify).
 
 **Curses** come in two strengths (`item.curse`):
 
 - **Full:** a cursed weapon, armour or ring binds itself to you once you put it on, and a weapon or armour has a Curse of ___ (clumsiness, frailty, burden, clamour...). A weapon's or armour's + still counts as normal. A cursed ring's + works *against* you instead: a cursed ring of protection +1 is −1 defense until the curse is lifted.
 - **Weakened:** it comes off, but its Curse of ___ (or a ring's reversal) remains.
 
-**Cursed wands** misfire. They don't cast their own spell, but some wand's bolt at random: missile, firebolt, frost or teleport other, never a line like lightning. A fifth of the time that fizzles, wasting the charge. Otherwise it flies as a wild, green, flickering bolt carrying that spell, or, while the curse is full, a quarter of the time the spell turns on you. The first misfire tells you the wand is cursed.
+**Cursed wands** misfire. They don't cast their own spell, but some wand's bolt at random: missile, firebolt, frost or teleport other, never a line like lightning. A fifth of the time that fizzles, wasting the charge. Otherwise it flies as a wild, green, flickering bolt carrying that spell, or, while the curse is full, a quarter of the time the spell turns on you. The first misfire tells you the wand is cursed, and since a cursed wand never casts its own spell, the first zap that does tells you it's clean.
 
 What you know shows in its name: "(cursed)", "(curse weakened)", or "(uncursed)" when you know it's clean but nothing more.
 

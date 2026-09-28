@@ -13,7 +13,7 @@ import { burst, ring, gasCloud, lightColumn } from './fx/particles.js';
 import { playerPopupPos } from './combat.js';
 import { Input, GAME_KEYS } from './input.js';
 import { Sfx } from './audio.js';
-import { useSlot } from './hotbar.js';
+import { useSlot, slotItem, usePotionSlot } from './hotbar.js';
 import { disposeGroup, propsForTheme } from './dungeon/levelBuilder.js';
 import { loadProps } from './dungeon/props.js';
 import { loadTraps } from './world/trapModels.js';
@@ -134,6 +134,7 @@ export class Game {
     this.amuletTaken = false;
     this.paraMsgT = -Infinity;
     this.menu = null;
+    this.potionHold = null;
   }
 
   newRun({ seed, name }) {
@@ -422,10 +423,11 @@ export class Game {
     else if (inp.wasPressed('KeyM')) this.openMenu('map');
     if (inp.wasPressed('KeyE') && this.canAct()) this.interact();
     if (inp.wasPressed('KeyF') && this.canAct()) toggleGrip(this);
+    this.holdPotion(inp);
     if (inp.wasPressed('Mouse2') && this.canAct()) useOffhand(this);
     if (inp.wasPressed('KeyQ') && this.canAct()) this.quickHeal();
     for (let i = 0; i < HOTBAR_SIZE; i++) {
-      if ((inp.wasPressed(`Digit${i + 1}`) || inp.wasPressed(`Numpad${i + 1}`)) && useSlot(this, i)) this.ui.flashSlot(i);
+      if (this.potionHold?.i !== i && (inp.wasPressed(`Digit${i + 1}`) || inp.wasPressed(`Numpad${i + 1}`)) && useSlot(this, i)) this.ui.flashSlot(i);
     }
     if (inp.wasPressed('KeyR') && this.canAct()) activateArtefact(this, 0);
     if (inp.wasPressed('KeyT') && this.canAct()) activateArtefact(this, 1);
@@ -434,6 +436,32 @@ export class Game {
       this.resize();
       this.log(`Render resolution: ${RENDER_HEIGHTS[this.resIdx] || 'native'}.`, 'info');
     }
+  }
+
+  /**
+   * A potion's hotbar slot waits while you hold its key down: click to throw the potion, right-click to drink it (and
+   * again, for another, while you still hold it). Meanwhile the mouse does nothing else: no swing, nothing from your off
+   * hand. Let go without choosing and nothing happens. `potionHold`: { i (the slot) } while a key is held.
+   */
+  holdPotion(inp) {
+    const down = (i) => inp.down(`Digit${i + 1}`) || inp.down(`Numpad${i + 1}`);
+    if (this.potionHold && !down(this.potionHold.i)) this.potionHold = null;
+    if (!this.potionHold) {
+      for (let i = 0; i < HOTBAR_SIZE; i++) {
+        if ((inp.wasPressed(`Digit${i + 1}`) || inp.wasPressed(`Numpad${i + 1}`)) && slotItem(this.player, i)?.kind === 'potion') {
+          this.potionHold = { i };
+          break;
+        }
+      }
+    }
+    if (!this.potionHold) return;
+    const i = this.potionHold.i;
+    const how = inp.wasPressed('Mouse0') ? 'throw' : inp.wasPressed('Mouse2') ? 'drink' : null;
+    inp.pressed.delete('Mouse0');
+    inp.pressed.delete('Mouse2');
+    inp.mouseDown = false;
+    if (how && usePotionSlot(this, i, how)) this.ui.flashSlot(i);
+    if (!slotItem(this.player, i)) this.potionHold = null; // (the last of them)
   }
 
   /** False while you're charmed: no swinging, zapping, throwing or warlike powers. Says so, at most every 0.6s. */

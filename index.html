@@ -55,9 +55,10 @@
         <div id="status-line"></div>
       </div>
       <div id="gear"></div>
-      <div id="hotbar"></div>
       <div id="popups"></div>
     </div>
+    <!-- Outside the HUD, so it can come up over the pack screen, where it's live (see UI.updateHotbar). -->
+    <div id="hotbar" hidden></div>
 
     <div id="pause" class="overlay" hidden>
       <div class="panel small">
@@ -110,11 +111,7 @@
             <div id="inv-actions"></div>
           </div>
         </div>
-        <div id="inv-hot">
-          <div class="inv-hot-head"><span>Hotbar</span><span id="inv-hot-note"></span></div>
-          <div id="inv-hot-slots"></div>
-        </div>
-        <div class="hint">Click or arrow keys to select · Q next tab · double-click or Enter to use · T throw · D drop · I / Esc close</div>
+        <div class="hint">Click or arrows select · drag to the doll or the hotbar, or press 1–6 · right-click a hotbar slot to empty it · Q tab · Enter use · T throw · D drop · I close</div>
       </div>
     </div>
 
@@ -177,7 +174,7 @@
           <section>
             <h3>Everything else</h3>
             <p><b>E</b> pick up, open, buy, use stairs · <b>I</b> pack · <b>M</b> map</p>
-            <p><b>1–6</b> hotbar: potions, scrolls, food, wands (assign from your pack) · <b>P</b> pixel size · <b>Esc</b> pause, or save and quit</p>
+            <p><b>1–6</b> hotbar: scrolls, food, wands (put them there from your pack) · potions: hold the key, then click to throw or right-click to drink · <b>P</b> pixel size · <b>Esc</b> pause, or save and quit</p>
           </section>
         </div>
         <h3>The descent</h3>

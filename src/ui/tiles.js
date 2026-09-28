@@ -4,8 +4,10 @@
 //   bottom right  a mark for what it does: its element or enchantment, or what a potion, scroll, wand or ring you
 //                 know does
 //   bottom left   nothing yet
-// and its tint: red for a curse you know of, blue for equipment you don't know yet (not identified, and whether it's
-// cursed unknown too). Identified, or known to be clean, it looks like anything that can't be cursed.
+// and its tint: red for a curse you know of (still, once you know everything else about it), blue for equipment you
+// know is free of curses but haven't identified yet. Equipment you know nothing of has no tint, since that would tell you
+// something: you learn whether it's cursed by putting it on (or zapping a wand), or by a scroll. Identified and clean,
+// it looks like anything that can't be cursed.
 //
 // The marks are placeholders until they have sprites: a coloured letter each. Each is named for what it stands for
 // (fire, ice, a map...), so the art pass need only change MARKS, not what uses them.
@@ -61,7 +63,7 @@ const CURSABLE = new Set(['weapon', 'armor', 'ring', 'wand']);
 
 /**
  * A tile's corners and tint for `item`, as far as `k` (the run's Knowledge) says you know it: { level, count, mark
- * (a MARKS entry or null), tint ('cursed', 'unknown' or '') }.
+ * (a MARKS entry or null), tint ('cursed', 'clean' or '') }.
  */
 export function tileInfo(item, k) {
   let level = '', count = '', mark = null, tint = '';
@@ -70,7 +72,7 @@ export function tileInfo(item, k) {
     else if (item.kind === 'ring') level = item.type === 'teleportation' ? '' : `${item.curse > 0 ? '−' : '+'}${item.plus}`;
     else level = `+${item.plus}`;
     if (item.curseKnown && item.curse > 0) tint = 'cursed';
-    else if (!item.identified && !item.curseKnown) tint = 'unknown';
+    else if (item.curseKnown && !item.identified) tint = 'clean';
   }
   if (item.kind === 'wand') count = item.identified ? `${item.charges}/${item.maxCharges}` : '?';
   else if (item.qty > 1) count = String(item.qty);

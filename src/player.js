@@ -3,9 +3,10 @@ import {
   STAMINA_BASE, STAMINA_PER_LEVEL, STAMINA_DRAIN, STAMINA_REGEN, STAMINA_REGEN_DELAY, STAMINA_RECOVER, MODE_SPEED, NOISE,
   TWO_HAND_STR,
 } from './config.js';
-import { WEAPONS, ARMORS, ARTEFACTS, OFFHANDS, CONTAINERS, CONTAINER_SIZE, wandRecharge } from './items/defs.js';
+import { WEAPONS, ARMORS, ARTEFACTS, OFFHANDS, FOOD, CONTAINERS, CONTAINER_SIZE, wandRecharge } from './items/defs.js';
 import { enchantOf, baneOf } from './items/enchant.js';
 import { stackable } from './items/generate.js';
+import { slotHolds } from './hotbar.js';
 import { playerStrike } from './combat.js';
 import { damageType, damageMult } from './damage.js';
 import { STATUSES, blankStatus, restoreStatus, saveStatus, afflict, tickStatuses } from './status.js';
@@ -18,6 +19,20 @@ const SAVED = [
   'maxStamina', 'stamina', 'winded', 'sneaking', 'twoHanded', 'artefactCD', 'teleT', 'kills', 'maxDepth', 'keys', 'goldKeys',
   'containers', 'hotbar', 'inventory',
 ];
+
+// The pack keeps things of a kind together, in this order (anything else last), so you know roughly where to look.
+// Weapons, armour, off-hand things, artefacts and food, whose type you can always see, go by their type in the order of
+// their table in items/defs.js (weakest first); potions, scrolls, wands and rings in the order you got them, since an
+// order by type would give away what you don't know.
+const PACK_ORDER = ['weapon', 'offhand', 'armor', 'ring', 'artefact', 'wand', 'potion', 'scroll', 'food', 'amulet'];
+const TYPE_ORDER = Object.fromEntries(Object.entries({ weapon: WEAPONS, armor: ARMORS, offhand: OFFHANDS, artefact: ARTEFACTS, food: FOOD })
+  .map(([kind, defs]) => [kind, Object.keys(defs)]));
+const rankOf = (kind) => (PACK_ORDER.includes(kind) ? PACK_ORDER.indexOf(kind) : PACK_ORDER.length);
+export function packOrder(a, b) {
+  if (a.kind !== b.kind) return rankOf(a.kind) - rankOf(b.kind);
+  const types = TYPE_ORDER[a.kind];
+  return (types ? types.indexOf(a.type) - types.indexOf(b.type) : 0) || a.uid - b.uid;
+}
 
 const FISTS = { name: 'fists', dmgType: 'bash', dmg: [1, 3], recharge: 0.6, reach: 1.4, str: 0, model: null };
 
@@ -85,6 +100,8 @@ export class Player {
       rings: s.equip.rings.map(byUid), artefacts: s.equip.artefacts.map(byUid),
     };
     this.twoHanded = this.twoHanded && !!this.equip.weapon;
+    // Putting something on tells you whether it's cursed (see equipItem), which a save from before it did doesn't know.
+    for (const it of [this.equip.weapon, this.equip.armor, ...this.equip.rings]) if (it) it.curseKnown = true;
     restoreStatus(this.status, s.status);
   }
 
@@ -222,21 +239,44 @@ export class Player {
 
   /**
    * Your pack by its tabs: the pack itself (INVENTORY_SIZE slots, for anything) and each expansion you have, in the
-   * order of CONTAINERS (CONTAINER_SIZE slots, for the kinds of thing it holds): [{ key ('pack', or the expansion's type), size, holds (the
-   * kinds, or null), items }]. Everything you carry is in `inventory`, in the order you got it, and where each thing is
-   * follows from that: in the first expansion that holds its kind and has room, or else the pack. So a new expansion
-   * takes in what it holds at once, and one with room to spare takes in any of its kinds that had to go in the pack.
+   * order of CONTAINERS (CONTAINER_SIZE slots, for the kinds of thing it holds): [{ key ('pack', or the expansion's
+   * type), size, holds (the kinds, or null), items }]. Everything you carry is in `inventory`, but what you have
+   * equipped or on the hotbar is out of the pack, and takes no slot. The rest is in PACK_ORDER (see packOrder), and
+   * where each thing is follows from that: in the first expansion that holds its kind and has room, or else the pack.
+   * So a new expansion takes in what it holds at once, and one with room to spare takes in any of its kinds that had
+   * to go in the pack.
    */
   bags() {
     const bags = [{ key: 'pack', size: INVENTORY_SIZE, holds: null, items: [] }];
     for (const type in CONTAINERS) if (this.containers.includes(type)) bags.push({ key: type, size: CONTAINER_SIZE, holds: CONTAINERS[type].holds, items: [] });
-    for (const it of this.inventory) (bags.find((b) => b.holds?.includes(it.kind) && b.items.length < b.size) ?? bags[0]).items.push(it);
+    const packed = this.inventory.filter((it) => this.inPack(it)).sort(packOrder);
+    for (const it of packed) (bags.find((b) => b.holds?.includes(it.kind) && b.items.length < b.size) ?? bags[0]).items.push(it);
     return bags;
   }
 
-  /** Whether there's a free slot for `item`, in an expansion that holds its kind or the pack. */
+  /** Whether something you carry is in the pack: not equipped, nor on the hotbar. */
+  inPack(item) {
+    return !this.isEquipped(item) && !this.onHotbar(item);
+  }
+
+  /** Whether a hotbar slot holds `item` (see hotbar.js). */
+  onHotbar(item) {
+    return this.hotbar.some((b) => slotHolds(b, item));
+  }
+
+  /**
+   * Whether there's room for `item` to come into the pack: a free slot in an expansion that holds its kind or in the
+   * pack, or a hotbar slot waiting for it (one that held the last of a stack of its kind, or held it before you
+   * dropped it), which it goes straight back into.
+   */
   hasRoom(item) {
+    if (this.onHotbar(item)) return true;
     return this.bags().some((b) => (!b.holds || b.holds.includes(item.kind)) && b.items.length < b.size);
+  }
+
+  /** Whether what's in the pack fits it (the Amulet always does: a full pack must never block the end of the quest). */
+  packFits() {
+    return this.bags()[0].items.filter((it) => it.kind !== 'amulet').length <= INVENTORY_SIZE;
   }
 
   /** Adds an item, stacking where possible. Returns false if there's no room for it. */
@@ -261,7 +301,7 @@ export class Player {
         return true;
       }
     }
-    // The Amulet always fits: a full pack must never block the end of the quest.
+    // The Amulet always fits (see packFits).
     if (!this.hasRoom(item) && item.kind !== 'amulet') return false;
     this.inventory.push(item);
     return true;

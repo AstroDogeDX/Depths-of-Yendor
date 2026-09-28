@@ -32,7 +32,7 @@ export function itemActions(game, item) {
     case 'wand': acts.push({ label: 'Zap', fn: () => zapWand(game, item) }); break;
     case 'weapon': case 'offhand': case 'armor': case 'ring': case 'artefact': {
       const [on, off] = EQUIP_LABELS[item.kind];
-      acts.push(equipped ? { label: off, fn: () => unequipItem(game, item) } : { label: on, fn: () => equipItem(game, item) });
+      acts.push(equipped ? { label: off, fn: () => putAway(game, item) } : { label: on, fn: () => equipItem(game, item) });
       break;
     }
     case 'amulet': acts.push({ label: 'Invoke', fn: () => game.amuletDialog() }); break;
@@ -400,7 +400,9 @@ export function zapWand(game, item) {
   });
   const learn = () => { if (k.learn(item)) game.log(`This must be a ${k.name(item)}!`, 'info'); };
 
-  // A cursed wand won't cast its own spell, but some wand's bolt at random, and it may fizzle, or turn on you.
+  // A cursed wand won't cast its own spell, but some wand's bolt at random, and it may fizzle, or turn on you. One that
+  // casts its own isn't cursed, then.
+  if (item.curse === 0) item.curseKnown = true;
   if (item.curse > 0) wildZap(game, item, power, bolt);
   else if (item.type === 'lightning') {
     const len = 16;
@@ -504,11 +506,21 @@ function cursedStuck(game, item) {
   return false;
 }
 
-export function equipItem(game, item) {
+/** The paper-doll slots each kind of equipment can go in (see equipSlotFor). */
+export const DOLL_SLOTS_FOR = {
+  weapon: ['weapon'], offhand: ['offhand'], armor: ['armor'], ring: ['ring0', 'ring1'], artefact: ['art0', 'art1'],
+};
+
+/**
+ * Equips an item, in its paper-doll slot (see equipSlotFor), or in `slot` (one of DOLL_SLOTS_FOR its kind), where
+ * there's a choice: dragged to a ring or artefact slot. Whatever was there goes back in the pack.
+ */
+export function equipItem(game, item, slot = null) {
   const p = game.player, k = game.knowledge, e = p.equip;
   const name = () => k.name(item);
-  // Putting on something cursed tells you so: a full curse binds it to you; a weakened one only taints you. So does
-  // something enchanted, and with that, that it's free of curses (an item never has both: see enchant.js).
+  // Putting something on tells you whether it's cursed: a full curse binds it to you; a weakened one only taints you;
+  // and if neither happens, it's free of curses. Something enchanted tells you that too (an item never has both: see
+  // enchant.js), and what its enchantment is.
   const bind = () => {
     if (binds(item)) {
       item.curseKnown = true;
@@ -522,6 +534,7 @@ export function equipItem(game, item) {
       item.enchantKnown = item.curseKnown = true;
       game.log(`Power stirs in the ${n}: an Enchantment of ${e.name[0].toUpperCase() + e.name.slice(1)}! ${e.desc}`, 'good');
     }
+    item.curseKnown = true;
   };
   switch (item.kind) {
     case 'weapon': {
@@ -555,20 +568,38 @@ export function equipItem(game, item) {
       bind();
       break;
     case 'ring': {
-      const key = equipSlotFor(p, item);
+      const key = slot ?? equipSlotFor(p, item);
       if (!key) return cursedStuck(game, e.rings[0]);
-      const slot = +key.slice(4);
-      e.rings[slot] = item;
+      const i = +key.slice(4), was = e.rings.indexOf(item);
+      if (e.rings[i] && e.rings[i] !== item && binds(e.rings[i])) return cursedStuck(game, e.rings[i]);
+      // Moved from one hand to the other, it swaps places with whatever's there.
+      if (was >= 0) {
+        [e.rings[was], e.rings[i]] = [e.rings[i], item];
+        return false;
+      }
+      e.rings[i] = item;
       game.log(`You slip the ${name()} onto your finger.`);
       bind();
       break;
     }
     case 'artefact': {
-      const slot = +equipSlotFor(p, item).slice(3);
-      e.artefacts[slot] = item;
-      p.artefactCD[slot] = 0;
+      const i = +(slot ?? equipSlotFor(p, item)).slice(3), was = e.artefacts.indexOf(item);
+      if (was >= 0) {
+        [e.artefacts[was], e.artefacts[i]] = [e.artefacts[i], item];
+        [p.artefactCD[was], p.artefactCD[i]] = [p.artefactCD[i], p.artefactCD[was]];
+        return false;
+      }
+      // One taken from the hotbar (not the pack) leaves no room in the pack for the one it replaces.
+      const old = e.artefacts[i];
+      e.artefacts[i] = item;
+      if (!p.packFits()) {
+        e.artefacts[i] = old;
+        game.log(`There's no room in your pack for the ${k.name(old)}.`, 'warn');
+        return false;
+      }
+      p.artefactCD[i] = 0;
       const a = ARTEFACTS[item.type];
-      game.log(`You attune yourself to the ${a.name}.${a.active ? ` Press ${slot === 0 ? 'R' : 'T'} to use it.` : ''}`, 'good');
+      game.log(`You attune yourself to the ${a.name}.${a.active ? ` Press ${i === 0 ? 'R' : 'T'} to use it.` : ''}`, 'good');
       break;
     }
   }
@@ -577,6 +608,17 @@ export function equipItem(game, item) {
   return false;
 }
 
+/** Takes off something equipped and puts it in the pack, if there's room there. */
+export function putAway(game, item) {
+  const p = game.player;
+  if (!binds(item) && !p.hasRoom(item)) {
+    game.log(`Your pack is full: there's no room to put away the ${game.knowledge.name(item)}.`, 'warn');
+    return false;
+  }
+  return unequipItem(game, item) && false;
+}
+
+/** Takes off something equipped (unless it's bound to you by a curse). Returns whether it did. */
 export function unequipItem(game, item, silent = false) {
   const p = game.player, k = game.knowledge, e = p.equip;
   if (binds(item)) return cursedStuck(game, item);
