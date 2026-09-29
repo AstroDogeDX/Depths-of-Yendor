@@ -46,7 +46,8 @@ export function updateProjectiles(dt, game, level) {
       pr.x += pr.vx * h;
       pr.y += pr.vy * h;
       pr.z += pr.vz * h;
-      if (level.blocksSight(level.toTile(pr.x), level.toTile(pr.z)) || pr.y < 0.03 || pr.y > WALL_H) {
+      // (Over a pool, it goes down to the water, where what's wading in it can still be hit.)
+      if (level.blocksSight(level.toTile(pr.x), level.toTile(pr.z)) || pr.y < level.surfaceY(pr.x, pr.z) + 0.03 || pr.y > WALL_H) {
         done = true;
         break;
       }

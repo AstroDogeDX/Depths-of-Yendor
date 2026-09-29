@@ -5,6 +5,7 @@ import { randomItem, makeItem, chestLoot, goldPile } from '../items/generate.js'
 import { T } from './tiles.js';
 import { ROOM_TYPES } from './rooms.js';
 import { digChannels } from './channels.js';
+import { digPools, growPool, dryMask } from './pools.js';
 import { decorate, faceKey } from './decor.js';
 
 export { T };
@@ -45,7 +46,8 @@ const SPRAWL = 0.6; // the chance of each extra side room a theme may add (see p
 export function generateLevel(seed, depth, opts = {}) {
   const rng = new RNG(`${seed}:depth:${depth}`);
   for (let attempt = 0; attempt < 100; attempt++) {
-    const level = attemptLevel(rng, depth, opts);
+    // Pools draw on a stream of their own, so how they're laid never moves anything else on the floor.
+    const level = attemptLevel(rng, depth, opts, new RNG(`${seed}:depth:${depth}:pools:${attempt}`));
     if (level) return level;
   }
   throw new Error(`Level generation failed for seed ${seed}, depth ${depth}`);
@@ -76,7 +78,7 @@ function planRooms(rng, depth, opts) {
   return { loop, branches };
 }
 
-function attemptLevel(rng, depth, opts) {
+function attemptLevel(rng, depth, opts, poolRng) {
   const W = MAP + MAP_GROWTH * THEMES.indexOf(themeForDepth(depth)), H = W;
   const grid = new Uint8Array(W * H); // all WALL
   const foot = new Int16Array(W * H).fill(-1); // owning room id for interior + wall-ring tiles
@@ -294,15 +296,30 @@ function attemptLevel(rng, depth, opts) {
       ctx.set(room.cx, room.cy, T.PEDESTAL);
       return { x: room.cx, y: room.cy };
     },
+    /**
+     * Grows a pool of up to `size` tiles in `room` from tile `at` (see growPool in pools.js), keeping clear of its
+     * doorways and of anything placed so far. Returns the tiles it flooded.
+     */
+    growPool(room, at, size) {
+      const tiles = growPool(rng, grid, W, room, at, size, dryMask(grid, W, rooms));
+      if (tiles.length) ctx.pools.push({ room: room.id, tiles });
+      return tiles;
+    },
+    pools: [],
     addMonster(m) { ctx.monsters.push(m); },
   };
   for (const r of rooms) ROOM_TYPES[r.type].furnish(ctx, r);
 
-  // --- 5: theme features: water channels, then decorations ---
+  // --- 5: theme features: water channels, pools, then decorations ---
 
   const theme = themeForDepth(depth);
   const [sx, sy] = STEPS[ctx.up.dir];
   const channels = theme.channels ? digChannels({ rng, grid, w: W, rooms, start: idx(ctx.up.x + sx, ctx.up.y + sy), count: theme.channels.count }) : [];
+  const pools = [...ctx.pools];
+  if (theme.pools) {
+    const where = rooms.filter((r) => ROOM_TYPES[r.type].pools && !r.locked);
+    pools.push(...digPools({ rng: poolRng, grid, w: W, rooms: where, count: theme.pools.count, flood: theme.pools.flood }));
+  }
   const occupied = new Set([idx(ctx.up.x, ctx.up.y)]);
   if (ctx.down) occupied.add(idx(ctx.down.x, ctx.down.y));
   for (const m of ctx.monsters) occupied.add(idx(m.x, m.y));
@@ -444,7 +461,7 @@ function attemptLevel(rng, depth, opts) {
     depth, w: W, h: H, grid, rooms, edges, doorways,
     doors: doorways.filter((d) => d.style === 'door'),
     up: ctx.up, down: ctx.down, amulet: ctx.amulet, shrine: ctx.shrine, shop: ctx.shop,
-    channels, decor: decor.props, wallUsed: decor.wallUsed,
+    channels, pools, decor: decor.props, wallUsed: decor.wallUsed,
     monsters, items, chests, traps, theme,
   };
 }

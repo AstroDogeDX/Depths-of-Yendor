@@ -40,6 +40,8 @@ const POPUPS = {
 };
 // Channels on the map by what fills them, [in sight, remembered]; any other fill is a dark pit.
 const CHANNEL_COLORS = { water: ['#2f5f66', '#1f3c40'], lava: ['#a8400e', '#5a2208'] };
+// A pool on the map (its theme's `pools.map` colour), as it is where you can't see it just now: darker.
+const dimPool = (hex) => `#${[1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * 0.62).toString(16).padStart(2, '0')).join('')}`;
 const PACK_COLUMNS = 5; // tiles across the pack (see renderInventory)
 // Paper-doll slots, positioned over the 240x300 figure in index.html.
 const DOLL_SLOTS = [
@@ -331,7 +333,8 @@ export class UI {
     const st = [];
     if (g.hunted) st.push('<span class="st-hunted">Hunted</span>');
     for (const [key, def] of Object.entries(STATUSES)) {
-      if (p.status[key] > 0) st.push(`<span style="color:${def.color}">${def.label}${def.permanent ? '' : ` ${Math.ceil(p.status[key])}`}</span>`);
+      // (One that isn't wearing down, as you're wet while you wade, shows no time.)
+      if (p.status[key] > 0) st.push(`<span style="color:${def.color}">${def.label}${def.permanent || def.hold?.(p) ? '' : ` ${Math.ceil(p.status[key])}`}</span>`);
     }
     if (p.winded) st.push('<span class="st-winded">Winded</span>');
     else if (p.mode === 'sneak') st.push('<span class="st-sneak">Sneaking</span>');
@@ -439,6 +442,7 @@ export class UI {
         else if (t === T.PEDESTAL) c = '#d0a040';
         else if (t === T.CHANNEL) c = CHANNEL_COLORS[lvl.theme.channels.fill]?.[lvl.visible[i] ? 0 : 1] ?? (lvl.visible[i] ? '#1c1916' : '#121010');
         else if (t === T.BRIDGE) c = lvl.visible[i] ? '#7a5a36' : '#4e3a24';
+        else if (t === T.POOL) c = lvl.visible[i] ? lvl.theme.pools.map : dimPool(lvl.theme.pools.map);
         else if (t === T.DOOR) {
           const d = lvl.doorAt(tx, ty);
           c = d.locked ? '#e8c040' : d.open ? '#6a4a2a' : '#b0703a';

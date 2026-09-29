@@ -5,6 +5,7 @@ import { catacombTextures } from './catacombTextures.js';
 import { caveTextures } from './caveTextures.js';
 import { dwarvenTextures } from './dwarvenTextures.js';
 import { underworldTextures } from './underworldTextures.js';
+import { poolTextures } from './poolTextures.js';
 
 const S = 64;
 const cache = new Map();
@@ -154,17 +155,19 @@ function ceilingTexture(theme) {
 // `pitFloor`, or the `abyss` glowing far down a chasm), the passages' own walls and floor (`tunnelWall`,
 // `tunnelFloor`, used outside the rooms), decorations' (`puddles`, `cobweb`), and a `...Glow` for any of them
 // (`wallGlow`, `channelGlow`...): what shines there by itself. `wallFullHeight` makes a wall texture span the
-// wall's height once instead of repeating up it.
+// wall's height once instead of repeating up it. A theme with `pools` gets its pools' water (`pool`, and `poolGlow`
+// if it shines) from its colours, whatever its style (see poolTextures.js).
 const STYLES = { sewers: sewerTextures, catacombs: catacombTextures, caves: caveTextures, dwarven: dwarvenTextures, underworld: underworldTextures };
 
 export function getTextures(theme) {
   if (!cache.has(theme.name)) {
     const style = STYLES[theme.style];
-    cache.set(theme.name, style ? style(theme, toTexture) : {
+    const tex = style ? style(theme, toTexture) : {
       wall: wallTexture(theme),
       floor: floorTexture(theme),
       ceiling: ceilingTexture(theme),
-    });
+    };
+    cache.set(theme.name, theme.pools ? { ...tex, ...poolTextures(theme, toTexture) } : tex);
   }
   return cache.get(theme.name);
 }

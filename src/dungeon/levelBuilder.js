@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TILE, WALL_H, MODEL_PX, THEMES } from '../config.js';
+import { TILE, WALL_H, MODEL_PX, THEMES, POOL } from '../config.js';
 import { T } from './tiles.js';
 import { getTextures } from './textures.js';
 import { RNG } from '../rng.js';
@@ -34,6 +34,10 @@ const FILLS = {
 };
 const WATER_Y = -FILLS.water.depth;
 const FLOW_SPEED = 0.35; // tiles a second
+// Pools' standing water sways a little (texture repeats, and radians a second), and on rough rock reaches this far
+// (metres) under the banks, so it meets the rock wherever the rock has moved.
+const POOL_SWAY = { amt: 0.035, speed: [0.23, 0.19] };
+const POOL_REACH = 0.22;
 const LAVA_SPEED = 0.06; // tiles a second
 const LAVA_FALL = { width: 0.34, top: 0.6, out: 0.27, speed: 0.9 }; // metres (out from the wall), and texture repeats a second
 const PUDDLE_GEO = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
@@ -214,9 +218,11 @@ export function buildLevelMeshes(data) {
       const tint = 0.9 + rng.next() * 0.12, inRoom = roomTile[y * w + x] === 1;
       const ao = [cornerAO(x, y), cornerAO(x + 1, y), cornerAO(x + 1, y + 1), cornerAO(x, y + 1)].map((v) => v * tint);
 
+      // (A pool's floor is its bed, a step down, and in shadow under the water.)
+      const y0 = t === T.POOL ? -POOL.bed : 0;
       if (t !== T.STAIRS_DOWN && !sunk(t)) {
-        (inRoom ? floor : tunnelFloor).quad([[x0, 0, z0], [x1, 0, z0], [x1, 0, z1], [x0, 0, z1]], [0, 1, 0],
-          [[0, 0], [1, 0], [1, 1], [0, 1]], ao);
+        (inRoom ? floor : tunnelFloor).quad([[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], [0, 1, 0],
+          [[0, 0], [1, 0], [1, 1], [0, 1]], y0 ? ao.map((v) => v * 0.55) : ao);
       }
       if (t !== T.STAIRS_UP) {
         ceil.quad([[x0, WALL_H, z0], [x1, WALL_H, z0], [x1, WALL_H, z1], [x0, WALL_H, z1]], [0, -1, 0],
@@ -239,6 +245,12 @@ export function buildLevelMeshes(data) {
         const deep = fill.dark ? (q) => 0.85 * tint * Math.max(0, 1 + q[1] / fill.dark) ** 1.5 : null;
         const buv = fill.dark ? [[0, 0], [1, 0], [1, fill.depth / TILE], [0, fill.depth / TILE]] : [[0, 0], [1, 0], [1, 1], [0, 1]];
         side(-fill.depth, 0, buv, deep ?? [0.5 * tint, 0.5 * tint, 0.85 * tint, 0.85 * tint], banks, (nx, ny) => !sunk(get(nx, ny)));
+      }
+      // A pool's sides are the foot of the wall carried down to its bed, darker below the water.
+      if (t === T.POOL) {
+        const v = POOL.bed / (tex.wallFullHeight ? WALL_H : TILE);
+        side(-POOL.bed, 0, [[0, 0], [1, 0], [1, v], [0, v]], [0.4 * tint, 0.4 * tint, 0.75 * tint, 0.75 * tint],
+          inRoom ? walls : tunnelWalls, (nx, ny) => get(nx, ny) !== T.POOL);
       }
     }
   }
@@ -329,6 +341,38 @@ export function buildLevelMeshes(data) {
     }
     if (fill.end) for (const e of c.ends) place({ type: fill.end, ...wallFace(e.x, e.y, e.side) });
   }
+  // Pools: the still water standing in them, one surface over them all, swaying a little (see flowWater). On rough rock
+  // it reaches in under the banks, where the floor hides it, so it meets the rock however far that has moved.
+  if (tex.pool) {
+    const surface = new GeoBuilder(), sy = -POOL.surface;
+    const sheet = (xa, za, xb, zb) => surface.quad([[xa, sy, za], [xb, sy, za], [xb, sy, zb], [xa, sy, zb]], [0, 1, 0],
+      [[xa / TILE, za / TILE], [xb / TILE, za / TILE], [xb / TILE, zb / TILE], [xa / TILE, zb / TILE]], [1, 1, 1, 1]);
+    let any = false;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (get(x, y) !== T.POOL) continue;
+        any = true;
+        const x0 = x * TILE, x1 = x0 + TILE, z0 = y * TILE, z1 = z0 + TILE, r = POOL_REACH;
+        sheet(x0, z0, x1, z1);
+        if (!rough) continue;
+        if (get(x - 1, y) !== T.POOL) sheet(x0 - r, z0, x0, z1);
+        if (get(x + 1, y) !== T.POOL) sheet(x1, z0, x1 + r, z1);
+        if (get(x, y - 1) !== T.POOL) sheet(x0, z0 - r, x1, z0);
+        if (get(x, y + 1) !== T.POOL) sheet(x0, z1, x1, z1 + r);
+      }
+    }
+    if (any) {
+      const map = tex.pool.clone(), glow = tex.poolGlow?.clone();
+      for (const m of [map, glow].filter(Boolean)) {
+        m.needsUpdate = true;
+        water.push({ map: m, sway: true });
+      }
+      group.add(new THREE.Mesh(surface.build(), new THREE.MeshPhongMaterial({
+        map, transparent: true, opacity: POOL.opacity, depthWrite: false, shininess: 36, specular: 0x6a7880,
+        ...(glow ? { emissive: 0xffffff, emissiveMap: glow } : {}),
+      })));
+    }
+  }
   // A chasm's floor is only darkness, far down, or where the style has an `abyss`, a glow far down.
   if (fill?.dark) group.add(new THREE.Mesh(abyss.build(), new THREE.MeshBasicMaterial(tex.abyss ? { map: tex.abyss, fog: false } : { color: 0x000000 })));
   // The haze rising out of the channels: the rifts' miasma (the glow down them churning with it), the lava's embers.
@@ -397,7 +441,7 @@ export function buildLevelMeshes(data) {
 
 /**
  * Where water drips (see fx/drips.js): from every drain pipe's mouth, from the vault over half the puddles and
- * a tile or two of each water channel, and from props' drip_N anchors (the caves' stalactites), given as
+ * pools and a tile or two of each water channel, and from props' drip_N anchors (the caves' stalactites), given as
  * `tips`. Each is { x, y, z, floor (where it lands), every: [min, max] s }.
  */
 function dripSources(data, rng, tips) {
@@ -417,6 +461,11 @@ function dripSources(data, rng, tips) {
       out.push({ x: (t.x + rng.range(0.25, 0.75)) * TILE, y: WALL_H - 0.05, z: (t.y + rng.range(0.25, 0.75)) * TILE, floor: WATER_Y, every: [1.5, 4] });
     }
   }
+  for (const p of data.pools ?? []) {
+    if (!rng.chance(0.5)) continue;
+    const t = rng.pick(p.tiles);
+    out.push({ x: (t.x + rng.range(0.25, 0.75)) * TILE, y: WALL_H - 0.05, z: (t.y + rng.range(0.25, 0.75)) * TILE, floor: -POOL.surface, every: [2, 5] });
+  }
   return out;
 }
 
@@ -435,9 +484,12 @@ function cobweb(p, material) {
   return new THREE.Mesh(g, material);
 }
 
-/** Scrolls each channel's water (or lava) along its course (`water` from buildLevelMeshes). */
+/** Scrolls each channel's water (or lava) along its course, and sways the pools' (`water` from buildLevelMeshes). */
 export function flowWater(water, time) {
-  for (const w of water) w.map.offset[w.axis] = (-w.flow * time * (w.speed ?? FLOW_SPEED)) % 1;
+  for (const w of water) {
+    if (w.sway) w.map.offset.set(Math.sin(time * POOL_SWAY.speed[0]) * POOL_SWAY.amt, Math.cos(time * POOL_SWAY.speed[1]) * POOL_SWAY.amt);
+    else w.map.offset[w.axis] = (-w.flow * time * (w.speed ?? FLOW_SPEED)) % 1;
+  }
 }
 
 /**

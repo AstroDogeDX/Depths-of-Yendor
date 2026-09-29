@@ -12,6 +12,8 @@ import { makeItem, shopStock } from '../items/generate.js';
  *   branchable         whether other rooms may hang off this one
  *   monsters, items    whether the general population pass may put things in it
  *   traps              whether hidden traps may be placed in it
+ *   pools              whether the theme's pools may be sunk into it (see pools.js). Any room's furnish() can lay
+ *                      pools of its own with ctx.growPool
  *   furnish(ctx, room) place stairs, pedestals, pillars, guardians, loot... (see ctx in generator.js)
  *
  * Locked rooms are dead ends: never branch parents. The general population pass leaves them out (no monsters,
@@ -21,7 +23,7 @@ import { makeItem, shopStock } from '../items/generate.js';
 export const ROOM_TYPES = {
   entrance: {
     size: (rng) => ({ w: rng.int(5, 8), h: rng.int(5, 7) }),
-    doors: 'arch', branchable: true, monsters: false, items: true, traps: false,
+    doors: 'arch', branchable: true, monsters: false, items: true, traps: false, pools: true,
     furnish(ctx, room) {
       ctx.up = ctx.placeStairs(room, T.STAIRS_UP);
     },
@@ -29,7 +31,7 @@ export const ROOM_TYPES = {
 
   exit: {
     size: (rng) => ({ w: rng.int(5, 8), h: rng.int(5, 7) }),
-    doors: 'mixed', branchable: true, monsters: true, items: true, traps: true,
+    doors: 'mixed', branchable: true, monsters: true, items: true, traps: true, pools: true,
     furnish(ctx, room) {
       ctx.down = ctx.placeStairs(room, T.STAIRS_DOWN);
     },
@@ -37,7 +39,7 @@ export const ROOM_TYPES = {
 
   standard: {
     size: (rng) => ({ w: rng.int(4, 9), h: rng.int(4, 8) }),
-    doors: 'mixed', branchable: true, monsters: true, items: true, traps: true,
+    doors: 'mixed', branchable: true, monsters: true, items: true, traps: true, pools: true,
     furnish(ctx, room) {
       // Single-tile pillars inset two tiles from the walls: they can never block a doorway or split the room.
       if (room.w < 7 || room.h < 7 || !ctx.rng.chance(0.6)) return;

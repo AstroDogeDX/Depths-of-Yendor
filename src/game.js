@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TILE, EYE_H, MAX_DEPTH, ARTEFACT_DEPTHS, SHOP_DEPTHS, RENDER_HEIGHTS, HOTBAR_SIZE, CROUCH_DROP, danger, themeForDepth } from './config.js';
+import { TILE, MAX_DEPTH, ARTEFACT_DEPTHS, SHOP_DEPTHS, RENDER_HEIGHTS, HOTBAR_SIZE, danger, themeForDepth } from './config.js';
 import { RNG, rand } from './rng.js';
 import { generateLevel } from './dungeon/generator.js';
 import { Level } from './world/level.js';
@@ -548,7 +548,7 @@ export class Game {
     const p = this.player;
     if (!p) return;
     const cam = this.camera;
-    const eye = EYE_H - p.crouch * CROUCH_DROP;
+    const eye = p.eyeHeight();
     const bobAmp = p.mode === 'sprint' ? 0.05 : p.mode === 'sneak' ? 0.015 : 0.03;
     const bobY = p.moving ? Math.sin(p.bob * 2) * bobAmp : 0;
     cam.position.set(p.x, eye + bobY, p.z);

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TILE, VIEW_RADIUS_TILES, MAX_DEPTH, PLAYER_RADIUS, danger } from '../config.js';
+import { TILE, VIEW_RADIUS_TILES, MAX_DEPTH, PLAYER_RADIUS, POOL, danger } from '../config.js';
 import { T } from '../dungeon/tiles.js';
 import { buildLevelMeshes, flowWater, poseDoor } from '../dungeon/levelBuilder.js';
 import { propRig } from '../dungeon/props.js';
@@ -14,6 +14,7 @@ import { updateParticles, burst } from '../fx/particles.js';
 import { rand } from '../rng.js';
 import { glowSprite } from '../fx/glow.js';
 import { Drips } from '../fx/drips.js';
+import { Ripples } from '../fx/ripples.js';
 import { Shopkeeper } from './shopkeeper.js';
 import { fingerprint, packBits, unpackBits, round2 } from '../save.js';
 import { tickStatuses } from '../status.js';
@@ -97,6 +98,7 @@ export class Level {
     this.waterTiles = this.channelSound ? data.channels.flatMap((c) => c.tiles.map((t) => ({ x: this.center(t.x), z: this.center(t.y) }))) : [];
     this.waterT = 0;
     this.drips = built.drips.length ? new Drips(this.group, built.drips) : null;
+    this.ripples = this.theme.pools ? new Ripples(this.group, this.theme.pools.water[3]) : null; // round anything wading
 
     // Doors: open when something walks into them, shut again once the doorway has been clear a while. `amt` is how
     // far open (0..1), `swing` which way a swinging door turns (see openDoor).
@@ -332,6 +334,30 @@ export class Level {
   }
 
   isFloorTile(tx, ty) { return this.tile(tx, ty) === T.FLOOR; }
+
+  /** Whether the point (x, z) is in a pool's water (see dungeon/pools.js). */
+  inPool(x, z) { return this.tile(this.toTile(x), this.toTile(z)) === T.POOL; }
+
+  /** How high what stands at (x, z) stands: a pool's bed, or the floor. */
+  groundY(x, z) { return this.inPool(x, z) ? -POOL.bed : 0; }
+
+  /** How high the first thing something falling at (x, z) meets is: a pool's water, or the floor. */
+  surfaceY(x, z) { return this.inPool(x, z) ? -POOL.surface : 0; }
+
+  /**
+   * The water stirred by `who` (you or a monster, `radius` across) wading through a pool: a splash as it steps in
+   * (`entered`), heard if it's near you, and ripples spreading from it every so often while it's `moving`. Only near
+   * you, where they can be seen.
+   */
+  stir(who, dt, { radius, moving, entered }) {
+    const p = this.game.player, d = Math.hypot(who.x - p.x, who.z - p.z);
+    if (entered && d < 14) this.game.audio.splash(who === p ? 1 : 1 - d / 14);
+    if (!this.ripples || d > 20) return;
+    who.rippleT = (who.rippleT ?? 0) - dt;
+    if (!entered && (!moving || who.rippleT > 0)) return;
+    who.rippleT = 0.35;
+    this.ripples.spawn(who.x, -POOL.surface, who.z, radius + (entered ? 1 : 0.55), entered ? 0.9 : 0.6);
+  }
 
   /**
    * Where something dropped at (x, z) comes to rest: there, or if that's over a channel, the nearest point of
@@ -811,6 +837,7 @@ export class Level {
     this.haze?.update(t);
     for (const tr of this.traps) tr.view?.update(dt, t);
     this.drips?.update(dt, p, game.audio);
+    this.ripples?.update(dt);
     if (this.waterTiles.length && (this.waterT -= dt) <= 0) {
       this.waterT = 0.25;
       let d = Infinity;

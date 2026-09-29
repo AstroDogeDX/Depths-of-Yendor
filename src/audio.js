@@ -65,6 +65,18 @@ export class Sfx {
     const freq = (mode === 'sprint' ? 140 : 180) + Math.random() * 60;
     this.noise({ dur: mode === 'sprint' ? 0.09 : 0.07, vol, freq, q: 0.8, type: 'lowpass' });
   }
+  /** A step wading through a pool: a slosh of water rather than a footfall. */
+  wade(mode = 'walk') {
+    const vol = mode === 'sprint' ? 0.14 : mode === 'sneak' ? 0.02 : 0.08;
+    const f = 650 + Math.random() * 250;
+    this.noise({ dur: mode === 'sprint' ? 0.2 : 0.16, vol, freq: f, freq2: f * 0.45, q: 1.1 });
+    this.tone({ f: 190 + Math.random() * 40, f2: 95, dur: 0.1, type: 'sine', vol: vol * 0.5 });
+  }
+  /** Something stepping down into a pool, `vol` 0..1 as near as it is. */
+  splash(vol = 1) {
+    this.noise({ dur: 0.38, vol: 0.2 * vol, freq: 1400, freq2: 320, q: 0.8 });
+    this.tone({ f: 150, f2: 60, dur: 0.22, type: 'sine', vol: 0.12 * vol });
+  }
   swing() { this.noise({ dur: 0.18, vol: 0.22, freq: 700, freq2: 2600, q: 0.9 }); }
   whiff() { this.noise({ dur: 0.14, vol: 0.1, freq: 2000, freq2: 800, q: 0.7 }); }
   /** A melee blow landing: 'weak' (on a weakness) crunches, 'resist' (resisted) lands dull with a clank. */

@@ -1,5 +1,4 @@
 import { rand } from './rng.js';
-import { EYE_H, CROUCH_DROP } from './config.js';
 import { damageMult } from './damage.js';
 
 const CONE = Math.cos(0.75); // ~43° either side of the crosshair
@@ -34,7 +33,7 @@ export function playerStrike(game, power) {
   let revealed = false;
   if (!best) {
     const d = lookDir(p);
-    const chest = level.chestInSight(p.x, EYE_H - p.crouch * CROUCH_DROP, p.z, d.x, d.y, d.z, Math.hypot(w.reach, 1.1));
+    const chest = level.chestInSight(p.x, p.eyeHeight(), p.z, d.x, d.y, d.z, Math.hypot(w.reach, 1.1));
     best = chest && game.hitChest(chest, { type: w.onHit?.ignite || p.hasArtefact('ember') ? 'fire' : w.dmgType });
     if (!best) return !!chest;
     bestD = Math.hypot(best.x - p.x, best.z - p.z);
@@ -88,5 +87,5 @@ export function playerStrike(game, power) {
 
 /** Point just in front of the player's face, used for popups about the player. */
 export function playerPopupPos(p) {
-  return { x: p.x - Math.sin(p.yaw) * 0.9, y: EYE_H - 0.2, z: p.z - Math.cos(p.yaw) * 0.9 };
+  return { x: p.x - Math.sin(p.yaw) * 0.9, y: p.eyeHeight() - 0.2, z: p.z - Math.cos(p.yaw) * 0.9 };
 }

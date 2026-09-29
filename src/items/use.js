@@ -1,7 +1,7 @@
 import { WEAPONS, ARMORS, FOOD, ARTEFACTS, WANDS, OFFHANDS, WAND_PLUS_DMG } from './defs.js';
 import { ENCHANTMENTS, binds, enchantOf } from './enchant.js';
 import { buildItemModel } from './models.js';
-import { HUNGER_MAX, EYE_H, TWO_HAND_STR } from '../config.js';
+import { HUNGER_MAX, TWO_HAND_STR } from '../config.js';
 import { rand } from '../rng.js';
 import { spawnProjectile } from '../fx/projectiles.js';
 import { burst, ring, transient, lightningMesh } from '../fx/particles.js';
@@ -172,7 +172,7 @@ export function throwPotion(game, item) {
   const speed = 11;
   const mesh = buildItemModel(one, game.knowledge.color(one));
   spawnProjectile(game.level, {
-    x: p.x + d.x * 0.5, y: EYE_H - 0.15, z: p.z + d.z * 0.5,
+    x: p.x + d.x * 0.5, y: p.eyeHeight() - 0.15, z: p.z + d.z * 0.5,
     vx: d.x * speed, vy: d.y * speed + 2.5, vz: d.z * speed,
     gravity: 9, owner: 'player', kind: 'potion', mesh, size: 0.12, life: 3,
     onImpact: (g, pr) => potionSplash(g, one.type, pr.x, pr.z, true),
@@ -388,7 +388,7 @@ export function zapWand(game, item) {
   game.audio.zap();
   const power = item.plus;
   const d = lookDir(p);
-  const ox = p.x + d.x * 0.5, oy = EYE_H - 0.15 + d.y * 0.5, oz = p.z + d.z * 0.5;
+  const ox = p.x + d.x * 0.5, oy = p.eyeHeight() - 0.15 + d.y * 0.5, oz = p.z + d.z * 0.5;
   // (What the bolt's `spell` does to a chest it hits, see Game.hitChest: burns it, if it's fire; nothing, if it's harmless.)
   const bolt = (color, speed, onHit, spell) => spawnProjectile(level, {
     x: ox, y: oy, z: oz, vx: d.x * speed, vy: d.y * speed, vz: d.z * speed,

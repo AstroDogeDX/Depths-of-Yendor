@@ -37,6 +37,13 @@ export const HUNGER_FAMISHED = 80; // below this, your wounds don't heal on thei
 
 export const VIEW_RADIUS_TILES = 9;
 
+// Pools (dungeon/pools.js): how far below the floor their beds and their water's surface lie, in metres, and how
+// much of what's under the water the murk hides. Wading through one, anything on foot moves at WADE_SPEED, and stays
+// Wet until it's out and WADE_WET seconds have passed.
+export const POOL = { bed: 0.5, surface: 0.16, opacity: 0.8 };
+export const WADE_SPEED = 0.6;
+export const WADE_WET = 10;
+
 // --- The dungeon: five themes of five floors. Each theme's last floor is its boss floor. ---
 
 export const FLOORS_PER_THEME = 5;
@@ -44,13 +51,18 @@ export const FLOORS_PER_THEME = 5;
 // Each theme's colours. `style` names its own textures (dungeon/textures.js) and decorations
 // (dungeon/decor.js); themes without one use plain stone and brick in their colours, as placeholders until
 // they get their own. `channels` runs trenches across some rooms (dungeon/channels.js): `fill` is what's in
-// them and `count` how many ([min, max]) a floor gets. `rough` makes its surfaces rough-hewn rock
+// them and `count` how many ([min, max]) a floor gets. `pools` sinks pools of standing water into some rooms
+// (dungeon/pools.js): `count` ([min, max]) rooms a floor, `flood` the chance a big one is flooded almost wall to wall,
+// `water` its colours ([deep, murk, ripple, film]: see dungeon/poolTextures.js), `map` its colour on the map, and
+// `glow` (0..1) how much the ripples shine by themselves. `rough` makes its surfaces rough-hewn rock
 // (dungeon/roughRock.js), or with 'tunnels' just its passages, its rooms being masonry below rough vaults;
 // `lights` names its wall lights (see FITTINGS in dungeon/levelBuilder.js), and `fire: 'violet'` burns them violet.
 export const THEMES = [
   {
     // Dank and wet.
     name: 'Sewers', style: 'sewers', channels: { fill: 'water', count: [2, 3] },
+    // Sewage and rain gathered in the low places, tinged green with algae and scummed over.
+    pools: { count: [1, 3], flood: 0.35, water: ['#16261c', '#2a4432', '#4a6c4c', '#6a7c46'], map: '#3a6448' },
     wall: ['#4f5448', '#43483d', '#373b32'], mortar: '#1c1f18', moss: '#4a6a2a',
     floor: ['#3a3d33', '#30332b'], ceiling: '#1d201a',
     fog: 0x080a06, fogNear: 2, fogFar: 20, ambient: 0x48523e, drone: 55,
@@ -58,6 +70,8 @@ export const THEMES = [
   {
     // A tomb and a jail in one: bones, cells, cages and chains.
     name: 'Catacombs', style: 'catacombs', channels: { fill: 'spikes', count: [1, 2] },
+    // Stale water that has stood in the tombs for centuries, dull and grey-brown under a film of bone dust.
+    pools: { count: [0, 2], flood: 0.25, water: ['#1e1d1a', '#34322c', '#4e4a42', '#6e6858'], map: '#56524a' },
     wall: ['#5e5f5e', '#4e4f4e', '#3f403f'], mortar: '#1e1f20', moss: '#3f5a2e',
     floor: ['#4a4b4b', '#3c3d3d'], ceiling: '#272829',
     fog: 0x08090b, fogNear: 2, fogFar: 21, ambient: 0x3c4048, drone: 51,
@@ -65,6 +79,8 @@ export const THEMES = [
   {
     // Natural, rough-hewn rock, and the leavings of the miners who dug here.
     name: 'Caves', style: 'caves', rough: true, channels: { fill: 'chasm', count: [1, 2] }, lights: ['wall_torch', 'lantern'],
+    // Cold, clear water seeped through the rock, blue-green over the stones.
+    pools: { count: [1, 2], flood: 0.3, water: ['#0e2430', '#1c4452', '#34707e', '#6a9ea8'], map: '#2e6878' },
     wall: ['#5e4e3e', '#4f4133', '#3f3429'], mortar: '#1c1510', moss: '#5a5a30',
     floor: ['#433a30', '#372f27'], ceiling: '#211a14',
     fog: 0x0a0806, fogNear: 2, fogFar: 20, ambient: 0x52463a, drone: 47,
@@ -72,6 +88,8 @@ export const THEMES = [
   {
     // The red stone and gold of a great dwarven kingdom, fallen into ruin as the evil below broke through.
     name: 'Dwarven Ruins', style: 'dwarven', channels: { fill: 'rift', count: [1, 2] }, lights: ['wall_brazier', 'hanging_lamp'],
+    // Water gone a suspicious red: rust from the ruins, or something worse.
+    pools: { count: [0, 2], flood: 0.25, water: ['#3a0c0a', '#5c1a14', '#863426', '#a45a3c'], map: '#7a3024' },
     wall: ['#6c382b', '#5c2f24', '#4b261d'], mortar: '#1a0d0a', moss: '#4f6e5a',
     floor: ['#52251d', '#6a5846'], ceiling: '#2a1812',
     fog: 0x0b0706, fogNear: 2, fogFar: 21, ambient: 0x5a4034, drone: 44,
@@ -82,6 +100,8 @@ export const THEMES = [
     // Warden of Yendor.
     name: 'Underworld', style: 'underworld', rough: 'tunnels', fire: 'violet',
     channels: { fill: 'lava', count: [1, 2] }, lights: ['skull_sconce', 'wall_torch'],
+    // Still violet water, faintly aglow with whatever seeps up from below.
+    pools: { count: [0, 2], flood: 0.25, water: ['#1e0c2e', '#3a1a58', '#643690', '#a878e0'], map: '#5e3a8a', glow: 0.35 },
     wall: ['#3a2c46', '#2e2338', '#231a2c'], mortar: '#0c080e', moss: '#7a3a12',
     floor: ['#2e2634', '#262030'], ceiling: '#1a131f',
     fog: 0x07050a, fogNear: 2, fogFar: 19, ambient: 0x62507a, drone: 41,

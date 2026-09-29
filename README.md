@@ -214,7 +214,7 @@ Statuses afflict you and monsters alike, by one set of rules (`status.js`): what
 | Bleeding | nothing yet | damage every second that armour and resistances don't reduce, and you don't heal. The bloodless (skeletons, wraiths, golems, oozes) can't bleed |
 | Chilled | the wand of frost | you move at 60% speed, and your weapon recovers a quarter slower; monsters move and strike at half speed |
 | Frozen | cold on something wet, or on an ooze | frozen stiff: it can't move or act, a frozen monster takes a blow as if unaware (double damage), and it loses every resistance (weaknesses stay). A thaw leaves 4 s of Chilled |
-| Wet | nothing yet (wading, to come) | won't burn, and lightning does half as much damage again |
+| Wet | wading through a pool (see *The dungeon*): it lasts as long as you wade, and wears off over 10 s once you're out (`WADE_WET`) | won't burn, and lightning does half as much damage again |
 | Oiled | nothing yet (oil flasks and traps, to come) | fire does half as much damage again, and set alight, it burns twice as long |
 | Paralysed | paralysis potions, the Horn of Thunder | as Frozen, but its resistances stay |
 | Weakened | nothing yet | you: 3 less strength. A monster: 3/4 of its damage and of its health |
@@ -231,7 +231,7 @@ How they meet (`afflict` in `status.js`):
 
 - **Water puts out fire,** and nothing wet will burn.
 - **Cold puts out fire, and heat drives out cold.** Setting something chilled or frozen alight thaws it instead, and chilling something that's burning douses it instead. A fire hit on something frozen thaws it and does its full damage.
-- **Cold on something wet freezes it solid,** as does wetting something chilled. Oozes are `fluid` (a trait in `monsters/defs.js`), so cold alone freezes them.
+- **Cold on something wet freezes it solid,** as does wetting something chilled (wading into a pool while chilled, say). Oozes are `fluid` (a trait in `monsters/defs.js`), so cold alone freezes them. The chill a thaw leaves never freezes anything again, so an ooze, or something frozen where it stands in water, thaws out for good; the ice dries it, and the water only soaks it again once that chill has gone.
 - **A charm leaves its target Heartbroken,** whether it wears off or is broken, and nothing heartbroken can be charmed.
 - **Immunity to a damage type wards off its status.** A resistance of 0 to fire, poison or ice (the fire imp to fire, Emberheart's wearer, the undead to poison) means no burning, no poison, or no chill or freezing.
 
@@ -315,6 +315,10 @@ Each theme has four ordinary floors and a boss floor (`isBossDepth` in `config.j
 
 **The Underworld** is a temple to the evil below, dug into caverns in the dark depths. Its rooms are masonry: walls of black-violet brick rising into the raw rock of the cavern, a frieze of runes glowing violet running round them, floors of great basalt slabs, some carved with rings. Above them is the cavern's own rough vault, glinting with specks of violet crystal. The passages between the rooms are rough tunnels hewn through the rock, veined with faint violet light (`rough: 'tunnels'` in the theme's entry in `config.js`: `dungeon/roughRock.js` keeps the rooms flat below their vaults; `dungeon/underworldTextures.js`). Every flame burns violet (`fire: 'violet'`): the horned skulls on the walls with fire in their cracked-open crowns, the torches, the braziers and the candles. One or two rooms on each floor have **lava** creeping along a channel where the Sewers have water. It pours from the jaws of a demon's head carved in the wall at one end. Its crust breaks and glows over the molten rock, embers fly up off it, crusted rock sags over its lips with molten rock oozing between, and it lights the room orange. It rumbles and bubbles as you get near, and it's crossed on narrow arches of black brick with runes glowing along their parapets. The lava follows the channels' rules. The temple's furnishings are summoning circles laid in lines of violet light with candles at the star's points, obelisks with columns of glowing runes, blood-stained altars before steles bearing the cult's sigil (an eye in a ring of rays), crouching winged demons on plinths with fire in their eyes, demon faces carved in rune-ringed medallions, black banners bearing the sigil, standing braziers, offerings of skulls, cages hung from the vault, a prisoner left in chains, and the violet crystal of the evil below breaking through the walls. The cavern shows through too: fallen rock, stalactites dripping from the vault, and cracks in the floor where magma glows close beneath.
 
+**Pools.** Every theme has pools of standing water a step down from the floor (`pools` in the theme's entry in `config.js`; `dungeon/pools.js`). A Sewers floor has them in one to three rooms, a Caves floor in one or two, and the other themes' floors in up to two, bigger rooms likelier: one to three pools to a room, each grown as a rounded blob, which run together where they meet into one body of water. Now and then a room of 36 tiles or more is flooded instead, its water over most of the floor. Pools leave a dry step in from every doorway, keep clear of the stairs, pedestals and channels, and never go in the shop, a shrine, the vault or a locked room. Nothing the floor is made with (monsters, chests, traps, loose things, decorations) is put in one.
+
+Unlike a channel, a pool never blocks the way. You and anything else on foot wade through it: you step half a metre down into water to the shin, move at 60% of your speed (`WADE_SPEED` in `config.js`), and come out Wet (see *Statuses*). Monsters are slowed the same way, and path through pools as through any floor; big ones wade on the bed, and small ones, like rats, swim with their backs out of the water. Flying monsters pass over. Anything wading stirs up rings of ripples as it goes and splashes as it steps in (`fx/ripples.js`), and water drips into some pools from the vault. Each theme's water is its own (`dungeon/poolTextures.js`): green-tinged and scummed over in the Sewers, stale and grey-brown under a film of bone dust in the Catacombs, clear, cold blue-green in the Caves, a suspicious rusty red in the Dwarven Ruins, and a still violet in the Underworld, its ripples faintly aglow. The map shows pools in their water's colour. A room design can lay pools of its own in its `furnish()`, with `ctx.growPool(room, at, size)` (see `dungeon/rooms.js`).
+
 **Difficulty** follows `danger(depth)` in `config.js`, which rises evenly from 1 on floor 1 to 10 on floor 25. How many monsters a floor has, how tough they are, loot quality, gold and shop prices all work from it, so the curve spans the whole dungeon and would stretch again if floors were added. Monsters' first and last floors (`depth` in `monsters/defs.js`) are real floor numbers. Experience per level is scaled to match, so your level keeps pace with the danger rather than with the floor count.
 
 ## Floors and doors
@@ -326,7 +330,7 @@ Floors are generated the Pixel Dungeon way, graph first:
 - **Deeper floors sprawl.** Each theme after the Sewers may add one more side room than the one before, hung off another side room where there is one (a 60% chance each: up to 1 in the Catacombs, 2 in the Caves, 3 in the Dwarven Ruins, 4 in the Underworld), so the deeper floors grow wings off the loop. To make room, the map grows 5 tiles each way per theme, from the Sewers' 52 to the Underworld's 72, while the loop keeps the Sewers' size in the middle. The deepest floors average about 14 rooms, where they had 11. Each extra side room brings one more monster.
 - **Sealed rooms.** Every connection is a doorway on each room's wall plus an A*-routed corridor. Corridors can never cut through a room, so a room can only be entered through its own doorways.
 
-Some themes add features to their rooms, like the Sewers' water channels, the Catacombs' spike pits, the Caves' chasms, the Dwarven Ruins' rifts and the Underworld's lava (see *The dungeon*).
+Some themes add features to their rooms, like the Sewers' water channels, the Catacombs' spike pits, the Caves' chasms, the Dwarven Ruins' rifts and the Underworld's lava, and every theme has its pools (see *The dungeon*).
 
 A doorway is either an open arch or a door. Doors open when anyone walks into them (or on **E**), and shut again once the doorway has been clear for a couple of seconds. A closed door blocks sight, arrows and bolts, so slipping through one is a way to break a chase. Monsters path through doors and open them.
 
@@ -462,12 +466,14 @@ src/
   dungeon/props.js     loads Blockbench furniture on demand and places it: meshes, obstacles, item slots, candles, glows, drips
   dungeon/decor.js     decorations by theme style, set about the rooms clear of doorways
   dungeon/channels.js  trenches across rooms, crossed by bridges: the Sewers' water channels, the Catacombs' spike pits, the Caves' chasms, the Ruins' rifts, the Underworld's lava
+  dungeon/pools.js     pools of standing water a step down, grown as blobs that run together, and flooded rooms
   dungeon/textures.js  procedural canvas textures per theme
   dungeon/sewerTextures.js  the Sewers' own textures: brickwork, cobbles, vault, channel sides, water, puddles
   dungeon/catacombTextures.js  the Catacombs': ashlar walls, flagstones, vault, pit sides and floor, cobwebs
   dungeon/caveTextures.js  the Caves': layered rock with cracks, veins and seeps, gritty floor, vault, chasm sides
   dungeon/dwarvenTextures.js  the Dwarven Ruins': porphyry, gold frieze and dado, inlaid marble, coffers, rift sides and glow
   dungeon/underworldTextures.js  the Underworld's: black brick and glowing runes, veined tunnels, basalt, crystal vault, lava
+  dungeon/poolTextures.js  each theme's pool water, painted from its colours in config.js
   dungeon/texturePaint.js  helpers the themes' textures are painted with
   world/level.js       runtime level: collision, line of sight, doors, chests (and mimics passing for them), BFS flow field, fog of war, spawning
   world/shopkeeper.js  the shop's merchant: idle animation and remarks
@@ -482,7 +488,7 @@ src/
   items/use.js         potions, scrolls, wands, equip/curses, grip and off-hand use, throwing, artefact powers
   items/models.js      loads the weapon and item models, tinting each item in its colour
   items/bbmodel.js     loads Blockbench .bbmodel projects (cubes, meshes, groups, textures) into three.js
-  fx/                  viewmodel (hands), pixel-art flames, projectiles, particles, drips, haze over channels (the rifts' miasma, the lava's embers), glow sprites
+  fx/                  viewmodel (hands), pixel-art flames, projectiles, particles, drips, ripples round waders, haze over channels (the rifts' miasma, the lava's embers), glow sprites
   ui/ui.js             HUD, minimap, message log, floating text, pack, dialogs, title and end screens
   ui/logo.js           the pixel-art title logo, drawn from hand-made glyphs, with its moving glint
   ui/titleScene.js     the walk through a floor of each theme behind the title screen
@@ -498,7 +504,7 @@ Balance numbers live in `monsters/defs.js`, `items/defs.js` and `config.js`. `wi
 
 - Specialist side rooms behind locked doors (treasuries, libraries, armouries), secret doors
 - More furniture for other room types
-- More level shapes: caves via cellular automata, flooded rooms, chasms that drop you a floor
+- More level shapes: caves via cellular automata, chasms that drop you a floor, rooms designed round their pools (a flooded crypt, a cistern, a bathhouse)
 - Splitting oozes, invisible stalkers, thieves who steal and teleport away
 - A shield/block action, and alchemy or crafting for spare potions
 - Music, and positional audio for monsters you can hear but not see

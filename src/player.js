@@ -1,7 +1,7 @@
 import {
   PLAYER_RADIUS, PLAYER_SPEED, TURN_SPEED, MOUSE_SENS, HUNGER_MAX, HUNGER_HUNGRY, HUNGER_FAMISHED, INVENTORY_SIZE, HOTBAR_SIZE,
   STAMINA_BASE, STAMINA_PER_LEVEL, STAMINA_DRAIN, STAMINA_REGEN, STAMINA_REGEN_DELAY, STAMINA_RECOVER, MODE_SPEED, NOISE,
-  TWO_HAND_STR,
+  TWO_HAND_STR, EYE_H, CROUCH_DROP, POOL, WADE_SPEED,
 } from './config.js';
 import { WEAPONS, ARMORS, ARTEFACTS, OFFHANDS, FOOD, CONTAINERS, CONTAINER_SIZE, wandRecharge } from './items/defs.js';
 import { enchantOf, baneOf } from './items/enchant.js';
@@ -9,7 +9,7 @@ import { stackable } from './items/generate.js';
 import { slotHolds } from './hotbar.js';
 import { playerStrike } from './combat.js';
 import { damageType, damageMult } from './damage.js';
-import { STATUSES, blankStatus, restoreStatus, saveStatus, afflict, tickStatuses } from './status.js';
+import { STATUSES, blankStatus, restoreStatus, saveStatus, afflict, tickStatuses, wade } from './status.js';
 import { rand } from './rng.js';
 import { round2 } from './save.js';
 
@@ -61,6 +61,8 @@ export class Player {
     this.mode = 'walk'; // walk | sprint | sneak
     this.sneaking = false; // toggled with C (see update)
     this.crouch = 0; // 0..1, eases the camera down while sneaking
+    this.wading = false; // standing in a pool (see wade in status.js)
+    this.sink = 0; // 0..1, eases the camera down the step into a pool
     this.noise = 0; // metres of walking distance at which monsters can hear you this frame
     this.swingT = -1; this.swingDur = 0.3; this.swingHit = false; this.swingPower = 1;
     this.status = blankStatus(true); // seconds left of each status (see status.js)
@@ -183,7 +185,13 @@ export class Player {
     const a = this.equip.armor;
     if (a) s *= Math.max(0.6, 1 - Math.max(0, ARMORS[a.type].str - this.str) * 0.08);
     if (this.hunger <= 0) s *= 0.8;
+    if (this.wading) s *= WADE_SPEED;
     return s;
+  }
+
+  /** How high your eyes are: lower crouched, and a step lower standing in a pool. */
+  eyeHeight() {
+    return EYE_H - this.crouch * CROUCH_DROP - this.sink * POOL.bed;
   }
 
   /** Multiplier on monsters' chance to notice you (lower is stealthier). */
@@ -373,7 +381,7 @@ export class Player {
       this.z += mz * sp * dt;
       const before = Math.floor(this.bob / Math.PI);
       this.bob += dt * 8.5 * (sp / PLAYER_SPEED);
-      if (Math.floor(this.bob / Math.PI) !== before) game.audio.step(mode);
+      if (Math.floor(this.bob / Math.PI) !== before) game.audio[this.wading ? 'wade' : 'step'](mode);
       // Walking into a closed door opens it (or tries its lock).
       const door = level.doorAhead(this.x, this.z, mx, mz, PLAYER_RADIUS);
       if (door) game.useDoor(door);
@@ -388,6 +396,11 @@ export class Player {
       }
     }
     level.collide(this, PLAYER_RADIUS);
+
+    // Wading through a pool: you step down into it, and slow, and it soaks you (see wade in status.js).
+    const inWater = level.inPool(this.x, this.z);
+    level.stir(this, dt, { radius: PLAYER_RADIUS, moving: this.moving, entered: wade(game, this, inWater) });
+    this.sink += ((inWater ? 1 : 0) - this.sink) * Math.min(1, dt * 10);
 
     // King's Field attack meter: a click swings once it's above 20% and damage scales with the charge;
     // holding the button only re-swings at full charge, so mashing never beats timing.

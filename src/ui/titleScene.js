@@ -158,7 +158,7 @@ function planWalk(data) {
   const { w, h, grid, up, down } = data;
   if (!down) return null;
   const at = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? T.WALL : grid[y * w + x]);
-  const open = (x, y) => at(x, y) === T.FLOOR || at(x, y) === T.DOOR || at(x, y) === T.BRIDGE;
+  const open = (x, y) => at(x, y) === T.FLOOR || at(x, y) === T.DOOR || at(x, y) === T.BRIDGE || at(x, y) === T.POOL;
   const [ux, uy] = DIRS[up.dir], [ddx, ddy] = DIRS[down.dir];
   const start = (up.y + uy) * w + up.x + ux, goal = (down.y + ddy) * w + down.x + ddx;
 
