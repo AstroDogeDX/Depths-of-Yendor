@@ -397,6 +397,9 @@ export const catacombs = {
       const top = RISE * (i + 1), z0 = i === N - 1 ? -HALF : HALF - RUN * (i + 1);
       m.cube(`step_${i + 1}`, [-HW, top - RISE, z0], [HW, top, HALF - RUN * i], { mat: 'step', info: { hw: HW }, faces: ['up', 'south'] });
     }
+    // Its back, walled up between the cheeks from the floor to the vault (the steps are only treads and risers, which
+    // you'd see straight through from behind).
+    m.mesh('back', [face([[-HW, 0, -HALF], [HW, 0, -HALF], [HW, TOP, -HALF], [-HW, TOP, -HALF]], [0, 0, -1])], { mat: 'deepAshlar' });
     // The cheeks: walls either side, their tops sloping up with the steps.
     for (const s of [-1, 1]) {
       const side = s < 0 ? 'left' : 'right', xa = s * HW, xb = s * (HW + CW);

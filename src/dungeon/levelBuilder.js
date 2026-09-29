@@ -48,14 +48,24 @@ const PUDDLE_GEO = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
 // floor round the way down and the vault round the way up are the level's own, laid round the hole each leaves:
 // 'full' (the whole tile), { r } (round) or { rect: [x0, z0, x1, z1] }, in metres in the stairs' own frame (+z the
 // side you step off them), which must match the model's. `descent` is how the title screen's walk goes down them
-// (see DESCENTS).
+// (see DESCENTS). The tile is solid, unless the theme gives `blocks` for its way up or down: the shapes that stop you
+// there instead, in the same frame, { r } (a circle round the middle) or { rect }. So you can walk up to a ladder,
+// or round a manhole's rim, rather than bump into the air about it.
 const STAIRS = {
-  // A manhole, and a ladder down its shaft; a ladder up into another in the vault.
-  sewers: { down: { r: 0.53125 }, up: { r: 0.53125 }, descent: 'shaft' },
+  // A manhole, and a ladder down its shaft; a ladder up into another in the vault. You stop at the manhole's rim and
+  // the grab rails behind it, and at the ladder (its stays running back to the wall behind).
+  sewers: {
+    down: { r: 0.53125 }, up: { r: 0.53125 }, descent: 'shaft',
+    blocks: { down: [{ r: 0.6 }, { rect: [-0.22, -0.78, 0.22, -0.45] }], up: [{ rect: [-0.31, -0.98, 0.31, -0.38] }] },
+  },
   // Stone steps down a stairwell, and up a flight into the vault.
   catacombs: { down: { rect: [-0.71875, -0.8125, 0.71875, 1] }, up: 'full', descent: 'steps' },
   // A roughly squared hole, braced with timber, a rope ladder down it; a rope ladder up into another.
-  caves: { down: { rect: [-0.625, -0.625, 0.625, 0.625] }, up: { rect: [-0.625, -0.625, 0.625, 0.625] }, descent: 'shaft' },
+  // You stop at the collar of timbers round the hole, and at the ladder and the two props behind it.
+  caves: {
+    down: { rect: [-0.625, -0.625, 0.625, 0.625] }, up: { rect: [-0.625, -0.625, 0.625, 0.625] }, descent: 'shaft',
+    blocks: { down: [{ rect: [-0.8, -0.8, 0.8, 0.8] }], up: [{ rect: [-0.8, -0.8, 0.8, -0.44] }] },
+  },
   // Spiral stairs round a column, down through the floor and up through the vault.
   dwarven: { down: { r: 0.875 }, up: { r: 0.875 }, descent: 'spiral' },
   // Black steps carved with glowing runes, down a stairwell and up a flight into the vault.
@@ -445,9 +455,15 @@ export function buildLevelMeshes(data) {
   }
 
   // The stairs (see STAIRS). The first floor's way up comes out under the open sky (stairs_surface), and daylight falls
-  // down it.
+  // down it. Stairs with `blocks` stop you with those, not their whole tile (openStairs: their tiles).
+  const openStairs = new Set();
   for (const [s, way] of [[data.down, 'down'], [data.up, 'up']]) {
-    if (s) place({ type: s === data.up && data.depth === 1 ? 'stairs_surface' : `stairs_${way}_${theme.style}`, x: s.x + 0.5, y: s.y + 0.5, yaw: DIR_ANGLE[s.dir] });
+    if (!s) continue;
+    place({ type: s === data.up && data.depth === 1 ? 'stairs_surface' : `stairs_${way}_${theme.style}`, x: s.x + 0.5, y: s.y + 0.5, yaw: DIR_ANGLE[s.dir] });
+    const blocks = stairs.blocks?.[way];
+    if (!blocks) continue;
+    openStairs.add(s.y * w + s.x);
+    obstacles.push(...blocks.map((b) => stairsBlock(b, s)));
   }
   const daylight = data.depth === 1 ? sunlight(group, data.up, stairs.up) : null;
   if (daylight) glowing.unshift(daylight.source);
@@ -493,7 +509,7 @@ export function buildLevelMeshes(data) {
     group.add(built.group);
     return built;
   });
-  return { group, flames, lights, share, obstacles, doors, shopSlots, shopKept, water, haze, rough, sunlight: daylight, drips: dripSources(data, rng, drips) };
+  return { group, flames, lights, share, obstacles, openStairs, doors, shopSlots, shopKept, water, haze, rough, sunlight: daylight, drips: dripSources(data, rng, drips) };
 }
 
 /**
@@ -510,11 +526,8 @@ function holed(builder, x, y, height, hole, dir, ao) {
     builder.quad(pts.map(([px, pz]) => [cx + px, height, cz + pz]), n, uv, c);
   };
   if (hole.rect) {
-    // The rectangle turned to face `dir` (a quarter turn at a time, so still square to the grid), and the tile round
-    // it as up to four strips.
-    const a = DIR_ANGLE[dir], cs = Math.round(Math.cos(a)), sn = Math.round(Math.sin(a));
-    const [ax, az, bx, bz] = hole.rect, turn = ([px, pz]) => [px * cs + pz * sn, -px * sn + pz * cs];
-    const [p, q] = [turn([ax, az]), turn([bx, bz])];
+    // The rectangle turned to face `dir`, and the tile round it as up to four strips.
+    const [p, q] = turnRect(hole.rect, dir);
     const x0 = Math.max(-h, Math.min(p[0], q[0])), x1 = Math.min(h, Math.max(p[0], q[0]));
     const z0 = Math.max(-h, Math.min(p[1], q[1])), z1 = Math.min(h, Math.max(p[1], q[1]));
     const strip = (xa, za, xb, zb) => { if (xb > xa && zb > za) quad([[xa, za], [xb, za], [xb, zb], [xa, zb]]); };
@@ -533,6 +546,24 @@ function holed(builder, x, y, height, hole, dir, ao) {
     };
     quad([pt(k, hole.r), pt(k + 1, hole.r), pt(k + 1, null), pt(k, null)]);
   }
+}
+
+/**
+ * A rectangle [x0, z0, x1, z1] in stairs' own frame, turned the way `dir` says (a quarter turn at a time, so it stays
+ * square to the grid): two opposite corners.
+ */
+function turnRect([ax, az, bx, bz], dir) {
+  const a = DIR_ANGLE[dir], cs = Math.round(Math.cos(a)), sn = Math.round(Math.sin(a));
+  const turn = ([px, pz]) => [px * cs + pz * sn, -px * sn + pz * cs];
+  return [turn([ax, az]), turn([bx, bz])];
+}
+
+/** One of the shapes that stop you at stairs `s` (see STAIRS), as an obstacle (see Level.collide). */
+function stairsBlock(b, s) {
+  const cx = (s.x + 0.5) * TILE, cz = (s.y + 0.5) * TILE;
+  if (b.r) return { x: cx, z: cz, r: b.r };
+  const [p, q] = turnRect(b.rect, s.dir);
+  return { x: cx + (p[0] + q[0]) / 2, z: cz + (p[1] + q[1]) / 2, hw: Math.abs(q[0] - p[0]) / 2, hd: Math.abs(q[1] - p[1]) / 2 };
 }
 
 /**

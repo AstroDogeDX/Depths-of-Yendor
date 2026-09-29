@@ -360,6 +360,8 @@ A locked door's lock (bar, chain, beam or seal) disappears when you unlock it, l
 | Dwarven Ruins | spiral stairs round a column of red stone and gold, a bronze rail round the hole | spiral stairs up round the column, a rail on balusters, a ring of gold round the hole in the coffered vault |
 | Underworld | black steps down a stairwell, a violet line along each and runes glowing round its walls on down into the dark, violet fire either side of the way in | black steps up, runes glowing across every riser, to a dark archway under the cult's eye, violet fire either side of the foot |
 
+Most stairs fill their tile, which is solid. The ladders don't, so they stop you with shapes of their own instead (`blocks` in `STAIRS`): you can walk up to a ladder up and stand under the hole it climbs to, or round a manhole to its rim, and in the Caves you stop at the collar of timbers round the hole. A monster still comes for you when you stand in such a tile, though it won't path through one.
+
 The way out of the dungeon, up from the first floor, comes up into the open air (`stairs_surface`): the manhole at the top of its short shaft stands open to a summer sky, weeds hanging over its rim, and the sun shines down it in a shaft of light with dust drifting in it, lighting a patch of the floor (`sunlight` in `dungeon/levelBuilder.js`). Near it you can hear a breeze up there, and now and then a bird.
 
 For now the stairs down from a theme's last floor are that theme's, and the stairs up on the next floor are the next theme's, so the two don't match: the boss floors are where those crossings will be made.

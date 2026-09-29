@@ -90,6 +90,7 @@ export class Level {
     this.lights = built.lights;
     this.lightShare = built.share; // how they're handed round the fittings near you (see shareLights)
     this.obstacles = built.obstacles;
+    this.openStairs = built.openStairs; // stairs tiles whose own shapes stop you, not the tile (STAIRS in levelBuilder.js)
     this.water = built.water;
     this.haze = built.haze; // the haze rising out of the channels
     this.sunlight = built.sunlight; // on the first floor, daylight down the way up (see sunlight in levelBuilder.js)
@@ -255,10 +256,14 @@ export class Level {
     return tx < 0 || ty < 0 || tx >= this.w || ty >= this.h ? undefined : this.doorByTile.get(ty * this.w + tx);
   }
 
-  /** Movement blockers: walls, the stair structures, closed doors, and channels unless `flying`. */
+  /**
+   * Movement blockers: walls, the stair structures (but for ladders and the like, where their own obstacles stop you:
+   * see openStairs), closed doors, and channels unless `flying`.
+   */
   isSolid(tx, ty, flying = false) {
     const t = this.tile(tx, ty);
     if (t === T.DOOR) return !this.doorAt(tx, ty).open;
+    if ((t === T.STAIRS_DOWN || t === T.STAIRS_UP) && this.openStairs.has(this.idx(tx, ty))) return false;
     return t === T.WALL || t === T.STAIRS_DOWN || t === T.STAIRS_UP || (t === T.CHANNEL && !flying);
   }
 
@@ -282,9 +287,13 @@ export class Level {
     return this.traverse(x0, z0, x1, z1, (tx, tz) => this.blocksSight(tx, tz));
   }
 
-  /** Whether something can go straight from one point to another: nothing on the line it can't walk (or fly) over. */
+  /**
+   * Whether something can go straight from one point to another: nothing on the line it can't walk (or fly) over. The
+   * tile at the far end doesn't count, since whatever's there stands in it: you, say, on the edge of a stairs tile.
+   */
   clearPath(x0, z0, x1, z1, flying = false) {
-    return this.traverse(x0, z0, x1, z1, (tx, tz) => this.blocksPath(tx, tz, flying));
+    const ex = this.toTile(x1), ez = this.toTile(z1);
+    return this.traverse(x0, z0, x1, z1, (tx, tz) => (tx !== ex || tz !== ez) && this.blocksPath(tx, tz, flying));
   }
 
   /** Walks the grid tiles on the line between two world points (Amanatides–Woo); false if one is `blocked`. */

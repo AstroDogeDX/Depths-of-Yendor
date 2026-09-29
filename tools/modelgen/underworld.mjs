@@ -311,6 +311,9 @@ export const underworld = {
       m.cube(`step_${i + 1}`, [-HW, top - RISE, i === N - 1 ? -HALF : HALF - RUN * (i + 1)], [HW, top, z1], { mat: 'deepBasalt', faces: ['up', 'south'] });
       overlay(m, `step_${i + 1}_runes`, [[-HW + 4, top - RISE + 7.7, z1 + 0.3], [HW - 4, top - RISE + 7.7, z1 + 0.3], [HW - 4, top - RISE + 14.7, z1 + 0.3], [-HW + 4, top - RISE + 14.7, z1 + 0.3]], [0, 0, 1], 'runes', { u: 'x', u0: -HW + 4, v0: top - RISE + 7.7, seed: 70 + i });
     }
+    // Its back, bricked up between the cheeks from the floor to the vault (the steps are only treads and risers, which
+    // you'd see straight through from behind).
+    m.mesh('back', [facing([[-HW, 0, -HALF], [HW, 0, -HALF], [HW, TOP, -HALF], [-HW, TOP, -HALF]], [0, 0, -1])], { mat: 'deepBrick' });
     for (const s of [-1, 1]) {
       const side = s < 0 ? 'left' : 'right';
       const outline = [[HALF, 0], [HALF, 30], [LAND, TOP + 26], [-HALF, TOP + 26], [-HALF, 30], [-HALF, 0]];
