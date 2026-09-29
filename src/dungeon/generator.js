@@ -1,5 +1,5 @@
 import { RNG } from '../rng.js';
-import { MAX_DEPTH, THEMES, themeForDepth, isShopDepth, danger } from '../config.js';
+import { TILE, MAX_DEPTH, THEMES, themeForDepth, isShopDepth, danger } from '../config.js';
 import { MONSTERS, spawnTable } from '../monsters/defs.js';
 import { randomItem, makeItem, chestLoot, goldPile } from '../items/generate.js';
 import { T } from './tiles.js';
@@ -22,6 +22,7 @@ const STEPS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, as stairs' `dir`
 const FIXTURES = new Set([T.STAIRS_UP, T.STAIRS_DOWN, T.PEDESTAL]);
 const CHEST_BACK = 0.25; // tiles a chest stands back from the middle of its tile, toward the wall behind it
 const SPRAWL = 0.6; // the chance of each extra side room a theme may add (see planRooms)
+const SIGN_OFF = 0.64; // tiles from the middle of a shop's door to each of the blue flames beside it (see shopSigns)
 
 /**
  * Pixel Dungeon-style layout, built graph-first:
@@ -62,8 +63,9 @@ function planRooms(rng, depth, opts) {
   // Boss floors (isBossDepth) are built like the rest for now; the last one holds the Amulet's vault.
   loop[Math.floor(n / 2)] = depth >= MAX_DEPTH ? 'vault' : 'exit';
   const branches = [];
-  // The shop goes first, so the room beside the entrance is still free for it.
-  if (isShopDepth(depth)) branches.push({ type: 'shop', required: true, parent: 'entrance' });
+  // The shop goes first, so the room beside the entrance is still free for it. It opens straight off the entrance
+  // room, through a door in a wall they share, so you can see it (and get to it) the moment you arrive.
+  if (isShopDepth(depth)) branches.push({ type: 'shop', required: true, parent: 'entrance', beside: true });
   if (opts.artefact) branches.push({ type: 'shrine', required: true });
   for (const b of opts.extraBranches ?? []) branches.push({ required: true, ...b });
   // Locked side rooms, from the second floor on: often one, and deeper down now and then a second. Each is a dead
@@ -89,9 +91,10 @@ function attemptLevel(rng, depth, opts, stream) {
   const edges = [];
   const idx = (x, y) => y * W + x;
 
-  const fits = (x, y, w, h) => {
+  /** Whether a room fits at (x, y), w × h, clear of the rest by GAP (but for `beside`, which it may share a wall with). */
+  const fits = (x, y, w, h, beside = null) => {
     if (x < EDGE || y < EDGE || x + w > W - EDGE || y + h > H - EDGE) return false;
-    if (!rooms.every((o) => x + w + GAP <= o.x || o.x + o.w + GAP <= x || y + h + GAP <= o.y || o.y + o.h + GAP <= y)) return false;
+    if (!rooms.every((o) => o === beside || x + w + GAP <= o.x || o.x + o.w + GAP <= x || y + h + GAP <= o.y || o.y + o.h + GAP <= y)) return false;
     // Branch rooms arrive after corridors exist: a room dropped on a corridor would let it cut through the walls.
     for (let yy = y - 1; yy <= y + h; yy++) for (let xx = x - 1; xx <= x + w; xx++) if (corr[idx(xx, yy)]) return false;
     return true;
@@ -215,6 +218,42 @@ function attemptLevel(rng, depth, opts, stream) {
     return true;
   };
 
+  /**
+   * Puts a room of `type` right beside `parent`, sharing a wall with it, and joins them by one doorway in that wall: no
+   * corridor between. The rooms share at least three tiles of wall, and the doorway goes in the middle of that stretch,
+   * so there's wall either side of it (see shopSigns). The doorway is in both rooms' `doorways`, each with the side of
+   * the room it's on, and once in the floor's. Returns the room, or null if there's no room for it beside the parent.
+   */
+  const placeBeside = (type, parent) => {
+    const def = ROOM_TYPES[type], flip = { N: 'S', S: 'N', E: 'W', W: 'E' };
+    for (let tries = 0; tries < 12; tries++) {
+      const { w, h } = def.size(rng, depth);
+      for (const side of rng.shuffle(['N', 'S', 'E', 'W'])) {
+        const horiz = side === 'E' || side === 'W', len = horiz ? h : w, plen = horiz ? parent.h : parent.w;
+        const off = rng.int(3 - len, plen - 3); // where it starts along the shared wall, from where the parent does
+        const x = side === 'E' ? parent.x + parent.w + 1 : side === 'W' ? parent.x - 1 - w : parent.x + off;
+        const y = side === 'S' ? parent.y + parent.h + 1 : side === 'N' ? parent.y - 1 - h : parent.y + off;
+        if (!fits(x, y, w, h, parent)) continue;
+        const a = Math.max(horiz ? parent.y : parent.x, horiz ? y : x), b = Math.min(horiz ? parent.y + parent.h : parent.x + parent.w, horiz ? y + h : x + w) - 1;
+        const at = rng.int(a + 1, b - 1), wall = { E: parent.x + parent.w, W: parent.x - 1, S: parent.y + parent.h, N: parent.y - 1 }[side];
+        const [dx, dy] = horiz ? [wall, at] : [at, wall];
+        if (parent.doorways.some((d) => Math.abs(d.x - dx) + Math.abs(d.y - dy) < 3)) continue;
+        const r = makeRoom(type, x, y, w, h, { onLoop: false, locked: false, parent: parent.id });
+        rooms.push(r);
+        claim(r, r.id);
+        grid[idx(dx, dy)] = r.doorStyle === 'door' ? T.DOOR : T.FLOOR;
+        const dw = { x: dx, y: dy, side: flip[side], room: r.id, style: r.doorStyle, locked: false, kind: 'branch' };
+        r.doorways.push(dw);
+        parent.doorways.push({ ...dw, side, room: parent.id });
+        doorways.push(dw);
+        edges.push({ a: parent.id, b: r.id, kind: 'branch', locked: false });
+        r.beside = { parent: parent.id, door: dw, side };
+        return r;
+      }
+    }
+    return null;
+  };
+
   // --- 1 & 2: plan and lay out the loop ---
 
   const plan = planRooms(rng, depth, opts);
@@ -241,6 +280,10 @@ function attemptLevel(rng, depth, opts, stream) {
 
   for (const spec of plan.branches) {
     const def = ROOM_TYPES[spec.type];
+    if (spec.beside) {
+      if (!placeBeside(spec.type, rooms.find((r) => r.type === spec.parent)) && spec.required) return null;
+      continue;
+    }
     let placed = false;
     for (let tries = 0; tries < 40 && !placed; tries++) {
       const parents = rooms.filter((r) => ROOM_TYPES[r.type].branchable && !r.locked && (!spec.parent || r.type === spec.parent));
@@ -310,6 +353,11 @@ function attemptLevel(rng, depth, opts, stream) {
     addMonster(m) { ctx.monsters.push(m); },
   };
   for (const r of rooms) ROOM_TYPES[r.type].furnish(ctx, r);
+  // A shop opening off the entrance room has a blue flame either side of its door on that side too, as it has inside,
+  // so it's seen the moment you arrive.
+  const shopBeside = rooms.find((r) => r.type === 'shop' && r.beside);
+  const signs = ctx.shop && shopBeside ? shopSigns(shopBeside.beside) : null;
+  if (signs) ctx.shop.sconces.push(...signs.spots);
 
   // --- 5: theme features: water channels, pools, then decorations ---
 
@@ -325,6 +373,7 @@ function attemptLevel(rng, depth, opts, stream) {
   if (ctx.down) occupied.add(idx(ctx.down.x, ctx.down.y));
   for (const m of ctx.monsters) occupied.add(idx(m.x, m.y));
   const decor = decorate({ style: theme.style, rng, tunnelRng: stream('tunnels'), grid, w: W, rooms, channels, occupied });
+  for (const f of signs?.faces ?? []) decor.wallUsed.add(f);
 
   // --- 6: populate ---
 
@@ -465,6 +514,23 @@ function attemptLevel(rng, depth, opts, stream) {
     channels, pools, decor: decor.props, wallUsed: decor.wallUsed,
     monsters, items, chests, traps, theme,
   };
+}
+
+/**
+ * The two blue-flamed sconces either side of the door of a shop beside the entrance room (see placeBeside), on the
+ * entrance's side of the wall. `side` is the side of the entrance the shop is on. Returns their spots, as the shop's own
+ * are ({ x, z in metres, 0.1 m out from the wall, ry facing away from it }), and the wall faces they take (faceKey), so
+ * nothing else is hung there.
+ */
+function shopSigns({ door, side }) {
+  const [nx, ny] = SIDES[side], ax = Math.abs(ny), ay = Math.abs(nx); // toward the shop, and along the wall
+  const spots = [], faces = [];
+  for (const s of [-1, 1]) {
+    const fx = door.x + 0.5 - nx * 0.5 + ax * s * SIGN_OFF, fz = door.y + 0.5 - ny * 0.5 + ay * s * SIGN_OFF;
+    spots.push({ x: fx * TILE - nx * 0.1, z: fz * TILE - ny * 0.1, ry: FACING[side] });
+    faces.push(faceKey(door.x - nx + ax * s, door.y - ny + ay * s, side));
+  }
+  return { spots, faces };
 }
 
 /** Minimal binary min-heap of (key, priority). */

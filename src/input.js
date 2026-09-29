@@ -1,9 +1,11 @@
+import { HOTBAR_SIZE } from './config.js';
+
 // Keys the game uses. In fullscreen, Keyboard Lock (Chrome, Edge) claims these, so browser shortcuts made with
 // them (a slip onto Ctrl+W closing the tab) don't fire mid-run. That includes Escape: a tap reaches the game, which
-// pauses, and the browser leaves fullscreen only when it's held (and says so itself).
+// pauses, and the browser leaves fullscreen only when it's held (and says so itself). The digits are the hotbar's.
 export const GAME_KEYS = [
   'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyR', 'KeyT', 'KeyF', 'KeyC', 'KeyN', 'KeyI', 'KeyM', 'KeyP',
-  'Tab', 'Space', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Escape',
+  'Tab', 'Space', ...Array.from({ length: HOTBAR_SIZE }, (_, i) => `Digit${i + 1}`), 'Escape',
 ];
 
 // Mouse look reads pointer lock's movementX/Y, which browsers sometimes get badly wrong for a single event: Chrome

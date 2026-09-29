@@ -29,7 +29,7 @@ export const NOISE = { walk: 6, sprint: 16, sneak: 1.5 };
 export const CROUCH_DROP = 0.4; // how far the camera sinks while sneaking
 
 export const INVENTORY_SIZE = 20;
-export const HOTBAR_SIZE = 6; // number keys 1..HOTBAR_SIZE
+export const HOTBAR_SIZE = 4; // number keys 1..HOTBAR_SIZE (and, one day, a controller's D-pad)
 export const TWO_HAND_STR = 2; // gripped in both hands (F), a weapon needs this much less strength (see Player.weaponStats)
 export const HUNGER_MAX = 1000;
 export const HUNGER_HUNGRY = 250;

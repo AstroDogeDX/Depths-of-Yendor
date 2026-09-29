@@ -80,6 +80,9 @@ const BRAZIER = { width: 0.36, height: 0.54, pixel: 0.026 }; // a prop's fire (f
 // round the fittings nearest the viewer (see shareLights), each fading `LIGHT_FADE` of the way a second as it goes.
 const SCONCE_LIGHTS = 6;
 const LIGHT_FADE = 2;
+// The shop's blue flames count as nearer than they are (`by` times as far) while you're within `within` metres of them,
+// so the shop is lit whenever you're about it, and seen lit through its door.
+const SHOP_PULL = { within: 20, by: 0.5 };
 const CORRIDOR_GAP = 6; // tiles: the least between two lights along the passages (see buildSconces)
 // Sconce fire: its glow and light colour, and the light's strength. Blue light looks dimmer, so it's stronger.
 const FIRE = { color: 0xff9040, light: 9 };
@@ -851,10 +854,14 @@ function lightUp(l, src, w) {
  * so the fittings about you light the walls wherever you go: `share` is castLights'. A light whose source has fallen
  * behind the rest fades out, then fades in again at the nearest one without a light; one whose source is still about
  * as near as the others stays put, so they don't shuffle back and forth. The first call gives them out at once. Call
- * it every frame; a flame's own flicker sets its light's strength (times `userData.w`, how far faded in).
+ * it every frame; a flame's own flicker sets its light's strength (times `userData.w`, how far faded in). The shop's
+ * blue flames count as nearer than they are, while you're near them (SHOP_PULL).
  */
 export function shareLights(lights, share, x, z, dt) {
-  const dist = (src) => Math.hypot(src.pos.x - x, src.pos.z - z);
+  const dist = (src) => {
+    const d = Math.hypot(src.pos.x - x, src.pos.z - z);
+    return src.shop && d < SHOP_PULL.within ? d * SHOP_PULL.by : d;
+  };
   if ((share.t -= dt) <= 0 || !share.ready) {
     share.t = 0.25;
     const ranked = [...share.sources].sort((a, b) => dist(a) - dist(b));
