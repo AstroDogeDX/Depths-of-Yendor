@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { defineModel, revolve, tube, noise3, rand, fract, ramp } from './lib.mjs';
 import { MAT, PAL, P, patches, bevel } from './materials.mjs';
 import { HALF, VAULT as TOP, prism, archPts, archSlices, bothFaces } from './doorkit.mjs';
+import { PIT as DEPTH, SKY, face, squareShaft, sideways, deep } from './stairkit.mjs';
 
 const CAT_PAL = {
   bone: P('#3a3428', '#5a5140', '#7a705a', '#9a9076', '#b8ae94', '#d4ccb2'),
@@ -50,6 +51,18 @@ const MATS = {
     return ramp(CAT_PAL.stone, v, c.ax, c.ay);
   },
   niche: (c) => ramp(CAT_PAL.stone, 0.18 + 0.1 * patches(c.p, 912, 0.5), c.ax, c.ay), // the dark back of a niche
+  // --- The stairs (stairs_down_catacombs, stairs_up_catacombs), fading into the dark away from the room.
+  // Big worn steps: treads worn pale down the middle where feet have gone, bone dust gathered at their ends, the risers
+  // darker (`info.hw`: half the steps' width).
+  step: deep((c) => {
+    const { p, n, info } = c, across = Math.abs(p.x) / info.hw;
+    if (n.y > 0.5 && across > 0.8 && noise3(p.x * 0.3, p.y, p.z * 0.3, 960) > 0.35) return ramp(CAT_PAL.dust, 0.5 + 0.2 * patches(p, 961, 0.7), c.ax, c.ay);
+    let v = 0.46 + 0.12 * patches(p, 962, 0.35) + bevel(c, 0.18) + (n.y > 0.5 ? 0.12 * (1 - across) : -0.1);
+    if (rand(c.ax, c.ay, 963) > 0.96) v -= 0.14;
+    return ramp(CAT_PAL.stone, v, c.ax, c.ay);
+  }, 20, 150),
+  deepAshlar: deep((c) => MATS.ashlar(c), 20, 150),
+  deepVoussoir: deep((c) => MATS.voussoir(c), 20, 150),
   dust: (c) => ramp(CAT_PAL.dust, 0.45 + 0.25 * patches(c.p, 915, 0.7), c.ax, c.ay),
   void: (c) => ramp(CAT_PAL.void, 0.3 + 0.3 * Math.max(0, c.p.y / 150), c.ax, c.ay),
   wax: (c) => ramp(CAT_PAL.wax, 0.5 + 0.1 * patches(c.p, 920, 1) + (c.n.y > 0.7 ? 0.2 : 0) + bevel(c, 0.1), c.ax, c.ay),
@@ -342,6 +355,67 @@ export const catacombs = {
     };
     m.cube('slab', [-28, 0, -48], [28, 1.2, 48], { mat: 'tomb', info: { carve: (p) => carve(p) && Math.abs(p.x) < 26.5 && Math.abs(p.z) < 46.5 }, faces: ['up', 'north', 'south', 'east', 'west'] });
   }, { density: 1 }),
+
+  stairs_down_catacombs: defineModel('stairs_down_catacombs', MATS, (m) => {
+    // Stone steps down a stairwell into the dark (see stairkit.mjs), between walls of big blocks; the opening walled
+    // round on three sides by a low coped parapet, a skull on each of the posts at its front, candles burning on its
+    // back corners, and a skull and bone left on the top step.
+    const HW = 46, BACK = -52, N = 7, RISE = 26, RUN = (HALF - BACK) / N, T = 12, H = 30;
+    m.mesh('walls', squareShaft(-HW, BACK, HW, HALF, -DEPTH, 0, { open: ['s'] }), { mat: 'deepAshlar' });
+    // Slabs a riser deep, each resting on the next's back: all you see is treads and the risers between them.
+    for (let i = 0; i < N; i++) {
+      const top = -RISE * (i + 1);
+      m.cube(`step_${i + 1}`, [-HW, top - RISE, HALF - RUN * (i + 1)], [HW, top, HALF - RUN * i], { mat: 'step', info: { hw: HW }, faces: i < N - 1 ? ['up', 'north'] : ['up'] });
+    }
+    skull(m, 'step_skull', [-34, -RISE + 4, HALF - 8], { s: 8, rot: [0, 30, -8] });
+    bone(m, 'step_bone', [-24, -RISE + 1.4, HALF - 4], [-8, -RISE + 1.4, HALF - 13], 1.2);
+    // The parapet, coped, with a post at the front of each side.
+    m.cube('parapet_left', [-HW - T, 0, BACK - T], [-HW, H, HALF - 18], { mat: 'ashlar' });
+    m.cube('parapet_right', [HW, 0, BACK - T], [HW + T, H, HALF - 18], { mat: 'ashlar' });
+    m.cube('parapet_back', [-HW, 0, BACK - T], [HW, H, BACK], { mat: 'ashlar' });
+    m.cube('coping_left', [-HW - T - 1.5, H, BACK - T - 1.5], [-HW + 1.5, H + 5, HALF - 18], { mat: 'voussoir', info: { block: 1 } });
+    m.cube('coping_right', [HW - 1.5, H, BACK - T - 1.5], [HW + T + 1.5, H + 5, HALF - 18], { mat: 'voussoir', info: { block: 2 } });
+    m.cube('coping_back', [-HW + 1.5, H, BACK - T - 1.5], [HW - 1.5, H + 5, BACK + 1.5], { mat: 'voussoir', info: { block: 3 } });
+    for (const s of [-1, 1]) {
+      const side = s < 0 ? 'left' : 'right', x0 = s < 0 ? -HALF : HW - 2, x1 = s < 0 ? -HW + 2 : HALF, x = (x0 + x1) / 2;
+      m.cube(`post_${side}`, [x0, 0, HALF - 20], [x1, 44, HALF - 1], { mat: 'voussoir', info: { block: 5 + s } });
+      m.cube(`post_cap_${side}`, [x0 - 1.5, 44, HALF - 21.5], [x1 + 1.5, 48, HALF + 0.5], { mat: 'voussoir', info: { block: 8 + s } });
+      skull(m, `skull_${side}`, [x, 48 + 2.5, HALF - 10], { s: 10, rot: [0, -s * 12, 0] });
+    }
+    candle(m, 1, [-HW - 6, H + 5, BACK - 6], 13, 2);
+    candle(m, 2, [-HW + 1, H + 5, BACK - 8], 8, 1.7);
+    candle(m, 3, [HW + 5, H + 5, BACK - 5], 10, 1.9);
+  }, { density: 1 }),
+
+  stairs_up_catacombs: defineModel('stairs_up_catacombs', MATS, (m) => {
+    // A flight of stone steps up through the vault (see stairkit.mjs), between sloping cheek walls, to a landing and a
+    // dark archway on up; a skull on each of the posts at the foot of the cheeks, a candle burning beside it.
+    const HW = 44, CW = 12, N = 8, RISE = TOP / N, RUN = 14, LAND = HALF - RUN * (N - 1);
+    m.mesh('shaft', squareShaft(-HALF, -HALF, HALF, HALF, TOP, SKY), { mat: 'deepAshlar' });
+    // Slabs a riser deep, walled in by the cheeks, the last running back to the wall as the landing.
+    for (let i = 0; i < N; i++) {
+      const top = RISE * (i + 1), z0 = i === N - 1 ? -HALF : HALF - RUN * (i + 1);
+      m.cube(`step_${i + 1}`, [-HW, top - RISE, z0], [HW, top, HALF - RUN * i], { mat: 'step', info: { hw: HW }, faces: ['up', 'south'] });
+    }
+    // The cheeks: walls either side, their tops sloping up with the steps.
+    for (const s of [-1, 1]) {
+      const side = s < 0 ? 'left' : 'right', xa = s * HW, xb = s * (HW + CW);
+      // (Its sides in two pieces, one square along the floor and the slope over it.)
+      const outline = [[HALF, 0], [HALF, 34], [LAND, TOP + 30], [-HALF, TOP + 30], [-HALF, 34], [-HALF, 0]];
+      m.mesh(`cheek_${side}`, sideways(outline, xa, xb, [[0, 1, 4, 5], [1, 2, 3, 4]]), { mat: 'deepAshlar' });
+      const x0 = Math.min(xa, xb) - (s < 0 ? 4 : 0), x1 = Math.max(xa, xb) + (s > 0 ? 4 : 0), x = (x0 + x1) / 2;
+      m.cube(`post_${side}`, [x0, 0, HALF - 16], [x1, 46, HALF], { mat: 'voussoir', info: { block: 5 + s } });
+      m.cube(`post_cap_${side}`, [x0 - 1.5, 46, HALF - 17.5], [x1 + 1.5, 50, HALF + 1.5], { mat: 'voussoir', info: { block: 8 + s } });
+      skull(m, `skull_${side}`, [x, 50 + 2.5, HALF - 8], { s: 10, rot: [0, s * 10, 0] });
+      candle(m, s < 0 ? 1 : 2, [x - s * 1, 50, HALF - 14], 10, 1.8);
+    }
+    // The archway on up, in the wall behind the landing: black beyond, stone round it.
+    const AW = 26, SPRING = TOP + 56, RISE_A = 20, Z = -HALF + 0.4;
+    m.mesh('archway', archSlices(AW, SPRING, RISE_A, 6, TOP).map((sl) => face(sl.map(([x, y]) => [x, y, Z]), [0, 0, 1])), { mat: 'void' });
+    const pts = archPts(AW + 8, SPRING, RISE_A + 8, 6), inner = archPts(AW, SPRING, RISE_A, 6);
+    m.mesh('arch', pts.slice(0, -1).map((a, i) => face([[a[0], a[1], Z + 0.2], [pts[i + 1][0], pts[i + 1][1], Z + 0.2], [inner[i + 1][0], inner[i + 1][1], Z + 0.2], [inner[i][0], inner[i][1], Z + 0.2]], [0, 0, 1], { block: 20 + i })), { mat: 'deepVoussoir' });
+    for (const s of [-1, 1]) m.cube(`jamb_${s < 0 ? 'left' : 'right'}`, [s < 0 ? -AW - 8 : AW, TOP, -HALF], [s < 0 ? -AW : AW + 8, SPRING, -HALF + 4], { mat: 'deepVoussoir', info: { block: 30 + s } });
+  }, { density: 0.75 }),
 
   door_catacombs: defineModel('door_catacombs', MATS, (m) => {
     // A tall door of old oak boards under a round stone arch, a skull carved on the keystone either side (see

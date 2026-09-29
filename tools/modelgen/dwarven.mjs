@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { defineModel, loft, revolve, tube, latheRing, noise3, rand, fract, ramp } from './lib.mjs';
 import { MAT, PAL, P, patches, bevel } from './materials.mjs';
 import { HALF, VAULT as TOP, prism, bothFaces } from './doorkit.mjs';
+import { PIT, SKY, roundShaft, wedge, polar, deep } from './stairkit.mjs';
 
 const DW = {
   stone: P('#1f1614', '#2e211d', '#3f2e28', '#523b33', '#664a3f', '#7c5b4d'),
@@ -387,7 +388,93 @@ function riftLip(name, seed) {
 
 // ---------------------------------------------------------------- props
 
+// --- The stairs (stairs_down_dwarven, stairs_up_dwarven): spiral stairs of red stone and gold round a column, fading
+// into the dark away from the room.
+const SPIRAL = { R: 56, COL: 8, STEP: Math.PI / 6 }; // the holes' radius (STAIRS in levelBuilder.js: 0.875 m), the column's; a step's turn
+/** Porphyry laid in courses round a round shaft, the walls' gold knotwork in a band `info.band` px up (8 high). */
+MATS.shaftPorphyry = deep((c) => {
+  const { p, info } = c, u = (Math.atan2(p.x, p.z) + Math.PI) * SPIRAL.R;
+  if (p.y >= info.band && p.y < info.band + 8) return knots(c, u, p.y - info.band);
+  if (Math.abs(p.y - info.band + 1) < 1 || Math.abs(p.y - info.band - 9) < 1) return gold(c);
+  const row = Math.floor((p.y + 400) / 12), off = row % 2 ? 12 : 0;
+  if (fract((p.y + 400) / 12) < 0.08 || fract((u + off) / 24) < 0.04) return ramp(DW.porphyry, 0.1, c.ax, c.ay);
+  return ramp(DW.porphyry, 0.5 + 0.2 * (rand(Math.floor((u + off) / 24), row, 2300) - 0.5) + 0.08 * patches(p, 2301, 0.3) + flecks(c), c.ax, c.ay);
+}, 20, 150);
+/** A spiral step: red stone, a gold edge along its nose (`info.a0`, the angle its nose is at). */
+MATS.spiralStep = deep((c) => {
+  const { p, info } = c;
+  if (info.step === 'nose') return gold(c);
+  if (info.step === 'top' && Math.abs(p.x * Math.cos(info.a0) - p.z * Math.sin(info.a0)) < 2.2) return gold(c);
+  return ramp(DW.porphyry, (info.step === 'top' ? 0.56 : 0.36) + 0.1 * patches(p, 2302, 0.3) + flecks(c), c.ax, c.ay);
+}, 20, 150);
+/** The stairs' column: porphyry, banded in gold every 40 px. */
+MATS.spiralColumn = deep((c) => (fract((c.p.y + 400) / 40) < 0.07 ? gold(c) : MATS.porphyry(c)), 20, 150);
+MATS.deepBronze = deep((c) => MATS.bronze(c), 20, 150);
+
+/**
+ * Spiral steps round the stairs' column, a step to every STEP of a turn from the nose of the first at the front (+z),
+ * each `rise` further on (up, or with a negative rise, down), from `from` for `count` steps. `faces` names the faces a
+ * step shows (see wedge). Returns each step's angle and the height of its top.
+ */
+function spiral(m, from, rise, count, faces) {
+  const out = [];
+  for (let k = 0; k < count; k++) {
+    const a0 = k * SPIRAL.STEP, y = from + rise * (k + 1);
+    // (Each made facing +z and turned into place, which packs its faces' textures tighter than at any old angle.)
+    const span = SPIRAL.STEP * 1.08;
+    m.mesh(`step_${k + 1}`, wedge(-span / 2, span / 2, SPIRAL.COL, SPIRAL.R - 1.5, y, 7, 2).filter((f) => faces.includes(f.step)),
+      { mat: 'spiralStep', info: { a0 }, rotation: [0, ((a0 + span / 2) * 180) / Math.PI, 0] });
+    out.push({ a: a0, y });
+  }
+  return out;
+}
+
 export const dwarven = {
+  stairs_down_dwarven: defineModel('stairs_down_dwarven', MATS, (m) => {
+    // Spiral stairs down through a round hole in the floor (see stairkit.mjs), round a column of red stone banded in gold
+    // that rises through the middle to a gold finial; red steps edged in gold, down a shaft of porphyry with the walls'
+    // knotwork run round its top. A bronze rail on posts guards the hole but for the way in at the front, and another
+    // follows the steps down the wall.
+    const { R, COL } = SPIRAL, RISE = 15;
+    m.mesh('shaft', roundShaft(R, -PIT, 0), { mat: 'shaftPorphyry', info: { band: -12 } });
+    m.mesh('rim', revolve([[R + 5, 0], [R + 5, 1.5], [R, 1.5], [R, -2]], { sides: 16, phase: 0 }), { mat: 'gold' });
+    m.mesh('column', revolve([[COL, -PIT], [COL, 30], [COL + 2.5, 32], [COL + 2.5, 35], [COL - 1, 36], [0, 36]], { sides: 8 }), { mat: 'spiralColumn' });
+    m.mesh('finial', revolve([[0, 36], [4.5, 38], [5.5, 42], [4, 46], [1.5, 49], [0, 50]], { sides: 8 }), { mat: 'gold' });
+    const steps = spiral(m, 0, -RISE, 13, ['top', 'nose', 'end', 'back']);
+    // The rail round the hole: posts every twelfth of a turn but at the front, a rail along their tops.
+    const posts = [];
+    for (let k = 2; k <= 10; k++) posts.push(k * (Math.PI / 6));
+    posts.forEach((a, i) => {
+      const [x, , z] = polar(a, R + 2.5, 0);
+      m.cube(`post_${i + 1}`, [x - 1.8, 0, z - 1.8], [x + 1.8, 32, z + 1.8], { mat: 'bronze' });
+      m.cube(`post_cap_${i + 1}`, [x - 2.6, 32, z - 2.6], [x + 2.6, 35, z + 2.6], { mat: 'gold' });
+    });
+    const arc = [];
+    for (let a = posts[0]; a <= posts[posts.length - 1] + 1e-6; a += Math.PI / 24) arc.push(polar(a, R + 2.5, 36.5));
+    m.mesh('rail', tube(arc, { half: 1.4, sides: 6, side: [0, 1, 0] }), { mat: 'bronze' });
+    // The rail down the wall, over the outer ends of the steps.
+    m.mesh('wall_rail', tube(steps.map(({ a, y }) => polar(a + SPIRAL.STEP / 2, R - 4, y + 30)), { half: 1.2, sides: 6 }), { mat: 'deepBronze' });
+  }, { density: 0.9 }),
+
+  stairs_up_dwarven: defineModel('stairs_up_dwarven', MATS, (m) => {
+    // Spiral stairs up through a round hole in the vault (see stairkit.mjs), round a column of red stone banded in gold,
+    // on a base ringed in gold; red steps edged in gold, a bronze rail on balusters up their outer ends, and on up a shaft
+    // of porphyry with the walls' knotwork run round its foot. A ring of gold rims the hole.
+    const { R, COL } = SPIRAL, RISE = 16, N = Math.floor((SKY - 8) / RISE);
+    m.mesh('shaft', roundShaft(R, TOP, SKY), { mat: 'shaftPorphyry', info: { band: TOP + 4 } });
+    m.mesh('rim', revolve([[R, TOP + 3], [R, TOP - 1.5], [R + 5, TOP - 1.5], [R + 5, TOP]], { sides: 16, phase: 0 }), { mat: 'gold' });
+    m.mesh('base', revolve([[COL + 7, 0], [COL + 7, 6], [COL + 5, 8], [COL, 9]], { sides: 8 }), { mat: 'porphyry' });
+    m.mesh('base_band', revolve([[COL + 7.4, 2], [COL + 7.4, 4]], { sides: 8 }), { mat: 'gold' });
+    m.mesh('column', revolve([[COL, 9], [COL, SKY]], { sides: 8 }), { mat: 'spiralColumn' });
+    const steps = spiral(m, 0, RISE, N, ['top', 'bottom', 'nose', 'end', 'back']);
+    // Balusters on the steps' outer ends, and the rail along their tops.
+    steps.forEach(({ a, y }, i) => {
+      const [x, , z] = polar(a + SPIRAL.STEP / 2, R - 5, 0);
+      m.cube(`baluster_${i + 1}`, [x - 1.3, y, z - 1.3], [x + 1.3, y + 32, z + 1.3], { mat: y > TOP ? 'deepBronze' : 'bronze' });
+    });
+    m.mesh('rail', tube(steps.map(({ a, y }) => polar(a + SPIRAL.STEP / 2, R - 5, y + 33)), { half: 1.3, sides: 6 }), { mat: 'deepBronze' });
+  }, { density: 0.7 }),
+
   rift_bridge: defineModel('rift_bridge', MATS, (m) => {
     // A way over a rift, thrown together from whatever was to hand: two beams (one a gilded beam from some
     // hall's ceiling), planks of odd lengths, half a door, all lashed with rope, and a pole lashed to two posts

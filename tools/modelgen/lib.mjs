@@ -240,6 +240,8 @@ export class Model {
       return keyOf.get(k);
     };
     for (const poly of polys) {
+      // Blockbench's mesh faces are triangles or quads, and the game draws no more of a face than its first four corners.
+      if (poly.pts.length > 4) throw new Error(`${this.name}: ${name} has a face with ${poly.pts.length} corners (at most 4)`);
       const keys = poly.pts.map(vkey);
       const face = { uv: {}, vertices: keys, texture: 0 };
       el.faces[`f${(fi++).toString(36)}`] = face;

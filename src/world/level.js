@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { TILE, VIEW_RADIUS_TILES, MAX_DEPTH, PLAYER_RADIUS, POOL, danger } from '../config.js';
 import { T } from '../dungeon/tiles.js';
-import { buildLevelMeshes, flowWater, poseDoor } from '../dungeon/levelBuilder.js';
+import { buildLevelMeshes, flowWater, poseDoor, shareLights } from '../dungeon/levelBuilder.js';
 import { propRig } from '../dungeon/props.js';
 import { TrapView, loadTraps, trapsLoaded } from './trapModels.js';
 import { buildItemModel } from '../items/models.js';
@@ -88,9 +88,11 @@ export class Level {
     this.group = built.group;
     this.flames = built.flames;
     this.lights = built.lights;
+    this.lightShare = built.share; // how they're handed round the fittings near you (see shareLights)
     this.obstacles = built.obstacles;
     this.water = built.water;
     this.haze = built.haze; // the haze rising out of the channels
+    this.sunlight = built.sunlight; // on the first floor, daylight down the way up (see sunlight in levelBuilder.js)
     this.rough = built.rough; // the rough rock's shape (see roughRock.js), for setting things on it
     // Channel tiles, for the sound they make as you near them: running water, wind rising out of a chasm, the
     // uneasy hum of a rift, or lava's rumble and bubbling.
@@ -827,14 +829,21 @@ export class Level {
     const p = game.player;
     const t = game.time;
 
+    shareLights(this.lights, this.lightShare, p.x, p.z, dt);
     for (const f of this.flames) {
       const k = 0.85 + Math.sin(t * 17 + f.phase) * 0.08 + Math.sin(t * 5.3 + f.phase * 2) * 0.07;
       f.flame.update(t, k);
       f.halo.material.opacity = 0.35 + (k - 0.85) * 1.6;
-      if (f.light) f.light.intensity = f.light.userData.base * k;
+      if (f.light) f.light.intensity = f.light.userData.base * f.light.userData.w * k;
     }
     flowWater(this.water, t);
     this.haze?.update(t);
+    this.sunlight?.update(dt);
+    // The world above, heard down the way up to it as you near it.
+    if (this.sunlight && (this.dayT = (this.dayT ?? 0) - dt) <= 0) {
+      this.dayT = 0.25;
+      game.audio.outdoors(Math.max(0, 1 - Math.hypot(this.sunlight.x - p.x, this.sunlight.z - p.z) / 14) ** 2);
+    }
     for (const tr of this.traps) tr.view?.update(dt, t);
     this.drips?.update(dt, p, game.audio);
     this.ripples?.update(dt);

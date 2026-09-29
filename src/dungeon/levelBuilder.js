@@ -9,8 +9,9 @@ import { buildBBModel } from '../items/bbmodel.js';
 import { placeProp, propTemplate, propRig } from './props.js';
 import { roughRock } from './roughRock.js';
 import { Haze } from '../fx/haze.js';
-import { faceKey, wallFace, decorProps } from './decor.js';
+import { faceKey, wallFace, decorProps, corridorMask } from './decor.js';
 import { SHOP_PROPS } from './rooms.js';
+import { rgb, mix, paint, noise } from './texturePaint.js';
 import sconceModel from '../../assets/models/sconce.bbmodel';
 
 // Channels by what fills them (the theme's `channels.fill`): how far below the floor their surface lies, the
@@ -41,10 +42,45 @@ const POOL_REACH = 0.22;
 const LAVA_SPEED = 0.06; // tiles a second
 const LAVA_FALL = { width: 0.34, top: 0.6, out: 0.27, speed: 0.9 }; // metres (out from the wall), and texture repeats a second
 const PUDDLE_GEO = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+
+// Each theme's stairs: the props stairs_down_<style> and stairs_up_<style> (see tools/modelgen/stairkit.mjs), set in
+// the middle of their tile, turned so the side you step off them on arriving faces the way their `dir` says. The
+// floor round the way down and the vault round the way up are the level's own, laid round the hole each leaves:
+// 'full' (the whole tile), { r } (round) or { rect: [x0, z0, x1, z1] }, in metres in the stairs' own frame (+z the
+// side you step off them), which must match the model's. `descent` is how the title screen's walk goes down them
+// (see DESCENTS).
+const STAIRS = {
+  // A manhole, and a ladder down its shaft; a ladder up into another in the vault.
+  sewers: { down: { r: 0.53125 }, up: { r: 0.53125 }, descent: 'shaft' },
+  // Stone steps down a stairwell, and up a flight into the vault.
+  catacombs: { down: { rect: [-0.71875, -0.8125, 0.71875, 1] }, up: 'full', descent: 'steps' },
+  // A roughly squared hole, braced with timber, a rope ladder down it; a rope ladder up into another.
+  caves: { down: { rect: [-0.625, -0.625, 0.625, 0.625] }, up: { rect: [-0.625, -0.625, 0.625, 0.625] }, descent: 'shaft' },
+  // Spiral stairs round a column, down through the floor and up through the vault.
+  dwarven: { down: { r: 0.875 }, up: { r: 0.875 }, descent: 'spiral' },
+  // Black steps carved with glowing runes, down a stairwell and up a flight into the vault.
+  underworld: { down: { rect: [-0.6875, -0.8125, 0.6875, 1] }, up: 'full', descent: 'steps' },
+};
+// The title screen's walk down each kind of stairs: points in the stairs' own frame, in metres (y down from eye
+// height), from the tile in front of them.
+const DESCENTS = {
+  steps: [[0, -0.35, 1], [0, -0.9, 0], [0, -2.2, -0.6]],
+  shaft: [[0, -0.15, 1.05], [0, -0.7, 0.2], [0, -2.6, -0.1]],
+  spiral: [[0, -0.2, 1.1], [0.25, -0.6, 0.65], [0.62, -1.1, 0.1], [0.35, -1.6, -0.5], [-0.25, -2.1, -0.6]],
+};
+// What comes down the way up from the first floor (see sunlight): the glow of the day about the foot of it, and the sun
+// itself, a spotlight down its shaft (its cone's half-angle in radians).
+const DAYLIGHT = { color: 0xffeccc, light: 7 };
+const SUN = { light: 260, angle: 0.2 };
+const SURFACE_TOP = WALL_H + 0.75; // how high the first floor's way up reaches, to the open sky (SURFACE in tools/modelgen/stairkit.mjs)
 const CANDLE = { width: 0.07, height: 0.14, pixel: 0.012 }; // a candle's flame
 const BRAZIER = { width: 0.36, height: 0.54, pixel: 0.026 }; // a prop's fire (fire_N anchors)
 
-const SCONCE_LIGHTS = 6; // constant per level so shaders never need recompiling between floors
+// The level's real lights: this many (constant per level so shaders never need recompiling between floors), handed
+// round the fittings nearest the viewer (see shareLights), each fading `LIGHT_FADE` of the way a second as it goes.
+const SCONCE_LIGHTS = 6;
+const LIGHT_FADE = 2;
+const CORRIDOR_GAP = 6; // tiles: the least between two lights along the passages (see buildSconces)
 // Sconce fire: its glow and light colour, and the light's strength. Blue light looks dimmer, so it's stronger.
 const FIRE = { color: 0xff9040, light: 9 };
 const BLUE_FIRE = { color: 0x4090ff, light: 14 };
@@ -157,15 +193,19 @@ const DIR_ANGLE = [Math.PI, Math.PI / 2, 0, -Math.PI / 2]; // N, E, S, W: rotate
 /** A theme's door: a prop with moving parts (see tools/modelgen/doorkit.mjs, and buildDoor). */
 const doorModel = (theme) => `door_${theme.style}`;
 
+/** The way the title screen's walk goes down a theme's stairs: points in their own frame (see DESCENTS). */
+export const stairsDescent = (theme) => DESCENTS[STAIRS[theme.style].descent];
+
 /**
- * Every prop a floor of `theme` might use: its doors', the chests (see Level.addChest), its decorations', its
- * channels', its wall lights and, in every theme after the first, the shop's. They must be loaded (loadProps) before
- * one of its floors is built.
+ * Every prop a floor of `theme` might use: its doors' and stairs', the chests (see Level.addChest), its decorations',
+ * its channels', its wall lights and, in every theme after the first, the shop's. They must be loaded (loadProps)
+ * before one of its floors is built.
  */
 export function propsForTheme(theme) {
   const fill = FILLS[theme.channels?.fill];
   return [...new Set([
     doorModel(theme),
+    `stairs_down_${theme.style}`, `stairs_up_${theme.style}`, ...(THEMES.indexOf(theme) === 0 ? ['stairs_surface'] : []),
     'chest', 'chest_locked',
     ...decorProps(theme.style),
     ...(fill ? [fill.bridge, fill.end, fill.bed, ...(fill.lips ?? [])].filter(Boolean) : []),
@@ -181,11 +221,12 @@ export function buildLevelMeshes(data) {
   const get = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? T.WALL : grid[y * w + x]);
   const isWall = (x, y) => get(x, y) === T.WALL;
 
-  // Rough rock (see roughRock.js), calm round whatever is fixed flat to a wall, the chests backed up against them, and
-  // about the shop. A theme whose `rough` is 'tunnels' is a temple dug into the rock: rough passages between rooms of
-  // masonry.
+  // Rough rock (see roughRock.js), calm round whatever is fixed flat to a wall or stands across a passage from wall to
+  // wall, the chests backed up against them, and about the shop. A theme whose `rough` is 'tunnels' is a temple dug
+  // into the rock: rough passages between rooms of masonry.
   const rough = theme.rough ? roughRock(data, [
     ...(data.decor ?? []).filter((p) => p.wall).map((p) => ({ x: p.x * TILE, z: p.y * TILE, r: 1.6 })),
+    ...(data.decor ?? []).filter((p) => p.span).map((p) => ({ x: p.x * TILE, z: p.y * TILE, r: 2.1 })),
     ...(data.chests ?? []).map((c) => ({ x: c.px * TILE, z: c.py * TILE, r: 1.5 })),
     ...(data.shop ? [...data.shop.props, data.shop.keeper].map((p) => ({ x: p.x * TILE, z: p.y * TILE, r: 2 })) : []),
     ...(data.shop?.sconces ?? []).map((s) => ({ x: s.x, z: s.z, r: 1.4 })),
@@ -199,6 +240,7 @@ export function buildLevelMeshes(data) {
   const vh = WALL_H / TILE;
   const sunk = (t) => t === T.CHANNEL || t === T.BRIDGE; // a channel: the floor drops away
   const fill = FILLS[theme.channels?.fill];
+  const stairs = STAIRS[theme.style];
 
   // Corner ambient occlusion: darken grid corners that touch walls.
   const cornerAO = (gx, gy) => {
@@ -218,13 +260,16 @@ export function buildLevelMeshes(data) {
       const tint = 0.9 + rng.next() * 0.12, inRoom = roomTile[y * w + x] === 1;
       const ao = [cornerAO(x, y), cornerAO(x + 1, y), cornerAO(x + 1, y + 1), cornerAO(x, y + 1)].map((v) => v * tint);
 
-      // (A pool's floor is its bed, a step down, and in shadow under the water.)
+      // (A pool's floor is its bed, a step down, and in shadow under the water. Stairs leave a hole in the floor, or
+      // the vault.)
       const y0 = t === T.POOL ? -POOL.bed : 0;
-      if (t !== T.STAIRS_DOWN && !sunk(t)) {
+      if (t === T.STAIRS_DOWN) holed(inRoom ? floor : tunnelFloor, x, y, 0, stairs.down, data.down.dir, ao);
+      else if (!sunk(t)) {
         (inRoom ? floor : tunnelFloor).quad([[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], [0, 1, 0],
           [[0, 0], [1, 0], [1, 1], [0, 1]], y0 ? ao.map((v) => v * 0.55) : ao);
       }
-      if (t !== T.STAIRS_UP) {
+      if (t === T.STAIRS_UP) holed(ceil, x, y, WALL_H, stairs.up, data.up.dir, ao.map((v) => v * 0.8));
+      else {
         ceil.quad([[x0, WALL_H, z0], [x1, WALL_H, z0], [x1, WALL_H, z1], [x0, WALL_H, z1]], [0, -1, 0],
           [[0, 0], [1, 0], [1, 1], [0, 1]], ao.map((v) => v * 0.8));
       }
@@ -266,12 +311,6 @@ export function buildLevelMeshes(data) {
   if (data.channels?.length) group.add(new THREE.Mesh(banks.build(), mat(tex.channel, tex.channelGlow)));
 
   const stoneMat = new THREE.MeshLambertMaterial({ map: tex.floor, color: 0xb0a898 });
-  const pitWallTex = tex.wall.clone();
-  pitWallTex.repeat.set(1, 1.6);
-  const pitMat = new THREE.MeshLambertMaterial({ map: pitWallTex, color: 0x807870 });
-
-  if (data.down) group.add(buildDownStairs(data.down, stoneMat, pitMat));
-  group.add(buildUpStairs(data.up, stoneMat, pitMat, data.depth === 1));
 
   const obstacles = [];
   for (const p of [data.amulet, data.shrine].filter(Boolean)) {
@@ -402,6 +441,20 @@ export function buildLevelMeshes(data) {
     group.add(m);
   }
 
+  // The stairs (see STAIRS). The first floor's way up comes out under the open sky (stairs_surface), and daylight falls
+  // down it.
+  for (const [s, way] of [[data.down, 'down'], [data.up, 'up']]) {
+    if (s) place({ type: s === data.up && data.depth === 1 ? 'stairs_surface' : `stairs_${way}_${theme.style}`, x: s.x + 0.5, y: s.y + 0.5, yaw: DIR_ANGLE[s.dir] });
+  }
+  const daylight = data.depth === 1 ? sunlight(group, data.up, stairs.up) : null;
+  if (daylight) glowing.unshift(daylight.source);
+  // The sun, shining down that way up. Every floor has it, parked in the dark on all but the first, so every floor has
+  // the same lights and no shader needs recompiling between them (as with SCONCE_LIGHTS).
+  const sun = new THREE.SpotLight(0xfff2dc, daylight ? SUN.light : 0, SURFACE_TOP + 1, SUN.angle, 0.55, 1.2);
+  sun.position.set(daylight ? (data.up.x + 0.5) * TILE : 0, daylight ? SURFACE_TOP : -50, daylight ? (data.up.y + 0.5) * TILE : 0);
+  sun.target.position.set(sun.position.x, -60, sun.position.z);
+  group.add(sun, sun.target);
+
   const flames = buildSconces(data, group, rng, isWall, rough, violet);
   // Props' fires (fire_N anchors): full-size flames, like the wall lights'.
   for (const { x, y, z } of fires) {
@@ -414,7 +467,8 @@ export function buildLevelMeshes(data) {
     flames.push({ flame, halo, fire: look, phase: rng.next() * 10, pos: new THREE.Vector3(x, y + 0.3, z) });
   }
   // The level's few real lights: the shop's sconces first, so it's sure of them, then lava, then the rest.
-  const lights = castLights(group, [...flames.filter((f) => f.shop), ...glowing, ...flames.filter((f) => !f.shop)]);
+  // (Every fitting with a fire, lava's glow and daylight share the level's few real lights: see shareLights.)
+  const { lights, share } = castLights(group, [...flames.filter((f) => f.shop), ...glowing, ...flames.filter((f) => f.fire && !f.shop)]);
   // Soft glows about things that shine by themselves (glow_N anchors: the caves' crystals, the ruins' void shards).
   for (const g of glows) {
     const halo = glowSprite(g.color, 0.9, 0.45);
@@ -436,7 +490,130 @@ export function buildLevelMeshes(data) {
     group.add(built.group);
     return built;
   });
-  return { group, flames, lights, obstacles, doors, shopSlots, shopKept, water, haze, rough, drips: dripSources(data, rng, drips) };
+  return { group, flames, lights, share, obstacles, doors, shopSlots, shopKept, water, haze, rough, sunlight: daylight, drips: dripSources(data, rng, drips) };
+}
+
+/**
+ * The floor of the stairs tile (x, y) (or the vault, `height` up), round the hole its stairs leave: `hole` as in STAIRS,
+ * turned to face `dir`. `ao` is the tile's corner shading, as the other floors have it.
+ */
+function holed(builder, x, y, height, hole, dir, ao) {
+  if (hole === 'full') return;
+  const h = TILE / 2, cx = (x + 0.5) * TILE, cz = (y + 0.5) * TILE, n = [0, height ? -1 : 1, 0];
+  // Where a point of the tile (metres from its middle) is on its texture, and how shaded (between the corners).
+  const quad = (pts) => {
+    const uv = pts.map(([px, pz]) => [(px + h) / TILE, (pz + h) / TILE]);
+    const c = uv.map(([u, v]) => ao[0] * (1 - u) * (1 - v) + ao[1] * u * (1 - v) + ao[2] * u * v + ao[3] * (1 - u) * v);
+    builder.quad(pts.map(([px, pz]) => [cx + px, height, cz + pz]), n, uv, c);
+  };
+  if (hole.rect) {
+    // The rectangle turned to face `dir` (a quarter turn at a time, so still square to the grid), and the tile round
+    // it as up to four strips.
+    const a = DIR_ANGLE[dir], cs = Math.round(Math.cos(a)), sn = Math.round(Math.sin(a));
+    const [ax, az, bx, bz] = hole.rect, turn = ([px, pz]) => [px * cs + pz * sn, -px * sn + pz * cs];
+    const [p, q] = [turn([ax, az]), turn([bx, bz])];
+    const x0 = Math.max(-h, Math.min(p[0], q[0])), x1 = Math.min(h, Math.max(p[0], q[0]));
+    const z0 = Math.max(-h, Math.min(p[1], q[1])), z1 = Math.min(h, Math.max(p[1], q[1]));
+    const strip = (xa, za, xb, zb) => { if (xb > xa && zb > za) quad([[xa, za], [xb, za], [xb, zb], [xa, zb]]); };
+    strip(-h, -h, h, z0);
+    strip(-h, z1, h, h);
+    strip(-h, z0, x0, z1);
+    strip(x1, z0, h, z1);
+    return;
+  }
+  // Round: a sixteen-sided hole (as the models' shafts are), each side joined to where a line from the middle through
+  // its corners meets the edge of the tile. The corners of the tile fall on those lines, so every piece is flat.
+  for (let k = 0; k < 16; k++) {
+    const pt = (i, r) => {
+      const a = (i * Math.PI) / 8, c = Math.cos(a), s = Math.sin(a);
+      return r === null ? [(c * h) / Math.max(Math.abs(c), Math.abs(s)), (s * h) / Math.max(Math.abs(c), Math.abs(s))] : [c * r, s * r];
+    };
+    quad([pt(k, hole.r), pt(k + 1, hole.r), pt(k + 1, null), pt(k, null)]);
+  }
+}
+
+/**
+ * Daylight down the way up from the first floor, the stairs `s`: the sky over the top of its shaft (covering what the
+ * model has up there), a shaft of sunlight falling from it, dust drifting in the sun, and the light itself (`source`,
+ * for castLights). `hole` is the way up's, as in STAIRS. Returns { source, update(dt), x, z (where it falls) }.
+ */
+function sunlight(group, s, hole) {
+  const cx = (s.x + 0.5) * TILE, cz = (s.y + 0.5) * TILE;
+  const r = hole.r ?? (hole.rect ? Math.min(hole.rect[2] - hole.rect[0], hole.rect[3] - hole.rect[1]) / 2 : TILE / 2);
+  const sky = new THREE.Mesh(new THREE.CircleGeometry(r * 1.05, 16).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ map: skyTexture(), fog: false }));
+  sky.position.set(cx, SURFACE_TOP - 0.02, cz);
+  // The shaft of light, brightest at the top, faded out at the bottom: straight down the shaft, clear of its walls and
+  // the frame at its top, then widening from the vault down to the floor.
+  const beamGeo = new THREE.LatheGeometry([new THREE.Vector2(r * 1.6, 0), new THREE.Vector2(r * 0.85, WALL_H), new THREE.Vector2(r * 0.85, SURFACE_TOP)], 16);
+  const { position: at, uv } = beamGeo.attributes;
+  for (let i = 0; i < uv.count; i++) uv.setY(i, at.getY(i) / SURFACE_TOP); // (the fade runs by height, not by the profile's points)
+  const beam = new THREE.Mesh(beamGeo, new THREE.MeshBasicMaterial({
+    map: beamTexture(), color: 0x9a8c6c, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false,
+  }));
+  beam.position.set(cx, 0, cz);
+  // Where it falls on the floor.
+  const pool = new THREE.Mesh(new THREE.CircleGeometry(r * 1.9, 20).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({
+    map: poolTexture(), color: 0x6a5e46, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+  }));
+  pool.position.set(cx, 0.004, cz);
+  // Dust in the sun: motes drifting slowly down and round, in the light's cone.
+  const N = 48, motes = Array.from({ length: N }, () => ({ a: Math.random() * Math.PI * 2, r: Math.random(), y: Math.random() * WALL_H * 1.2, spin: 0.1 + Math.random() * 0.25, fall: 0.03 + Math.random() * 0.05 }));
+  const pos = new Float32Array(N * 3);
+  const dust = new THREE.Points(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(pos, 3)), new THREE.PointsMaterial({
+    color: 0xfff4d8, size: 0.022, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+  }));
+  group.add(sky, beam, pool, dust);
+  const update = (dt) => {
+    motes.forEach((m, i) => {
+      m.a += m.spin * dt;
+      m.y -= m.fall * dt;
+      if (m.y < 0.05) m.y = WALL_H * 1.2;
+      const edge = m.y > WALL_H ? 0.85 : 1.6 - (0.75 * m.y) / WALL_H, rr = m.r * r * edge * 0.9; // (inside the beam)
+      pos.set([cx + Math.cos(m.a) * rr, m.y, cz + Math.sin(m.a) * rr], i * 3);
+    });
+    dust.geometry.attributes.position.needsUpdate = true;
+  };
+  update(0);
+  return { source: { pos: new THREE.Vector3(cx, WALL_H - 1.2, cz), fire: DAYLIGHT }, update, x: cx, z: cz };
+}
+
+/** A patch of summer sky, as seen straight up a shaft: blue, and a few soft clouds going over. */
+function skyTexture() {
+  const rng = new RNG('sky'), cloud = noise(rng, 64, 64, 4), wisp = noise(rng, 64, 64, 9);
+  return canvasTexture(paint(64, 64, (x, y) => {
+    const c = cloud(x, y) * 0.75 + wisp(x, y) * 0.25, d = Math.hypot(x - 31.5, y - 31.5) / 32;
+    const blue = mix(rgb('#8cc4f4'), rgb('#5a98e0'), d);
+    return c > 0.62 ? mix(blue, rgb('#fbfdff'), Math.min(1, (c - 0.62) * 5)) : blue;
+  }));
+}
+
+/** Down the shaft of sunlight: bright at the top, fading away to nothing at the floor, in soft streaks. */
+function beamTexture() {
+  const rng = new RNG('beam'), streak = noise(rng, 64, 64, 8, 1);
+  const t = canvasTexture(paint(64, 64, (x, y) => {
+    const k = (1 - y / 63) ** 1.6 * (0.55 + 0.45 * streak(x, 0));
+    return [255 * k, 240 * k, 210 * k];
+  }));
+  t.magFilter = THREE.LinearFilter;
+  return t;
+}
+
+/** The sunlit patch on the floor: brightest in the middle, soft at its edge. */
+function poolTexture() {
+  const t = canvasTexture(paint(32, 32, (x, y) => {
+    const k = Math.max(0, 1 - Math.hypot(x - 15.5, y - 15.5) / 16) ** 1.4;
+    return [255 * k, 245 * k, 220 * k];
+  }));
+  t.magFilter = THREE.LinearFilter;
+  return t;
+}
+
+function canvasTexture(canvas) {
+  const t = new THREE.CanvasTexture(canvas);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.magFilter = THREE.NearestFilter;
+  return t;
 }
 
 /**
@@ -552,81 +729,6 @@ export function poseDoor(door, amt, swing = 1) {
   if (r) r.position.x = r.userData.rest.x + k * door.slide;
 }
 
-function buildDownStairs(s, stoneMat, pitMat) {
-  const g = new THREE.Group();
-  const half = TILE / 2, depth = 3.2;
-  const wall = (x, z, ry) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(TILE, depth), pitMat);
-    m.position.set(x, -depth / 2, z);
-    m.rotation.y = ry;
-    g.add(m);
-  };
-  wall(0, -half, 0);
-  wall(-half, 0, Math.PI / 2);
-  wall(half, 0, -Math.PI / 2);
-  wall(0, half, Math.PI);
-
-  const N = 6, sd = TILE / N;
-  for (let i = 0; i < N; i++) {
-    const top = -(i + 1) * 0.42;
-    const bh = depth + top;
-    const m = new THREE.Mesh(new THREE.BoxGeometry(TILE * 0.98, bh, sd), stoneMat);
-    m.position.set(0, -depth + bh / 2, half - (i + 0.5) * sd);
-    g.add(m);
-  }
-  // Knee-high rim on the three closed sides.
-  const rimH = 0.55, th = 0.16;
-  const rim = (sx, sz, px, pz) => {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, rimH, sz), stoneMat);
-    m.position.set(px, rimH / 2, pz);
-    g.add(m);
-  };
-  rim(th, TILE, -half + th / 2, 0);
-  rim(th, TILE, half - th / 2, 0);
-  rim(TILE, th, 0, -half + th / 2);
-
-  const glow = new THREE.Mesh(new THREE.PlaneGeometry(TILE * 0.9, TILE * 0.9),
-    new THREE.MeshBasicMaterial({ color: 0x1a3a70, transparent: true, opacity: 0.7, fog: false }));
-  glow.rotation.x = -Math.PI / 2;
-  glow.position.y = -depth + 0.05;
-  g.add(glow);
-
-  g.position.set((s.x + 0.5) * TILE, 0, (s.y + 0.5) * TILE);
-  g.rotation.y = DIR_ANGLE[s.dir];
-  return g;
-}
-
-function buildUpStairs(s, stoneMat, pitMat, toSurface) {
-  const g = new THREE.Group();
-  const half = TILE / 2, shaft = 3;
-  const N = 7, sd = TILE / N;
-  for (let i = 0; i < N; i++) {
-    const top = (i + 1) * (WALL_H / N);
-    const m = new THREE.Mesh(new THREE.BoxGeometry(TILE * 0.98, top, sd), stoneMat);
-    m.position.set(0, top / 2, half - (i + 0.5) * sd);
-    g.add(m);
-  }
-  const wall = (x, z, ry) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(TILE, shaft), pitMat);
-    m.position.set(x, WALL_H + shaft / 2, z);
-    m.rotation.y = ry;
-    g.add(m);
-  };
-  wall(0, -half, 0);
-  wall(-half, 0, Math.PI / 2);
-  wall(half, 0, -Math.PI / 2);
-  wall(0, half, Math.PI);
-  const cap = new THREE.Mesh(new THREE.PlaneGeometry(TILE, TILE),
-    new THREE.MeshBasicMaterial({ color: toSurface ? 0xfff0c8 : 0x6a5030, fog: false }));
-  cap.rotation.x = Math.PI / 2;
-  cap.position.y = WALL_H + shaft;
-  g.add(cap);
-
-  g.position.set((s.x + 0.5) * TILE, 0, (s.y + 0.5) * TILE);
-  g.rotation.y = DIR_ANGLE[s.dir];
-  return g;
-}
-
 function buildPedestal(p, stoneMat) {
   const g = new THREE.Group();
   const base = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.2, 1.0), stoneMat);
@@ -660,6 +762,23 @@ function buildSconces(data, group, rng, isWall, rough, violet) {
     const n = Math.min(cands.length, rng.int(1, 2));
     for (let i = 0; i < n; i++) spots.push(cands[i]);
   }
+  // Along the passages between the rooms, a light every so often (none nearer another than CORRIDOR_GAP tiles), clear
+  // of the doorways (see corridorMask) and of walls with something on them.
+  const passage = corridorMask(data.grid, data.w, data.rooms), cands = [];
+  for (let i = 0; i < passage.length; i++) {
+    if (!passage[i]) continue;
+    const x = i % data.w, y = (i / data.w) | 0, free = (side) => !data.wallUsed?.has(faceKey(x, y, side));
+    if (isWall(x, y - 1) && free('N')) cands.push({ x, y, spot: { x: (x + 0.5) * TILE, z: y * TILE + 0.1, ry: 0 } });
+    if (isWall(x, y + 1) && free('S')) cands.push({ x, y, spot: { x: (x + 0.5) * TILE, z: (y + 1) * TILE - 0.1, ry: Math.PI } });
+    if (isWall(x - 1, y) && free('W')) cands.push({ x, y, spot: { x: x * TILE + 0.1, z: (y + 0.5) * TILE, ry: Math.PI / 2 } });
+    if (isWall(x + 1, y) && free('E')) cands.push({ x, y, spot: { x: (x + 1) * TILE - 0.1, z: (y + 0.5) * TILE, ry: -Math.PI / 2 } });
+  }
+  const lit = [];
+  for (const c of rng.shuffle(cands)) {
+    if (lit.some((l) => Math.max(Math.abs(l.x - c.x), Math.abs(l.y - c.y)) < CORRIDOR_GAP)) continue;
+    lit.push(c);
+    spots.push(c.spot);
+  }
   rng.shuffle(spots);
   // The shop's sconces burn blue. They go first, so they're sure of a light.
   if (data.shop) spots.unshift(...data.shop.sconces.map((s) => ({ ...s, blue: true })));
@@ -692,28 +811,67 @@ function buildSconces(data, group, rng, isWall, rough, violet) {
 }
 
 /**
- * The level's point lights, SCONCE_LIGHTS of them, given to `sources` ({ pos, fire }) in order. A source with a
- * flame keeps its light (`light`), to flicker with it.
+ * The level's point lights, SCONCE_LIGHTS of them, given to the first of `sources` ({ pos, fire, flame? }) to begin
+ * with; shareLights moves them on. Returns { lights, share }: `share` is what shareLights keeps between calls.
  */
 function castLights(group, sources) {
   const lights = [];
   for (let i = 0; i < SCONCE_LIGHTS; i++) {
     const l = new THREE.PointLight(0xff9040, 0, 11, 1.8);
-    const s = sources[i];
-    if (s) {
-      l.color.setHex(s.fire.color);
-      l.position.copy(s.pos); // already nudged off the wall so it lights the room, not just the bricks
-      l.userData.base = s.fire.light;
-      if (s.flame) s.light = l;
-    } else {
-      l.position.set(0, -50, 0);
-      l.userData.base = 0;
-    }
-    l.intensity = l.userData.base;
+    lightUp(l, sources[i] ?? null, 1);
     group.add(l);
     lights.push(l);
   }
-  return lights;
+  return { lights, share: { sources, t: 0, want: null, near: null, ready: false } };
+}
+
+/**
+ * Gives light `l` to `src` (a source as castLights takes them), or parks it in the dark with none, `w` (0..1) of the way
+ * faded in. A source with a flame keeps its light (`light`), to flicker with it.
+ */
+function lightUp(l, src, w) {
+  if (l.userData.src) l.userData.src.light = null;
+  l.userData.src = src;
+  l.userData.w = w;
+  if (!src) {
+    l.position.set(0, -50, 0);
+    l.userData.base = 0;
+    l.intensity = 0;
+    return;
+  }
+  l.color.setHex(src.fire.color);
+  l.position.copy(src.pos); // already nudged off the wall so it lights the room, not just the bricks
+  l.userData.base = src.fire.light;
+  l.intensity = src.fire.light * w;
+  src.light = l;
+}
+
+/**
+ * Hands the level's few real lights (`lights`, SCONCE_LIGHTS of them) round the sources nearest the viewer at (x, z),
+ * so the fittings about you light the walls wherever you go: `share` is castLights'. A light whose source has fallen
+ * behind the rest fades out, then fades in again at the nearest one without a light; one whose source is still about
+ * as near as the others stays put, so they don't shuffle back and forth. The first call gives them out at once. Call
+ * it every frame; a flame's own flicker sets its light's strength (times `userData.w`, how far faded in).
+ */
+export function shareLights(lights, share, x, z, dt) {
+  const dist = (src) => Math.hypot(src.pos.x - x, src.pos.z - z);
+  if ((share.t -= dt) <= 0 || !share.ready) {
+    share.t = 0.25;
+    const ranked = [...share.sources].sort((a, b) => dist(a) - dist(b));
+    share.want = ranked.slice(0, SCONCE_LIGHTS);
+    share.near = ranked.length ? dist(ranked[Math.min(SCONCE_LIGHTS, ranked.length) - 1]) + 3 : 0;
+  }
+  if (!share.ready) {
+    share.ready = true;
+    lights.forEach((l, i) => lightUp(l, share.want[i] ?? null, 1));
+    return;
+  }
+  for (const l of lights) {
+    const u = l.userData, stay = u.src && dist(u.src) <= share.near;
+    u.w = stay ? Math.min(1, u.w + dt * LIGHT_FADE) : Math.max(0, u.w - dt * LIGHT_FADE);
+    if (u.w === 0) lightUp(l, share.want.find((src) => !src.light) ?? null, 0);
+    if (u.src && !u.src.flame) l.intensity = u.base * u.w;
+  }
 }
 
 /** Swaps red and blue in a sconce's glowing materials, so its embers match a blue flame. */

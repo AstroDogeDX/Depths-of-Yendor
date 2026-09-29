@@ -4,6 +4,7 @@
 import { defineModel, revolve, tube, noise3, rand, fract, ramp } from './lib.mjs';
 import { MAT, PAL, P, patches, bevel } from './materials.mjs';
 import { HALF, VAULT, bothFaces } from './doorkit.mjs';
+import { PIT, SKY, SURFACE, roundShaft, deep } from './stairkit.mjs';
 
 const SEWER_PAL = {
   wetWood: P('#121009', '#1b180f', '#252116', '#302b1e', '#3c3627', '#4a4331'),
@@ -23,6 +24,17 @@ const algae = (c, col, wetBelow) => {
   const wet = (wetBelow - c.p.y) / 10 + (noise3(c.p.x * 0.3, c.p.y * 0.3, c.p.z * 0.3, 801) - 0.5);
   return wet > 0.3 ? ramp(SEWER_PAL.slime, 0.35 + 0.3 * patches(c.p, 802, 0.5), c.ax, c.ay) : col;
 };
+
+/** Brick lining a round shaft (`info.r` across), in running bond round it, slimed in green streaks and patches. */
+function brickRound(c) {
+  const { p, info } = c;
+  const u = (Math.atan2(p.x, p.z) + Math.PI) * info.r, row = Math.floor((p.y + 400) / 6), off = row % 2 ? 8 : 0;
+  if (fract((p.y + 400) / 6) < 0.17 || fract((u + off) / 16) < 0.07) return ramp(SEWER_PAL.brick, 0.06, c.ax, c.ay);
+  // Slime: down from the rim in streaks, and in patches wherever it's wet.
+  const streak = noise3(u * 0.25, p.y * 0.02, 0, 1122) + 0.3 * noise3(u * 0.8, p.y * 0.1, 1, 1123);
+  if (streak > 0.95 || noise3(u * 0.12, p.y * 0.12, 2, 1124) > 0.68) return ramp(SEWER_PAL.slime, 0.3 + 0.25 * patches(p, 1125, 0.6), c.ax, c.ay);
+  return ramp(SEWER_PAL.brick, 0.42 + 0.25 * (rand(Math.floor((u + off) / 16), row, 1120) - 0.5) + 0.1 * patches(p, 1121, 0.5), c.ax, c.ay);
+}
 
 const MATS = {
   ...MAT,
@@ -118,6 +130,40 @@ const MATS = {
     }
     return MATS.doorFrame(c);
   },
+  // --- The stairs (stairs_down_sewers, stairs_up_sewers)
+  // A shaft's brick lining (see brickRound), fading into the dark away from the room.
+  shaftBrick: deep((c) => brickRound(c), 20, 140),
+  // A manhole cover's top: cast iron in rings and a grid of raised studs, worn bright where feet have gone over it,
+  // rust in its hollows (`info.at`: its middle).
+  manholeCover(c) {
+    const { p, n, info } = c;
+    if (n.y < 0.5) return MAT.rustyIron(c);
+    const x = p.x - info.at[0], z = p.z - info.at[2], r = Math.hypot(x, z);
+    const worn = 0.12 * patches(p, 1130, 0.3);
+    if (Math.abs(r - 26.5) < 1 || Math.abs(r - 8) < 0.8) return ramp(PAL.iron, 0.72 + worn, c.ax, c.ay);
+    if (r < 25 && r > 9.5) {
+      const gx = fract((x + 100) / 5), gz = fract((z + 100) / 5);
+      if (gx > 0.25 && gx < 0.75 && gz > 0.25 && gz < 0.75) return ramp(PAL.iron, 0.66 + worn, c.ax, c.ay);
+      return rand(c.ax, c.ay, 1131) > 0.7 ? ramp(PAL.rust, 0.35, c.ax, c.ay) : ramp(PAL.iron, 0.24, c.ax, c.ay);
+    }
+    return ramp(PAL.iron, 0.42 + worn + bevel(c, 0.15), c.ax, c.ay);
+  },
+  // The brick of the shaft up to the surface: as shaftBrick, but lit from the sky above, not fading into the dark.
+  sunBrick(c) {
+    const col = brickRound(c);
+    const k = Math.max(0, (c.p.y - VAULT) / (SURFACE - VAULT)) ** 1.5;
+    return k > 0.25 ? col.map((v, i) => (i < 3 ? v + (255 - v) * (k - 0.25) * 0.35 : v)) : col;
+  },
+  // Weeds hanging in over the rim of the manhole up to the surface: blades of green, cut out, catching the day.
+  weeds(c) {
+    const f = fract((c.p.x + c.p.z) * 0.9);
+    if (f < 0.35) return [0, 0, 0, 0];
+    return ramp(P('#1e3a10', '#2e5418', '#467a22', '#62a030', '#86c448'), 0.45 + 0.4 * f + 0.15 * patches(c.p, 1143, 0.8), c.ax, c.ay);
+  },
+  // The underside of a cover shut over a shaft, as seen from below: plain dark iron, in the dark.
+  coverUnder: deep((c) => ramp(PAL.iron, 0.3 + 0.12 * patches(c.p, 1132, 0.4), c.ax, c.ay), 20, 140),
+  ladder: deep((c) => MAT.rustyIron(c), 30, 150),
+
   // Brickwork in running bond on its faces, filling the wall up to the vault.
   brickBond(c) {
     const { p, n } = c;
@@ -142,6 +188,50 @@ function facing(pts, out, extra = {}) {
   const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
   return { pts: n[0] * out[0] + n[1] * out[1] + n[2] * out[2] >= 0 ? pts : [...pts].reverse(), ...extra };
 }
+
+/** An iron ladder's rungs, `hw` either side of x 0 at z, every `every` px from y0 up to y1, in `mat`. */
+function rungs(m, hw, z, y0, y1, every, mat = 'ladder') {
+  for (let y = y0, i = 1; y <= y1; y += every, i++) m.mesh(`rung_${i}`, tube([[-hw, y, z], [hw, y, z]], { half: 1.1, sides: 6 }), { mat });
+}
+
+/**
+ * A ladder up into a manhole in the vault (stairs_up_sewers; see stairkit.mjs): a round shaft up through the vault,
+ * lined in brick, to the manhole above, its cover shut; an iron frame round the hole; and an iron ladder up the shaft's
+ * far wall and on down to the floor, braced and footed on plates. Water drips down the shaft. The first floor's
+ * (stairs_surface) comes up into the open air: its manhole stands open to the sky (which the game shows over it), the
+ * shaft lit from above, not fading into the dark, and weeds hang over its rim up there.
+ */
+function ladderUp(m, surface) {
+  const R = 34, RAIL = 11, Z = -29.5, TOP = surface ? SURFACE : SKY, brick = surface ? 'sunBrick' : 'shaftBrick', ladder = surface ? 'rustyIron' : 'ladder';
+  m.mesh('shaft', roundShaft(R, VAULT, TOP), { mat: brick, info: { r: R } });
+  m.mesh('frame', revolve([[R, VAULT + 4], [R, VAULT - 1.2], [R + 8, VAULT - 1.2], [R + 8, VAULT]], { sides: 16, phase: 0 }), { mat: 'rustyIron' });
+  if (surface) {
+    // The manhole's frame up top, and weeds hanging in over it, lit by the day.
+    m.mesh('top_frame', revolve([[R + 1, TOP - 5], [R - 3, TOP - 5], [R - 3, TOP]], { sides: 16, phase: 0 }), { mat: 'rustyIron' });
+    for (let k = 0; k < 11; k++) {
+      const a = (k / 11) * Math.PI * 2 + wobbleAt(k, 0.25), len = 9 + rand(k, 1140) * 12, w = 2 + rand(k, 1141) * 2.5;
+      const at = [Math.sin(a) * (R - 3), TOP - 2, Math.cos(a) * (R - 3)], tip = [Math.sin(a) * (R - 3 - len * 0.45), TOP - 2 - len, Math.cos(a) * (R - 3 - len * 0.45)];
+      const side = [Math.cos(a) * w, 0, -Math.sin(a) * w];
+      m.mesh(`weed_${k + 1}`, [{ pts: [[at[0] - side[0], at[1], at[2] - side[2]], [at[0] + side[0], at[1], at[2] + side[2]], [tip[0] + side[0] * 0.3, tip[1], tip[2] + side[2] * 0.3], [tip[0] - side[0] * 0.3, tip[1], tip[2] - side[2] * 0.3]] }], { mat: 'weeds' });
+    }
+  } else {
+    m.mesh('cover', revolve([[0, TOP], [R + 1, TOP]], { sides: 16, phase: 0 }), { mat: 'coverUnder' });
+    m.mesh('cover_rim', revolve([[R, TOP - 4], [R - 3, TOP - 4], [R - 3, TOP]], { sides: 16, phase: 0 }), { mat: 'coverUnder' });
+    m.group('drip_1', undefined, { origin: [16, VAULT + 120, 4] });
+  }
+  for (const s of [-1, 1]) {
+    const x = s * RAIL, side = s < 0 ? 'left' : 'right', wall = -Math.sqrt(R * R - x * x);
+    m.cube(`rail_${side}`, [x - 0.9, 0, Z - 2.5], [x + 0.9, TOP - 3, Z + 2.5], { mat: ladder });
+    m.cube(`foot_${side}`, [x - 3.5, 0, Z - 5], [x + 3.5, 1.2, Z + 5], { mat: 'rustyIron' });
+    m.mesh(`stay_${side}`, tube([[x, 96, Z - 2], [x + s * 6, 0.5, Z - 30]], { half: 1.2, side: [1, 0, 0] }), { mat: 'rustyIron' });
+    m.cube(`stay_foot_${side}`, [x + s * 6 - 3, 0, Z - 33], [x + s * 6 + 3, 1.2, Z - 27], { mat: 'rustyIron' });
+    for (const y of [VAULT - 6, VAULT + 50, VAULT + 110, VAULT + 170].filter((y) => y < TOP - 8)) {
+      m.cube(`bracket_${side}_${Math.round(y)}`, [x - 0.8, y - 1.5, wall - 0.5], [x + 0.8, y + 1.5, Z - 2.5], { mat: ladder });
+    }
+  }
+  rungs(m, RAIL, Z + 1, 14, TOP - 10, 14, ladder);
+}
+const wobbleAt = (k, amt) => (rand(k, 1142) - 0.5) * 2 * amt;
 
 export const sewers = {
   bridge: defineModel('bridge', MATS, (m) => {
@@ -252,6 +342,36 @@ export const sewers = {
     // A square grating set in the floor.
     m.cube('drain', [-22, 0, -22], [22, 0.6, 22], { mat: 'drain', faces: ['up'] });
   }, { density: 2 }),
+
+  stairs_down_sewers: defineModel('stairs_down_sewers', MATS, (m) => {
+    // A manhole (see stairkit.mjs): a round shaft down through the floor, lined in brick gone green with slime, an
+    // iron ladder down its far wall, the grab rails at its top arching up over the rim, its iron frame set in the floor
+    // and its cover pushed aside, half off the rim.
+    const R = 34, RAIL = 11, Z = -29.5;
+    m.mesh('shaft', roundShaft(R, -PIT, 0), { mat: 'shaftBrick', info: { r: R } });
+    // The frame: a ring on the floor round the hole, its inside carried down into the shaft, bolted.
+    m.mesh('frame', revolve([[R + 8, 0], [R + 8, 1.2], [R, 1.2], [R, -4]], { sides: 16, phase: 0 }), { mat: 'rustyIron' });
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2 + 0.2, x = Math.cos(a) * (R + 4), z = Math.sin(a) * (R + 4);
+      m.cube(`bolt_${k + 1}`, [x - 1, 1.2, z - 1], [x + 1, 2.2, z + 1], { mat: 'iron' });
+    }
+    // The cover, slid off to the back and right, tipped up where it rests on the frame.
+    const at = [44, 2.2, -40];
+    m.mesh('cover', revolve([[0, -1.5], [30, -1.5], [30, 1.5], [0, 1.5]], { sides: 16 }), { mat: 'manholeCover', origin: at, rotation: [-3, 20, -4], info: { at } });
+    // The ladder: its rails down the far wall, rungs between, bracketed to the brick; above the floor the rails arch
+    // over the rim into grab handles, footed on the floor beyond it.
+    for (const s of [-1, 1]) {
+      const x = s * RAIL, side = s < 0 ? 'left' : 'right', wall = -Math.sqrt(R * R - x * x);
+      m.cube(`rail_${side}`, [x - 0.9, -PIT + 4, Z - 2.5], [x + 0.9, -3, Z + 2.5], { mat: 'ladder' });
+      m.mesh(`grab_${side}`, tube([[x, -4, Z], [x, 26, Z], [x, 34, Z - 4], [x, 34, Z - 12], [x, 26, Z - 17], [x, 0.5, Z - 17]], { half: 1.3, side: [1, 0, 0] }), { mat: 'rustyIron' });
+      m.cube(`foot_${side}`, [x - 3, 0, Z - 20], [x + 3, 1.2, Z - 14], { mat: 'rustyIron' });
+      for (const y of [-40, -110, -180]) m.cube(`bracket_${side}_${-y}`, [x - 0.8, y - 1.5, wall - 0.5], [x + 0.8, y + 1.5, Z - 2.5], { mat: 'ladder' });
+    }
+    rungs(m, RAIL, Z + 1, -PIT + 12, -12, 14);
+  }, { density: 1 }),
+
+  stairs_up_sewers: defineModel('stairs_up_sewers', MATS, (m) => ladderUp(m, false), { density: 1 }),
+  stairs_surface: defineModel('stairs_surface', MATS, (m) => ladderUp(m, true), { density: 1, double: ['weeds'] }),
 
   door_sewers: defineModel('door_sewers', MATS, (m) => {
     // A steel door in chipped green paint (see doorkit.mjs for how doors go together): riveted round its border

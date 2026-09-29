@@ -239,6 +239,7 @@ export class Sfx {
 
   stopDrone() {
     this.water(0);
+    this.outdoors(0);
     this.wind(0);
     this.rift(0);
     this.lava(0);
@@ -282,6 +283,38 @@ export class Sfx {
       src.start();
     }
     this.waterOut.gain.setTargetAtTime(level * 0.14, this.ctx.currentTime, 0.4);
+  }
+
+  /**
+   * The world above, heard down the way up from the first floor, as loud as `level` (0..1): a soft breeze, and now and
+   * then a bird singing up there. Called a few times a second (see Level.update).
+   */
+  outdoors(level) {
+    if (!this.ctx) return;
+    const c = this.ctx;
+    if (!this.airOut) {
+      if (level <= 0) return;
+      const src = c.createBufferSource();
+      src.buffer = this.noiseBuf;
+      src.loop = true;
+      const high = c.createBiquadFilter(), low = c.createBiquadFilter();
+      high.type = 'highpass';
+      high.frequency.value = 500;
+      low.type = 'lowpass';
+      low.frequency.value = 2400;
+      this.airOut = c.createGain();
+      this.airOut.gain.value = 0;
+      src.connect(high).connect(low).connect(this.airOut).connect(this.master);
+      src.start();
+    }
+    this.airOut.gain.setTargetAtTime(level * 0.035, c.currentTime, 0.8);
+    if (level > 0.1 && Math.random() < 0.07 * level) {
+      const f = 2600 + Math.random() * 1400, notes = 2 + Math.floor(Math.random() * 4);
+      for (let i = 0; i < notes; i++) {
+        const up = Math.random() < 0.5;
+        this.tone({ f: f * (up ? 0.85 : 1.15), f2: f * (up ? 1.2 : 0.8), dur: 0.07, type: 'sine', vol: 0.03 * level, delay: i * (0.09 + Math.random() * 0.05) });
+      }
+    }
   }
 
   /** Wind moaning up out of a chasm, as loud as `level` (0..1). */

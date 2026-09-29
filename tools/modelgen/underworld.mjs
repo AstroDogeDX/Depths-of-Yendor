@@ -6,7 +6,8 @@
 // empty "flame" group where the fire burns. The lava lies 0.7 m below the floor (45 px).
 import { defineModel, loft, revolve, tube, noise3, rand, fract, ramp } from './lib.mjs';
 import { MAT, PAL, P, patches, bevel } from './materials.mjs';
-import { HALF, VAULT as TOP, bothFaces } from './doorkit.mjs';
+import { HALF, VAULT as TOP, archPts, archSlices, bothFaces } from './doorkit.mjs';
+import { PIT, SKY, squareShaft, sideways, deep } from './stairkit.mjs';
 
 const UW = {
   basalt: P('#16121c', '#221b2a', '#2e2438', '#3b2f47', '#4a3b58', '#5c4a6c'),
@@ -243,7 +244,89 @@ function lavaLip(name, seed) {
 
 // ---------------------------------------------------------------- props
 
+// --- The stairs (stairs_down_underworld, stairs_up_underworld): black stone and brick fading into the dark away from
+// the room, but for their runes, which shine on down (or up) into it.
+MATS.deepBrick = deep((c) => MATS.brick(c), 20, 150);
+MATS.deepBasalt = deep((c) => MATS.basalt(c), 20, 150);
+
+/** Bands of runes round the inside of a stairwell or shaft, x ±hw by z0..z1, at the heights `ys`, on the walls `walls`. */
+function runeBands(m, hw, z0, z1, ys, walls) {
+  ys.forEach((y, i) => {
+    const q = (pts, out, info) => overlay(m, `band_${i + 1}_${info.wall}`, pts, out, 'runes', info);
+    if (walls.includes('n')) q([[-hw, y, z0 + 0.3], [hw, y, z0 + 0.3], [hw, y + 7, z0 + 0.3], [-hw, y + 7, z0 + 0.3]], [0, 0, 1], { u: 'x', u0: -hw, v0: y, seed: 40 + i, wall: 'n' });
+    if (walls.includes('s')) q([[-hw, y, z1 - 0.3], [hw, y, z1 - 0.3], [hw, y + 7, z1 - 0.3], [-hw, y + 7, z1 - 0.3]], [0, 0, -1], { u: 'x', u0: -hw, v0: y, seed: 45 + i, wall: 's' });
+    for (const s of [-1, 1]) {
+      const wall = s < 0 ? 'w' : 'e', x = s * (hw - 0.3);
+      if (walls.includes(wall)) q([[x, y, z0], [x, y, z1], [x, y + 7, z1], [x, y + 7, z0]], [-s, 0, 0], { u: 'z', u0: z0, v0: y, seed: 50 + i * 2 + (s > 0), wall });
+    }
+  });
+}
+
+/** A squat basalt pillar standing by the stairs at (x, z), `h` tall, runes down its front, violet fire in the bowl on top. */
+function firePillar(m, name, x, z, h, i) {
+  m.cube(`${name}_foot`, [x - 9, 0, z - 9], [x + 9, 5, z + 9], { mat: 'basalt' });
+  m.cube(`${name}_shaft`, [x - 7, 5, z - 7], [x + 7, h, z + 7], { mat: 'basalt' });
+  overlay(m, `${name}_runes`, [[x - 4.5, 10, z + 7.3], [x + 4.5, 10, z + 7.3], [x + 4.5, h - 6, z + 7.3], [x - 4.5, h - 6, z + 7.3]], [0, 0, 1], 'runes', { u: 'x', u0: x - 3.5, v0: 10, seed: 60 + i });
+  const profile = [[0, 0], [6, 0], [11, 3], [13, 8], [12, 8.5], [11, 6], [0, 5.5]];
+  m.mesh(`${name}_bowl`, revolve(profile, { sides: 8, mat: (k) => (k === profile.length - 2 ? 'violetEmbers' : 'darkIron') }), { origin: [x, h, z] });
+  m.group(`fire_${i}`, undefined, { origin: [x, h + 9, z] });
+}
+
 export const underworld = {
+  stairs_down_underworld: defineModel('stairs_down_underworld', MATS, (m) => {
+    // Black steps down a stairwell into the dark (see stairkit.mjs): a line of violet light along the nose of each and
+    // runes across its riser, and bands of runes round the black brick walls all the way down, shining on in the dark.
+    // A kerb of basalt runs round the opening, runes along it, and a pillar stands either side of the way in, violet
+    // fire burning in the bowl on top.
+    const HW = 44, BACK = -52, N = 7, RISE = 26, RUN = (HALF - BACK) / N, K = 11, KH = 10;
+    m.mesh('walls', squareShaft(-HW, BACK, HW, HALF, -PIT, 0, { open: ['s'] }), { mat: 'deepBrick' });
+    runeBands(m, HW, BACK, HALF, [-24, -86, -148], ['n', 'e', 'w']);
+    for (let i = 0; i < N; i++) {
+      const top = -RISE * (i + 1), z0 = HALF - RUN * (i + 1);
+      m.cube(`step_${i + 1}`, [-HW, top - RISE, z0], [HW, top, HALF - RUN * i], { mat: 'deepBasalt', faces: i < N - 1 ? ['up', 'north'] : ['up'] });
+      overlay(m, `step_${i + 1}_nose`, [[-HW, top + 0.2, z0], [HW, top + 0.2, z0], [HW, top + 0.2, z0 + 1.6], [-HW, top + 0.2, z0 + 1.6]], [0, 1, 0], 'violetGlow');
+      if (i < N - 1) overlay(m, `step_${i + 1}_runes`, [[-HW + 4, top - 16, z0 - 0.3], [HW - 4, top - 16, z0 - 0.3], [HW - 4, top - 9, z0 - 0.3], [-HW + 4, top - 9, z0 - 0.3]], [0, 0, -1], 'runes', { u: 'x', u0: -HW + 4, v0: top - 16, seed: 70 + i });
+    }
+    // The kerb, runes round its outside.
+    m.cube('kerb_left', [-HW - K, 0, BACK - K], [-HW, KH, HALF - 20], { mat: 'basalt' });
+    m.cube('kerb_right', [HW, 0, BACK - K], [HW + K, KH, HALF - 20], { mat: 'basalt' });
+    m.cube('kerb_back', [-HW, 0, BACK - K], [HW, KH, BACK], { mat: 'basalt' });
+    overlay(m, 'kerb_runes_back', [[-HW - K, 1.5, BACK - K - 0.3], [HW + K, 1.5, BACK - K - 0.3], [HW + K, 8.5, BACK - K - 0.3], [-HW - K, 8.5, BACK - K - 0.3]], [0, 0, -1], 'runes', { u: 'x', u0: -HW - K, v0: 1.5, seed: 80 });
+    for (const s of [-1, 1]) {
+      const x = s * (HW + K + 0.3);
+      overlay(m, `kerb_runes_${s < 0 ? 'left' : 'right'}`, [[x, 1.5, BACK - K], [x, 1.5, HALF - 20], [x, 8.5, HALF - 20], [x, 8.5, BACK - K]], [s, 0, 0], 'runes', { u: 'z', u0: BACK - K, v0: 1.5, seed: 81 + (s > 0) });
+      firePillar(m, `pillar_${s < 0 ? 'left' : 'right'}`, s * (HW + K / 2 + 1), HALF - 10, 38, s < 0 ? 1 : 2);
+    }
+  }, { density: 1, glow: ['runes', 'violetGlow', 'violetEmbers'] }),
+
+  stairs_up_underworld: defineModel('stairs_up_underworld', MATS, (m) => {
+    // A flight of black steps up through the vault (see stairkit.mjs), runes glowing across every riser, between cheek
+    // walls of black brick, to a landing and a dark archway on up, the cult's eye burning over it; bands of runes round
+    // the shaft, and a pillar at the foot of each cheek, violet fire in the bowl on top.
+    const HW = 42, CW = 12, N = 8, RISE = TOP / N, RUN = 14, LAND = HALF - RUN * (N - 1);
+    m.mesh('shaft', squareShaft(-HALF, -HALF, HALF, HALF, TOP, SKY), { mat: 'deepBrick' });
+    runeBands(m, HALF, -HALF, HALF, [TOP + 26, TOP + 104], ['n', 'e', 'w', 's']);
+    for (let i = 0; i < N; i++) {
+      const top = RISE * (i + 1), z1 = HALF - RUN * i;
+      m.cube(`step_${i + 1}`, [-HW, top - RISE, i === N - 1 ? -HALF : HALF - RUN * (i + 1)], [HW, top, z1], { mat: 'deepBasalt', faces: ['up', 'south'] });
+      overlay(m, `step_${i + 1}_runes`, [[-HW + 4, top - RISE + 7.7, z1 + 0.3], [HW - 4, top - RISE + 7.7, z1 + 0.3], [HW - 4, top - RISE + 14.7, z1 + 0.3], [-HW + 4, top - RISE + 14.7, z1 + 0.3]], [0, 0, 1], 'runes', { u: 'x', u0: -HW + 4, v0: top - RISE + 7.7, seed: 70 + i });
+    }
+    for (const s of [-1, 1]) {
+      const side = s < 0 ? 'left' : 'right';
+      const outline = [[HALF, 0], [HALF, 30], [LAND, TOP + 26], [-HALF, TOP + 26], [-HALF, 30], [-HALF, 0]];
+      m.mesh(`cheek_${side}`, sideways(outline, s * HW, s * (HW + CW), [[0, 1, 4, 5], [1, 2, 3, 4]]), { mat: 'deepBrick' });
+      firePillar(m, `pillar_${side}`, s * (HW + CW / 2 + 2), HALF - 9, 44, s < 0 ? 1 : 2);
+    }
+    // The archway on up, black beyond, a frame of basalt round it and the cult's eye over it.
+    const AW = 24, SPRING = TOP + 58, RISE_A = 18, Z = -HALF + 0.4;
+    m.mesh('archway', archSlices(AW, SPRING, RISE_A, 6, TOP).map((sl) => facing(sl.map(([x, y]) => [x, y, Z]), [0, 0, 1])), { mat: 'socket' });
+    const outer = archPts(AW + 7, SPRING, RISE_A + 7, 6), inner = archPts(AW, SPRING, RISE_A, 6);
+    m.mesh('arch', outer.slice(0, -1).map((a, i) => facing([[a[0], a[1], Z + 0.2], [outer[i + 1][0], outer[i + 1][1], Z + 0.2], [inner[i + 1][0], inner[i + 1][1], Z + 0.2], [inner[i][0], inner[i][1], Z + 0.2]], [0, 0, 1])), { mat: 'deepBasalt' });
+    for (const s of [-1, 1]) m.cube(`jamb_${s < 0 ? 'left' : 'right'}`, [s < 0 ? -AW - 7 : AW, TOP, -HALF], [s < 0 ? -AW : AW + 7, SPRING, -HALF + 3], { mat: 'deepBasalt' });
+    const EY = SPRING + RISE_A + 20;
+    overlay(m, 'eye', [[-16, EY - 16, Z + 0.3], [16, EY - 16, Z + 0.3], [16, EY + 16, Z + 0.3], [-16, EY + 16, Z + 0.3]], [0, 0, 1], 'sigil', { cx: 0, cy: EY, R: 8 });
+  }, { density: 0.75, glow: ['runes', 'violetEmbers', 'sigil'] }),
+
   lava_bridge: defineModel('lava_bridge', MATS, (m) => {
     // A narrow arch of black brick over the lava, low parapets either side with runes glowing along them, a
     // horned post at each corner. It spans 2 m (along z) and rests on the banks.

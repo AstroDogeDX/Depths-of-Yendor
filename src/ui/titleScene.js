@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { THEMES, FLOORS_PER_THEME, TILE, EYE_H } from '../config.js';
 import { generateLevel } from '../dungeon/generator.js';
-import { buildLevelMeshes, disposeGroup, flowWater, propsForTheme, poseDoor } from '../dungeon/levelBuilder.js';
+import { buildLevelMeshes, disposeGroup, flowWater, propsForTheme, poseDoor, stairsDescent, shareLights } from '../dungeon/levelBuilder.js';
 import { loadProps } from '../dungeon/props.js';
 import { T } from '../dungeon/tiles.js';
 import { Drips } from '../fx/drips.js';
@@ -133,11 +133,12 @@ export class TitleScene {
     flowWater(this.built.water, this.t);
     this.built.haze?.update(this.t);
     this.drips.update(dt, this.camera.position);
+    shareLights(this.built.lights, this.built.share, pos.x, pos.z, dt);
     for (const f of this.built.flames) {
       const k = 0.85 + Math.sin(this.t * 17 + f.phase) * 0.08 + Math.sin(this.t * 5.3 + f.phase * 2) * 0.07;
       f.flame.update(this.t, k);
       f.halo.material.opacity = 0.35 + (k - 0.85) * 1.6;
-      if (f.light) f.light.intensity = f.light.userData.base * k;
+      if (f.light) f.light.intensity = f.light.userData.base * f.light.userData.w * k;
     }
   }
 
@@ -201,9 +202,9 @@ function planWalk(data) {
     out.push(pts[pts.length - 1]);
     pts = out;
   }
-  // Down the stairs: step into the stairwell and sink, heading away from its opening.
-  const sx = (down.x + 0.5) * TILE, sz = (down.y + 0.5) * TILE;
-  pts.push([sx + ddx * 0.5, EYE_H - 0.35, sz + ddy * 0.5], [sx, EYE_H - 0.9, sz], [sx - ddx * 0.6, EYE_H - 1.8, sz - ddy * 0.6]);
+  // Down the stairs, as the theme's go (see stairsDescent): points in their own frame, turned the way they face.
+  const sx = (down.x + 0.5) * TILE, sz = (down.y + 0.5) * TILE, a = Math.atan2(ddx, ddy), c = Math.cos(a), s = Math.sin(a);
+  for (const [x, y, z] of stairsDescent(data.theme)) pts.push([sx + x * c + z * s, EYE_H + y, sz - x * s + z * c]);
   const points = pts.map(([x, y, z]) => new THREE.Vector3(x, y, z));
   points.descent = TILE * 1.3;
   return points;
