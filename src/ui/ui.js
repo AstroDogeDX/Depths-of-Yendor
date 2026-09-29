@@ -4,7 +4,7 @@ import { equipSlotFor, equipItem, putAway, DOLL_SLOTS_FOR } from '../items/use.j
 import { T } from '../dungeon/tiles.js';
 import { TRAP_COLORS } from '../world/level.js';
 import { HUNGER_HUNGRY, HUNGER_FAMISHED, TILE, HOTBAR_SIZE, PLAYER_SPEED, MAX_DEPTH, THEMES, FLOORS_PER_THEME, TWO_HAND_STR, themeForDepth } from '../config.js';
-import { canHotbar, slotItem, slotHolds, slotAction, assignSlot, clearSlot, moveSlot } from '../hotbar.js';
+import { canHotbar, slotItem, slotHolds, slotAction, assignSlot, clearSlot, moveSlot, HELD } from '../hotbar.js';
 import { stackable } from '../items/generate.js';
 import { DAMAGE_TYPES } from '../damage.js';
 import { Logo } from './logo.js';
@@ -352,9 +352,9 @@ export class UI {
     });
     this.setHtml('gear', gear.join(''));
 
-    // Holding a potion's hotbar key, what the mouse does with it (see Game.holdPotion).
-    const potion = g.potionHold && slotItem(p, g.potionHold.i);
-    const prompt = g.menu ? '' : potion ? `${g.knowledge.name(potion)}: [Click] Throw · [Right-click] Drink`
+    // Holding a hotbar key for something held up, what the mouse does with it (see Game.holdSlot).
+    const held = g.hold && slotItem(p, g.hold.i), how = held && HELD[held.kind];
+    const prompt = g.menu ? '' : how ? `${g.knowledge.name(held)}: [Click] ${how.left} · [Right-click] ${how.right}`
       : g.interaction ? `[E] ${g.interaction.label}` : '';
     this.set('prompt', prompt);
 
@@ -1004,7 +1004,7 @@ export class UI {
       el.classList.toggle('na', unattuned);
       el.classList.toggle('cursed', tint === 'cursed');
       el.classList.toggle('clean', tint === 'clean');
-      el.classList.toggle('held', g.potionHold?.i === i && !g.menu);
+      el.classList.toggle('held', g.hold?.i === i && !g.menu);
       el.classList.toggle('sel', !!it && it === sel);
       el.classList.toggle('dim', live && !!it && !!this.selectMode && !this.selectMode.filter(it));
       el.draggable = live && !!b && !this.selectMode;

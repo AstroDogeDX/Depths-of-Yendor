@@ -1,5 +1,5 @@
 import { ARTEFACTS } from './items/defs.js';
-import { drinkPotion, throwPotion, readScroll, zapWand, eatFood, activateArtefact } from './items/use.js';
+import { drinkPotion, throwPotion, readScroll, zapWand, zapSelf, eatFood, activateArtefact } from './items/use.js';
 import { stackable } from './items/generate.js';
 
 // Hotbar bindings live on the player as { kind, type, uid? }.
@@ -60,15 +60,21 @@ export function moveSlot(player, from, to) {
 }
 
 /**
- * What pressing the slot does. A potion waits for you to choose while you hold its key: click to throw it, right-click
- * to drink it (see Game.handleKeys and usePotionSlot).
+ * What holding a slot's key lets you do with what's in it, by kind: raised in place of your weapon, click for `left`
+ * and right-click for `right`, which is always on yourself (see Game.holdSlot and useHeldSlot). Anything else is used
+ * the moment its key is pressed.
  */
+export const HELD = {
+  potion: { left: 'Throw', right: 'Drink' },
+  wand: { left: 'Zap', right: 'Zap yourself' },
+};
+
+/** What pressing the slot does: for what's HELD, 'hold' (you choose, holding its key). */
 export function slotAction(game, item) {
+  if (HELD[item.kind]) return 'hold';
   switch (item.kind) {
-    case 'potion': return 'hold';
     case 'scroll': return 'read';
     case 'food': return 'eat';
-    case 'wand': return 'zap';
     case 'artefact': return 'use';
   }
   return '';
@@ -103,11 +109,26 @@ export function useSlot(game, i) {
   return true;
 }
 
-/** Throws (`how` 'throw') or drinks ('drink') the potion in slot `i`. Returns true if it did. */
-export function usePotionSlot(game, i, how) {
-  const item = slotItem(game.player, i);
-  if (!item || item.kind !== 'potion' || !game.canAct()) return false;
-  if (how === 'throw') throwPotion(game, item);
-  else drinkPotion(game, item);
-  return true;
+/**
+ * Uses what's held up from slot `i` (see HELD): with the `button` clicked ('left' or 'right'), which the hand holding it
+ * acts out (see ViewModel.act). Returns true if it did anything.
+ */
+export function useHeldSlot(game, i, button) {
+  return useHeld(game, slotItem(game.player, i), button);
+}
+
+/** Uses `item`, held up in place of your weapon (from the hotbar, or a healing potion quaffed with Q), as useHeldSlot. */
+export function useHeld(game, item, button) {
+  if (!item || !HELD[item.kind] || !game.canAct() || !game.player.inventory.includes(item)) return false;
+  const last = item.qty <= 1 && item.kind === 'potion'; // (a wand stays, spent or not)
+  let did, act;
+  if (item.kind === 'potion') {
+    act = button === 'left' ? 'throw' : 'drink';
+    did = button === 'left' ? throwPotion(game, item) : (drinkPotion(game, item), true);
+  } else {
+    act = button === 'left' ? 'zap' : 'self';
+    did = button === 'left' ? zapWand(game, item) : zapSelf(game, item);
+  }
+  if (did) game.viewmodel.act(act, last);
+  return !!did;
 }

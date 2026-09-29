@@ -29,7 +29,10 @@ export function itemActions(game, item) {
       break;
     case 'scroll': acts.push({ label: 'Read', fn: () => readScroll(game, item) }); break;
     case 'food': acts.push({ label: 'Eat', fn: () => eatFood(game, item) }); break;
-    case 'wand': acts.push({ label: 'Zap', fn: () => zapWand(game, item) }); break;
+    case 'wand':
+      acts.push({ label: 'Zap', fn: () => zapWand(game, item) });
+      acts.push({ label: 'Zap yourself', fn: () => zapSelf(game, item) });
+      break;
     case 'weapon': case 'offhand': case 'armor': case 'ring': case 'artefact': {
       const [on, off] = EQUIP_LABELS[item.kind];
       acts.push(equipped ? { label: off, fn: () => putAway(game, item) } : { label: on, fn: () => equipItem(game, item) });
@@ -340,20 +343,21 @@ function removeCurse(game, it) {
 
 // --- Wands ---
 
-// What each wand's bolt does to what it hits: a monster, or you when a cursed wand turns on you. `power` is the wand's +,
-// adding WAND_PLUS_DMG to its damage. `known`: what it does is plain as soon as it's zapped (else, once it hits).
+// What each wand's bolt does to what it hits: a monster, or you, when a cursed wand turns on you or you zap yourself.
+// `power` is the wand's +, adding WAND_PLUS_DMG to its damage; `source`, what hurt you, if it's you. `known`: what it
+// does is plain as soon as it's zapped (else, once it hits).
 const WAND_BOLTS = {
   missile: { color: 0xc080ff, speed: 16, known: true,
-    hit: (game, who, power, pr) => wandHurt(game, who, 'missile', power, { knockback: pr && { x: pr.vx / 16, z: pr.vz / 16 } }) },
-  fire: { color: 0xff6010, speed: 13, known: true, hit: (game, who, power) => wandHurt(game, who, 'fire', power, { ignite: 5 }) },
-  frost: { color: 0x9ad8ff, speed: 13, hit: (game, who, power) => wandHurt(game, who, 'frost', power, { chill: 10 + power * 2 }) },
+    hit: (game, who, power, pr, source) => wandHurt(game, who, 'missile', power, { knockback: pr && { x: pr.vx / 16, z: pr.vz / 16 }, source }) },
+  fire: { color: 0xff6010, speed: 13, known: true, hit: (game, who, power, pr, source) => wandHurt(game, who, 'fire', power, { ignite: 5, source }) },
+  frost: { color: 0x9ad8ff, speed: 13, hit: (game, who, power, pr, source) => wandHurt(game, who, 'frost', power, { chill: 10 + power * 2, source }) },
   teleother: { color: 0x8040e0, speed: 12, hit: (game, who) => teleportOther(game, who) },
 };
 const WILD_BOLT = 0x70ff70; // a cursed wand's bolt, whatever it carries
 
-function wandHurt(game, who, wand, power, opts) {
+function wandHurt(game, who, wand, power, { source, ...opts }) {
   const d = WANDS[wand], amount = rand.int(d.dmg[0], d.dmg[1]) + power * WAND_PLUS_DMG;
-  if (who.isPlayer) game.hurtPlayer(amount, { source: 'a backfiring wand', type: d.dmgType, ignoreArmor: true, ...opts });
+  if (who.isPlayer) game.hurtPlayer(amount, { source: source ?? 'a backfiring wand', type: d.dmgType, ignoreArmor: true, ...opts });
   else who.takeDamage(game, amount, { type: d.dmgType, ...opts });
 }
 
@@ -437,12 +441,62 @@ export function zapWand(game, item) {
     if (b.known) learn();
   }
 
-  // A few zaps and you know the wand through and through: its +, and its charges (and its kind and curse, if its
-  // spell hasn't shown you those already).
+  zapped(game, item);
+  return true;
+}
+
+// A few zaps and you know the wand through and through: its +, and its charges (and its kind and curse, if its spell
+// hasn't shown you those already).
+function zapped(game, item) {
   if (!item.identified && --item.zapsToId <= 0) {
-    k.identify(item);
-    game.log(`You have used your wand enough to know it: ${k.name(item)}.`, 'info');
+    game.knowledge.identify(item);
+    game.log(`You have used your wand enough to know it: ${game.knowledge.name(item)}.`, 'info');
   }
+}
+
+/**
+ * Zaps a wand at yourself: its spell does to you what it would to a monster, through your armour, as when a cursed
+ * wand turns on you. Why would you? Frost puts out the fire on you and fire thaws you (see status.js), and teleport
+ * other takes you somewhere else on the floor. You know what it was straight away, from what it did to you. A cursed
+ * wand does what it would zapped at anything: some wand's bolt at random, or nothing (see wildZap). Not an attack, so
+ * you can do it charmed.
+ */
+export function zapSelf(game, item) {
+  const p = game.player, k = game.knowledge;
+  if (item.charges <= 0) {
+    game.log('You turn the wand on yourself, but nothing happens. It is out of charges.', 'warn');
+    return true;
+  }
+  item.charges--;
+  game.audio.zap();
+  const source = 'a wand of their own', power = item.plus;
+  if (item.curse > 0) {
+    const key = rand.pick(Object.keys(WAND_BOLTS));
+    if (!k.isKnown(item)) k.tried.wand.add(item.type);
+    if (rand.chance(0.2)) game.log('You turn the wand on yourself. It sputters, and fizzles out.', 'warn');
+    else {
+      game.log('You turn the wand on yourself, and it spits a wild, flickering bolt into you!', 'danger');
+      burst(game.level, p.x, 1.2, p.z, WILD_BOLT, 14, 2.5, 0.5);
+      WAND_BOLTS[key].hit(game, p, power, null, source);
+    }
+    if (!item.curseKnown) {
+      item.curseKnown = true;
+      game.log('The wand is cursed!', 'danger');
+    }
+  } else {
+    item.curseKnown = true;
+    game.log('You turn the wand on yourself.', 'warn');
+    if (item.type === 'lightning') {
+      const w = WANDS.lightning;
+      game.flash('#c0e0ff', 0.25);
+      game.hurtPlayer(rand.int(w.dmg[0], w.dmg[1]) + power * WAND_PLUS_DMG, { source, type: w.dmgType, ignoreArmor: true });
+    } else {
+      burst(game.level, p.x, 1.2, p.z, WAND_BOLTS[item.type].color, 14, 2.5, 0.5);
+      WAND_BOLTS[item.type].hit(game, p, power, null, source);
+    }
+    if (k.learn(item)) game.log(`This must be a ${k.name(item)}!`, 'info');
+  }
+  zapped(game, item);
   return true;
 }
 

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildWeaponMesh } from '../items/models.js';
+import { buildWeaponMesh, buildItemModel } from '../items/models.js';
 import { buildBBModel } from '../items/bbmodel.js';
 import { MODEL_PX } from '../config.js';
 import { glowSprite } from './glow.js';
@@ -55,6 +55,23 @@ const JAB_2H = [
 ];
 // Weapons (by model) with a two-handed pose of their own; the rest slash or thrust by their damage type.
 const KEYS_2H = { dagger: JAB_2H };
+
+// Something held up from the hotbar in place of your weapon (see Game.holdSlot): the weapon goes down out of sight and
+// it comes up, taking HOLD_RAISE seconds in all (half each), and the reverse when you let go. Only once it's up can you
+// use it, and then again HOLD_USE seconds after each use.
+export const HOLD_RAISE = 0.4;
+export const HOLD_USE = 0.35;
+const HELD_AT = [0.24, -0.3, -0.72]; // where it's held up, in the right hand
+// How it's held, by kind: turned from its floor model's frame (a wand points ahead, crystal first), and scaled.
+const HELD_KINDS = { wand: { turn: [-0.1, -Math.PI / 2, 0], scale: 1 }, potion: { turn: [0.1, 0.4, 0], scale: 0.5 } };
+// What using it looks like (see act), each over `dur` seconds: `k` rises from 0 to 1 and back over it.
+export const actTime = (kind) => ACTS[kind].dur;
+const ACTS = {
+  throw: { dur: 0.35, pose: (k) => ({ p: [0, 0.14 * k, -0.28 * k], r: [-0.9 * k, 0, 0] }) }, // lobbed ahead
+  drink: { dur: 0.6, pose: (k) => ({ p: [-0.2 * k, 0.2 * k, 0.3 * k], r: [0, 0, 1.3 * k] }) }, // up to your lips, tipped
+  zap: { dur: 0.3, pose: (k) => ({ p: [0, 0.02 * k, -0.16 * k], r: [0.15 * k, 0, 0] }) }, // jabbed at the crosshair
+  self: { dur: 0.55, pose: (k) => ({ p: [-0.12 * k, 0.06 * k, 0.12 * k], r: [0, 2.4 * k, 0] }) }, // turned on yourself
+};
 
 const smooth = (x) => x * x * (3 - 2 * x);
 const lerp = (a, b, k) => a + (b - a) * k;
@@ -115,6 +132,41 @@ export class ViewModel {
     this.torch.position.set(-0.5, -0.52, -0.95);
     this.torch.rotation.set(-0.25, 0, 0.2);
     this.scene.add(this.torch);
+
+    // What's held up from the hotbar (see update's `held`): `heldItem` the item it shows, and `swap` how far along the
+    // change is: 0 the weapon up, 0.5 both down, 1 the item up.
+    this.heldPivot = new THREE.Group();
+    this.scene.add(this.heldPivot);
+    this.heldItem = null;
+    this.heldModel = null;
+    this.swap = 0;
+    this.actKind = null;
+    this.actT = -1;
+    this.actGone = false; // the last of them: it's gone from your hand once used
+  }
+
+  /** Acts out using what's held up (see ACTS); `gone`: that was the last of it, which leaves your hand. */
+  act(kind, gone = false) {
+    this.actKind = kind;
+    this.actT = 0;
+    this.actGone = gone;
+  }
+
+  /** Puts `item` in the hand (or nothing), to be raised. */
+  showHeld(item, color) {
+    if (this.heldModel) this.heldPivot.remove(this.heldModel);
+    this.heldItem = item;
+    this.heldModel = null;
+    this.actT = -1;
+    if (!item) return;
+    const model = buildItemModel(item, color);
+    const turn = new THREE.Group();
+    const how = HELD_KINDS[item.kind] ?? { turn: [0, 0, 0], scale: 1 };
+    turn.rotation.set(...how.turn);
+    turn.scale.setScalar(how.scale);
+    turn.add(model);
+    this.heldModel = turn;
+    this.heldPivot.add(turn);
   }
 
   /** Holds the weapon with this def (items/defs.js WEAPONS), or nothing. Stabbing weapons thrust. */
@@ -145,7 +197,15 @@ export class ViewModel {
    * `offhand`: the type of what's in your off hand (only the torch has a model yet), or null; `twoHanded`: your weapon
    * gripped in both hands, with it stowed; `torchLight`: how brightly your torch lights you (Player.torchLight).
    */
-  update(dt, { moving, bob, charge, time, lightLevel, torchLight = 1, offhand = 'torch', twoHanded = false, yaw = 0, sprint = false }) {
+  update(dt, { moving, bob, charge, time, lightLevel, torchLight = 1, offhand = 'torch', twoHanded = false, yaw = 0, sprint = false, held = null }) {
+    // What's held up from the hotbar: a new one waits for the last to go down (or, from the weapon, goes straight in).
+    const want = held?.item ?? null;
+    if (want !== this.heldItem && this.swap <= 0.5) this.showHeld(want, held?.color);
+    const to = want !== this.heldItem ? 0.5 : want ? 1 : 0;
+    const step = dt / HOLD_RAISE;
+    this.swap = to > this.swap ? Math.min(to, this.swap + step) : Math.max(to, this.swap - step);
+    const lowered = smooth(Math.min(1, this.swap * 2)), raised = smooth(Math.max(0, this.swap * 2 - 1));
+
     // Changing grip eases the weapon between its poses, and the torch up or down.
     const ease = Math.min(1, dt * 9);
     this.grip += ((twoHanded ? 1 : 0) - this.grip) * ease;
@@ -171,11 +231,15 @@ export class ViewModel {
     if (sprint && this.swingT < 0) pose.p[1] -= 0.06;
     const bx = moving ? Math.sin(bob) * 0.012 * sway : 0;
     const by = moving ? Math.abs(Math.cos(bob)) * 0.014 * sway : Math.sin(time * 1.5) * 0.003;
+    pose.p[1] -= lowered * 0.75;
+    pose.arc += lowered * 0.7;
+    this.weaponPivot.visible = lowered < 0.99;
     this.weaponPivot.position.set(pose.p[0] + bx, pose.p[1] + by, pose.p[2]);
     this.weaponPivot.rotation.set(0, pose.yaw, 0);
     this.weaponPlane.rotation.set(0, 0, pose.roll);
     this.weaponArc.rotation.set(pose.arc, 0, 0);
     this.weaponTwist.rotation.set(0, pose.twist, 0);
+    this.updateHeld(dt, raised, bx, by);
     const down = 1 - this.torchUp;
     this.torch.position.set(-0.5 - bx, -0.52 + by - down * 0.75, -0.95);
     this.torch.visible = this.torchUp > 0.01;
@@ -193,5 +257,22 @@ export class ViewModel {
     this.torchLight.position.set(-0.4, -0.15 - down * 0.6, -0.7);
     this.torchLight.intensity = 2.2 * flick * lightLevel * torchLight;
     this.ambient.intensity = 0.25 + lightLevel * 0.45;
+  }
+
+  /** Poses what's held up: `raised` how far (0..1), and what using it looks like, if it's being used. */
+  updateHeld(dt, raised, bx, by) {
+    const h = this.heldPivot;
+    h.visible = !!this.heldModel && raised > 0.01;
+    let p = [0, 0, 0], r = [0, 0, 0];
+    if (this.actT >= 0) {
+      const a = ACTS[this.actKind];
+      this.actT += dt / a.dur;
+      // The last one leaves your hand: thrown at the top of the throw, drunk at the end.
+      if (this.actGone && this.heldModel && this.actT >= (this.actKind === 'throw' ? 0.5 : 1)) this.heldModel.visible = false;
+      if (this.actT >= 1) this.actT = -1;
+      else ({ p, r } = a.pose(Math.sin(Math.PI * this.actT)));
+    }
+    h.position.set(HELD_AT[0] + p[0] + bx, HELD_AT[1] + p[1] + by - (1 - raised) * 0.6, HELD_AT[2] + p[2]);
+    h.rotation.set(r[0] - (1 - raised) * 0.5, r[1], r[2]);
   }
 }

@@ -30,10 +30,10 @@ A shared link to the site shows a preview card (Open Graph tags in `index.html`,
 | E | Pick up, open a chest or door, use stairs |
 | I or Tab | Pack (click or arrow keys select, drag to the doll or hotbar, 1–6 put on the hotbar, Q next tab, double-click or Enter use, T throw, D drop) |
 | M | Full map |
-| 1–6 | Hotbar slots (see below). For a potion, hold the key: click throws it, right-click drinks it |
+| 1–6 | Hotbar slots (see below). For a potion or wand, hold the key: click throws or zaps it, right-click drinks it or zaps yourself |
 | F | Grip your weapon in both hands, or back in one (see *Off hand and two hands*) |
 | Right-click | Use what's in your off hand, or, gripping your weapon in both hands, its special (none yet) |
-| Q | Drink a potion you *know* is healing |
+| Q | Quaff a potion you *know* is healing: your weapon goes down, the potion comes up and is drunk, and your weapon comes back up, as if you'd held it up from the hotbar and right-clicked (clicks meanwhile do nothing) |
 | R / T | Active power of artefact slot 1 / 2 |
 | P | Cycle internal render resolution (270p → 360p → 540p → native) |
 | Esc | Pause (the pause panel can also save and quit to the title) |
@@ -89,8 +89,11 @@ Wands no longer have a key of their own: put them on the hotbar.
 
 Open your pack, select a potion, scroll, food, wand or artefact, then press 1–6 to put it in that slot, or drag it onto the hotbar under the pack. Pressing the same number on the same item takes it off again, as does dragging it back onto the pack or right-clicking the slot. What's on the hotbar is out of the pack (see *The pack*). In play, the number key uses the item:
 
-- **Potions** wait for you to choose: hold the key down, then **click** to throw the potion where you're looking, or **right-click** to drink it (click again for another, while you hold the key). The slot lifts and the prompt says so while you hold it, and meanwhile the mouse does nothing else: no swing, nothing from your off hand. Let go without clicking and nothing happens. The choice is always yours, so the hotbar never gives away what a potion is, and you can throw a good one where that helps (at allies, one day).
-- **Scrolls** are read, **food** is eaten, and **wands** are zapped at the crosshair.
+- **Potions and wands are held up.** Hold the key down and you lower your weapon and raise the potion or wand in its place (0.4 s in all: `HOLD_RAISE` in `fx/viewmodel.js`). Once it's up, **click** to throw the potion where you're looking or zap the wand at the crosshair, or **right-click** to use it on yourself: drink the potion, or zap yourself with the wand. Click again for another while you still hold the key (after 0.35 s, `HOLD_USE`), and a click while it's still coming up waits for it. Let go and it goes back down and your weapon comes back up. The slot lifts and the prompt says what each click does while you hold it, and meanwhile the mouse does nothing else: no swing, nothing from your off hand (`Game.holdSlot`, `HELD` in `hotbar.js`).
+  - Having to raise each one in turn is what keeps a hotbar of wands from being played like piano keys: each wand costs a lower and a raise before it fires.
+  - The choice is always yours, so the hotbar never gives away what a potion is, and you can throw a good one where that helps (at allies, one day).
+  - **Zapping yourself** (also **Zap yourself** in the pack) does to you what the wand's spell does to a monster, through your armour: frost puts out the fire on you and chills you, fire thaws you out of a freeze (and sets you alight), teleport other takes you somewhere else on the floor, and missile and lightning just hurt. You know what the wand is straight away. A cursed wand misfires at you as it would at anything: some wand's bolt at random, or nothing.
+- **Scrolls** are read and **food** is eaten the moment you press the key.
 - **Artefacts** trigger their active power if you're attuned to them. The slot shows the cooldown.
 
 Potion, scroll and food slots remember the *type*, so a slot whose stack runs out shows 0 and refills when you pick up more. Wand and artefact slots remember that specific item.
