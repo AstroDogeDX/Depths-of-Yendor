@@ -1,0 +1,146 @@
+# The dungeon
+
+The floors and how they're made: the themes, rooms and passages, lights, pools, doors, stairs, traps, chests and mimics, and the shop. [All the docs](README.md)
+
+## The dungeon
+
+| Floors | Theme | Meant to be | Boss floor |
+|---|---|---|---|
+| 1–5 | Sewers | dank and wet | 5 |
+| 6–10 | Catacombs | old jail cells, cages and chains | 10 |
+| 11–15 | Caves | natural, rough-hewn rock | 15 |
+| 16–20 | Dwarven Ruins | an ancient civilisation's halls, fallen apart | 20 |
+| 21–25 | Underworld | hellish, demonic and hot | 25: the Warden of Yendor and the Amulet |
+
+Each theme has four ordinary floors and a boss floor (`isBossDepth` in `config.js`). For now the boss floors are built like any other, except floor 25, which holds the Amulet's vault and its keeper, the Warden. Each theme has its own look (below).
+
+**The Sewers** have slimy brick walls with a damp band and a tide mark along their foot, wet cobbled floors and a brick vault overhead (`dungeon/sewerTextures.js`). Two or three rooms on each Sewers floor have a **water channel** running straight across them from wall to wall (`channels` in the theme's entry in `config.js`). The murky water flows in through a barred grate in one wall and out through another, and one or two plank bridges cross it. Nothing can walk through water: players, walking monsters and dropped items all stay on the banks, and walking monsters path round by the bridges. Flying monsters (bats, wraiths) go straight over it, and anything they drop over the water lands on the nearest bank. You can still see and shoot across. A channel never blocks a doorway, and one that would cut off any part of the floor is never dug (`dungeon/channels.js`). You can hear the water running as you get near. Water drips from the drain pipes, and from the vault into puddles and channels, each drop landing with a spreading ring and a quiet plip (`fx/drips.js`). The rooms are dressed with drain pipes, pipes with valve wheels, rubble, barrels, floor drains and puddles (`dungeon/decor.js`). They keep clear of doorways and stairs, and sconces keep off walls that already have something on them.
+
+**The Catacombs** are a tomb and a jail in one: heavy rough-hewn blocks, sooty under the vault and grey with bone dust at their feet, big worn flagstones, and a rough stone vault (`dungeon/catacombTextures.js`). The stone is cold grey, so torchlight and bone stand out warm against it. One or two rooms on each floor have a **spike pit** where the Sewers have a channel: the same trench, 1.5 m deep, its floor a thicket of rusted, blood-tipped spikes among the bones of whoever fell in, with a skull left on a spike here and there. Iron grating walkways cross the pits, and you can look down through them. The pits follow the channels' rules: you can't step in, walking monsters go round, and fliers pass over. The jail has barred cell doors set into the walls, shackles on chains (some still holding a slumped skeleton), and gibbet cages hung from the vault. The tomb has burial niches of skulls and bones, bone piles, stone sarcophagi with their lids pushed askew, clusters of candles whose flames flicker like the sconces', engraved grave slabs set in the floor, and cobwebs in the corners of the rooms. A hanging cage only goes where there's open floor all round it, so it never blocks a way through.
+
+**The Caves** are natural rock that miners dug into and then abandoned. Every surface is rough-hewn: walls, floor, vault and pit sides are split into pieces about 0.7 m across, and a smooth noise field pushes each piece in or out. The walls bulge and lean, the vault sags, and the floor is a little uneven underfoot (`dungeon/roughRock.js`, switched on by `rough` in the theme's entry in `config.js`). The rock stays flat round doorways and stairs and behind anything fixed to a wall, so frames and fittings sit true. Collision still follows the tile grid. The walls are banded strata, cracked and threaded with pale veins and dark seeps, and the floor is rock, grit and pebbles (`dungeon/caveTextures.js`). One or two rooms on each floor have a **bottomless chasm** where the Sewers have a channel. Its sides fade into blackness, a cold wind moans up out of it as you get near, and it is crossed by a sagging rope bridge with a couple of planks missing, which holds, whatever it looks like. The chasms follow the channels' rules. The Caves have no sconces: torches in iron brackets are braced against the rock, and oil lanterns hang from wall arms (`lights` in the theme's entry). The miners left timber supports against the walls, and shored their tunnels with timber sets every few paces, posts against either wall under a cap beam across the roof (`tunnels` in `dungeon/decor.js`'s set for the Caves); minecarts of ore on lengths of rail (and loose rails), pickaxes, shovels and buckets, barrels and crates. The rock has seams of gold and copper ore, clusters of glowing blue crystals, heaps of fallen boulders, stalagmites rising from the floor, and stalactites that drip from the vault.
+
+**The Dwarven Ruins** were the halls of a great dwarven kingdom of red stone and gold, which fell into ruin when the evil below broke through. The walls are polished red porphyry ashlar under a gilded cornice, with a frieze of dwarven knotwork in gold (looters have prised the gold out of some of it) above a dark panelled dado. The floors are inlaid in red and cream marble with lines of gold, and the vaults are coffered, a gold boss in each coffer (`dungeon/dwarvenTextures.js`). Everything is cracked, sooty and dusty. One or two rooms on each floor have a **rift** torn open where the Sewers have a channel. Its raw sides are veined with violet light that shines by itself and fall away to a violet glow far below. A pixel-art miasma wells up out of it, with motes of light drifting up through it, thinning away below head height (`fx/haze.js`). Broken slabs of the floor sag out over its lips, cracks run back from them, and an uneasy hum and whispering rise from it as you get near. The rifts are crossed on makeshift bridges: two salvaged beams (one a gilded beam from some hall's ceiling), planks of odd lengths and half a door, all lashed together, with a pole on posts for a rail. The rifts follow the channels' rules. The halls are lit by gilded wall braziers and by oil lamps of ruby glass hung from gilt arms. On the walls hang the kingdom's banners, gone to rags at the hem, portraits of its kings (one slashed across), round shields over crossed axes, and here and there black crystal bursting out of a glowing crack, where the evil below has come through. The furnishings are in disarray: great rugs frayed, torn and scorched, a throne with an arm broken off, feast tables knocked over like barricades, chairs flung about, a statue of a dwarf warrior whose head lies at its feet, fallen columns, gold candelabra, suits of armour on stands, looted bookcases with their books strewn across the floor, an anvil, paintings fallen from their nails, and heaps of fallen masonry.
+
+**The Underworld** is a temple to the evil below, dug into caverns in the dark depths. Its rooms are masonry: walls of black-violet brick rising into the raw rock of the cavern, a frieze of runes glowing violet running round them, floors of great basalt slabs, some carved with rings. Above them is the cavern's own rough vault, glinting with specks of violet crystal. The passages between the rooms are rough tunnels hewn through the rock, veined with faint violet light (`rough: 'tunnels'` in the theme's entry in `config.js`: `dungeon/roughRock.js` keeps the rooms flat below their vaults; `dungeon/underworldTextures.js`). Every flame burns violet (`fire: 'violet'`): the horned skulls on the walls with fire in their cracked-open crowns, the torches, the braziers and the candles. One or two rooms on each floor have **lava** creeping along a channel where the Sewers have water. It pours from the jaws of a demon's head carved in the wall at one end. Its crust breaks and glows over the molten rock, embers fly up off it, crusted rock sags over its lips with molten rock oozing between, and it lights the room orange. It rumbles and bubbles as you get near, and it's crossed on narrow arches of black brick with runes glowing along their parapets. The lava follows the channels' rules. The temple's furnishings are summoning circles laid in lines of violet light with candles at the star's points, obelisks with columns of glowing runes, blood-stained altars before steles bearing the cult's sigil (an eye in a ring of rays), crouching winged demons on plinths with fire in their eyes, demon faces carved in rune-ringed medallions, black banners bearing the sigil, standing braziers, offerings of skulls, cages hung from the vault, a prisoner left in chains, and the violet crystal of the evil below breaking through the walls. The cavern shows through too: fallen rock, stalactites dripping from the vault, and cracks in the floor where magma glows close beneath.
+
+### Lights
+
+Every room has a wall light or two, and the passages between the rooms have them too, one every six tiles or so, clear of the doorways (`buildSconces` in `dungeon/levelBuilder.js`). Every floor has only six real lights, so that no shader ever needs recompiling between floors. They go to the fittings nearest you (and to lava's glow, and the daylight on the first floor), and hand over as you go, a light fading out of the one falling behind and into the one coming up (`shareLights`). The rest burn and glow, but light nothing, until you come near. The shop's blue flames count as half as near as they are while you're within 20 m of them, so the shop is lit whenever you're about it (`SHOP_PULL`).
+
+### Pools
+
+Every theme has pools of standing water a step down from the floor (`pools` in the theme's entry in `config.js`; `dungeon/pools.js`). A Sewers floor has them in one to three rooms, a Caves floor in one or two, and the other themes' floors in up to two, bigger rooms likelier: one to three pools to a room, each grown as a rounded blob, which run together where they meet into one body of water. Now and then a room of 36 tiles or more is flooded instead, its water over most of the floor. Pools leave a dry step in from every doorway, keep clear of the stairs, pedestals and channels, and never go in the shop, a shrine, the vault or a locked room. Nothing the floor is made with (monsters, chests, traps, loose things, decorations) is put in one.
+
+Unlike a channel, a pool never blocks the way. You and anything else on foot wade through it: you step half a metre down into water to the shin, move at 60% of your speed (`WADE_SPEED` in `config.js`), and come out Wet (see [Statuses](gameplay.md#statuses)). Monsters are slowed the same way, and path through pools as through any floor; big ones wade on the bed, and small ones, like rats, swim with their backs out of the water. Flying monsters pass over. Anything wading stirs up rings of ripples as it goes and splashes as it steps in (`fx/ripples.js`), and water drips into some pools from the vault. Each theme's water is its own (`dungeon/poolTextures.js`): green-tinged and scummed over in the Sewers, stale and grey-brown under a film of bone dust in the Catacombs, clear, cold blue-green in the Caves, a suspicious rusty red in the Dwarven Ruins, and a still violet in the Underworld, its ripples faintly aglow. The map shows pools in their water's colour. A room design can lay pools of its own in its `furnish()`, with `ctx.growPool(room, at, size)` (see `dungeon/rooms.js`).
+
+### Difficulty
+
+Difficulty follows `danger(depth)` in `config.js`, which rises evenly from 1 on floor 1 to 10 on floor 25. How many monsters a floor has, how tough they are, loot quality, gold and shop prices all work from it, so the curve spans the whole dungeon and would stretch again if floors were added. Monsters' first and last floors (`depth` in `monsters/defs.js`) are real floor numbers. Experience per level is scaled to match, so your level keeps pace with the danger rather than with the floor count.
+
+## Floors and doors
+
+Floors are generated the Pixel Dungeon way, graph first:
+
+- **The loop.** A ring of rooms with the entrance stairs on one side and the exit (or, on the last floor, the Amulet's vault) opposite. There are always two independent routes between them, so both stair rooms always have at least two ways in and out.
+- **Branches.** Rooms that hang off the loop, or off other branches, as dead ends. The artefact shrine is one: a side room behind a door.
+- **Deeper floors sprawl.** Each theme after the Sewers may add one more side room than the one before, hung off another side room where there is one (a 60% chance each: up to 1 in the Catacombs, 2 in the Caves, 3 in the Dwarven Ruins, 4 in the Underworld), so the deeper floors grow wings off the loop. To make room, the map grows 5 tiles each way per theme, from the Sewers' 52 to the Underworld's 72, while the loop keeps the Sewers' size in the middle. The deepest floors average about 14 rooms, where they had 11. Each extra side room brings one more monster.
+- **Sealed rooms.** Every connection is a doorway on each room's wall plus an A*-routed corridor. Corridors can never cut through a room, so a room can only be entered through its own doorways.
+
+Some themes add features to their rooms, like the Sewers' water channels, the Catacombs' spike pits, the Caves' chasms, the Dwarven Ruins' rifts and the Underworld's lava, and every theme has its pools (see [Pools](#pools)).
+
+A doorway is either an open arch or a door. Doors open when anyone walks into them (or on **E**), and shut again once the doorway has been clear for a couple of seconds. A closed door blocks sight, arrows and bolts, so slipping through one is a way to break a chase. Monsters path through doors and open them.
+
+A door swings away from whoever opens it, you or a monster, so it never opens into your face. (One still closing when it's opened again goes back the way it came.)
+
+Each theme has its own door, and its own way of locking it:
+
+| Theme | Door | Locked |
+| --- | --- | --- |
+| Sewers | a steel door in chipped green paint, riveted, with a barred slot and a lever handle, in a bare steel frame under a lintel painted with warning stripes | a red-painted bar across it in brackets, padlocked |
+| Catacombs | tall, of old oak boards, under a round stone arch with a skull on the keystone; black iron straps ending in spear points, studs, a heavy ring | a chain sagging across it from a staple in the jamb to a padlocked hasp |
+| Caves | knocked together from mismatched boards, crooked battens and a brace, leather hinges and a rope handle, in leaning mine timbers | a rough beam across it in crude iron hooks, padlocked |
+| Dwarven Ruins | dark planks in a bronze border, studded in gold, a gold medallion; the doorway's top corners cut away, porphyry jambs, the walls' gold knotwork and the kingdom's crest on the lintel | shut like a vault: two gold-banded bronze bars and an ornate lock box, its bolt shot into the jamb |
+| Underworld | two halves of obsidian that **slide apart** into the walls, a ring of runes split between them, the seam glowing violet, in a basalt frame with runes up the jambs and the cult's eye above | a violet seal burning across the seam: a greater ring of runes, a bar of light, the eye |
+
+A locked door's lock (bar, chain, beam or seal) disappears when you unlock it, leaving an ordinary door.
+
+### Stairs
+
+Each theme has its own ways up and down (the props `stairs_down_<style>` and `stairs_up_<style>`). The way down goes down through a hole in the floor and the way up up through a hole in the vault, into the dark, each on a tile of its own that you use (**E**) from beside it:
+
+| Theme | Down | Up |
+| --- | --- | --- |
+| Sewers | a manhole in the floor, its cover pushed aside, an iron ladder down its brick shaft, grab rails arching over the rim | an iron ladder, braced to the floor, up into a manhole in the vault |
+| Catacombs | stone steps down a stairwell, walled round by a low parapet, skulls on its posts and candles on its corners | a flight of stone steps between sloping cheek walls, up through the vault to a dark archway, skulls and candles at its foot |
+| Caves | a rough square hole, shored with timber, a rope ladder tied off round its collar and a lantern on a post | a rope ladder hanging from a timber frame round a hole in the vault, pegged at its foot, a coil of spare rope by it |
+| Dwarven Ruins | spiral stairs round a column of red stone and gold, a bronze rail round the hole | spiral stairs up round the column, a rail on balusters, a ring of gold round the hole in the coffered vault |
+| Underworld | black steps down a stairwell, a violet line along each and runes glowing round its walls on down into the dark, violet fire either side of the way in | black steps up, runes glowing across every riser, to a dark archway under the cult's eye, violet fire either side of the foot |
+
+Most stairs fill their tile, which is solid. The ladders don't, so they stop you with shapes of their own instead (`blocks` in `STAIRS`): you can walk up to a ladder up and stand under the hole it climbs to, or round a manhole to its rim, and in the Caves you stop at the collar of timbers round the hole. A monster still comes for you when you stand in such a tile, though it won't path through one.
+
+The way out of the dungeon, up from the first floor, comes up into the open air (`stairs_surface`): the manhole at the top of its short shaft stands open to a summer sky, weeds hanging over its rim, and the sun shines down it in a shaft of light with dust drifting in it, lighting a patch of the floor (`sunlight` in `dungeon/levelBuilder.js`). Near it you can hear a breeze up there, and now and then a bird.
+
+For now the stairs down from a theme's last floor are that theme's, and the stairs up on the next floor are the next theme's, so the two don't match: the boss floors are where those crossings will be made.
+
+The title screen's walk through the dungeon goes down each kind of stairs its own way: down steps, a ladder or a spiral (`stairsDescent` in `dungeon/levelBuilder.js`).
+
+### Locked doors
+
+From the second floor on, a floor often has a locked side room: about a third of floors at first, rising to two thirds by the last, and from floor 15 on now and then a second. A locked room is always a dead end, a branch that nothing else hangs off, so it never cuts off anything but itself, and it's never on the loop. Each needs an iron key, which lies loose in a room you can reach without any key: any room on the floor but a locked one. Behind the door is a stash worth the key: a chest or two (never a mimic) and a heap of gold half again the usual size, and half the time, if the floor has a locked chest, that too. No monsters, traps or loose things are put in a locked room. Keys don't take pack slots: they show as *Keys* on the stat line (iron and gold, "Keys: 1 iron, 1 gold") and are used up when you walk into (or use) the locked door, or open a locked chest. Monsters can't path through a locked door, and teleports never drop you inside a locked room.
+
+### Traps
+
+Traps lie hidden in rooms and corridors (never near the entrance, in the shop or behind a locked door). You notice one now and then when you pass within a couple of tiles of it; the Eye of the Deep and a scroll of magic mapping reveal them all. Step on one and it goes off, whether you'd found it or not, and it's spent afterwards. **Sneak** onto one you've found and you creep over it without setting it off (it stays armed): stop sneaking before you're off its tile (tap C, sprint, or run out of stamina) and your weight comes down on it. Sneaking is no help with a trap you haven't found. Each kind has its own model (`world/trapModels.js`), told apart at a glance by shape and colour, with three states: **armed** (found, waiting), **active** (going off) and **used** (spent):
+
+| Trap | Looks like | Goes off | Spent |
+| --- | --- | --- | --- |
+| Spike | a square iron grate, spike points glinting in its holes | spikes thrust up half a metre (damage) | spikes left stuck half out, bent and bloodied |
+| Poison | a round vent in a green stain, a slotted brass cap over it | the cap blows off in a cloud of green gas (poisoned) | the cap lying where it fell, the vent open |
+| Teleport | a stone disc with an azure glyph slowly turning on it | the glyph spins and flares in a column of light (you're thrown elsewhere on the floor) | the glyph burnt out, the stone cracked |
+| Alarm | a wooden plate with a brass bell on a post | the plate goes down and the bell swings and rings (monsters within 30 m come) | the plate jammed down, the bell fallen and cracked |
+
+The minimap marks found traps in the same colours (grey, green, azure, yellow), spent ones dimmed. The used state would also serve for a trap that's been disarmed.
+
+## Chests and mimics
+
+Most of what there is to find is in **chests**: two to four on each floor, one more from floor 12 on. They stand against the walls of rooms, facing in, clear of doorways, stairs and whatever hangs on the wall behind them, and spread across the rooms before any room gets a second. Only a thing or two, if anything, lies loose on a floor now, besides food and gold (`chestLoot` in `items/generate.js`; placing them, `dungeon/generator.js`).
+
+- **Chests** open with **E**: the lid swings up and what's inside flies out onto the floor in front of it, and the log says what it was. Most hold one thing, some two, a few three (72%, 22%, 6%), each as a thing found on the floor would be, and about a third hold a pile of gold too.
+- **Locked chests** are strongboxes: bigger and squarer, dark oak bound all over in iron, on iron feet, with gold at the corners and a gold padlock. About a third of floors have one at first, rising to half by the last, likeliest in a side room, and half the time, if the floor has a locked room, behind its locked door. Each takes a **gold key** from its own floor (doors take iron ones). The key lies somewhere on the floor, or, half the time, is in one of the floor's other chests, never a mimic. What's inside is a treasure, and a pile of gold twice the usual size. The treasure is most often equipment (weapons, armour, rings and wands) +2 or better (+3 and +4 get likelier deeper down), from a little deeper than the floor, which may be enchanted (30% of weapons and armour) but 12% of the time is still cursed. Otherwise it's a potion of strength or experience, two scrolls of upgrade, or a scroll of enchantment. Unlocked, the padlock is gone and it opens like any chest. Nothing else opens it: blows, bolts and fire glance off.
+- **Smashing a chest.** Your blow smashes a chest if the crosshair is on it when it lands: a swing at something else never hits one by chance, and a monster in reach takes the blow first. A bolt or lightning from a wand smashes one too, and fire (liquid flame, a firebolt, a blade that burns) burns it. The wreck stays where it stood. Each thing inside has an even chance of being lost with it: potions shatter, scrolls are torn up (or burn), wands snap, and so on. Gold and keys always survive.
+- **Mimics.** From floor 3 on, some chests are mimics: about one in twelve at first, rising to one in five, and never in the room you arrive in. Until something wakes it, a mimic is a chest. It never stirs, and it isn't a monster to anything that looks for monsters (a scroll of aggravate monsters, the alarm, the Amulet's call, the Horn of Thunder, your sword's swing at the nearest foe). It blocks you as a chest does. There are tells for those who look:
+  - its wood is a shade warmer,
+  - the slot of its keyhole is a narrow slit,
+  - the tips of teeth show under the front of its lid,
+  - and now and then, while you're about and can see it (every 15–35 s), it licks its lips: the lid lifts a crack, and a tongue slips out along the front and back in, with a faint wet sound if you're close.
+
+  A potion of mind vision or the Eye of the Deep shows its mind on the map, like any monster's, over the chest it's passing for.
+  - **Reach for it (E)** and it springs at you, biting before you can pull back.
+  - **Strike it first** and your blow catches it before it can spring: double damage, like a sneak attack, and it always lands. A bolt or lightning wakes it too, as does a harmful splash (poison, confusion, darkness, paralysis or flame), each doing its work on it as it wakes; teleport other wakes it and sends it away. So striking a chest you suspect is worth it, but not every chest: a chest you strike is smashed, and locked chests, which are never mimics, can't be.
+  - Awake, it hops after you, a little slower than you walk, gapes wide to wind up and snaps shut as it lunges. A point sticks in its wooden hide (−25% stab), and it burns like kindling (+50% fire). It gets tougher faster than other monsters with depth (`grow` in `monsters/defs.js`). It never spawns on its own. When it dies, it spills out what its chest held.
+- **The minimap** marks chests you've seen: tan while shut (gold if locked, like a locked door), dim once open or smashed.
+
+## The shop
+
+On the first floor of each new theme after the first (floors 6, 11, 16 and 21), a shop opens straight off the room you arrive in: the two rooms share a wall, with the shop's door in the middle of it and no corridor between, and a blue-flamed sconce burns either side of the door, so you see where the shop is the moment you arrive (`placeBeside` and `shopSigns` in `dungeon/generator.js`). A small hooded shopkeeper stands on a stool behind the counter, idly shaking a purse of coins, watching you and passing remarks. The shop is lit by blue-flamed sconces. It's a big room (7 or 8 tiles square): the counter at the back between two velvet-topped plinths, three display tables down each side, and the rug in the middle.
+
+- **Stock:** eleven items (see `shopStock` in `items/generate.js`), never cursed. Items keep their unidentified names.
+  - **The counter:** a ration, a potion and a scroll (often healing and identify).
+  - **The left plinth:** a pack expansion (see [The pack](gameplay.md#the-pack)), 300 gold and up. Each of the four shops has a different one, in an order each run draws, so by the last theme you can have all four.
+  - **The right plinth:** in one of the four shops, an artefact: the one of the six no shrine holds (there are five shrines), at 1500 gold and up. In the others, a prize: a weapon or armour from a few floors deeper than you are, identified, +2 or +3 and half the time enchanted, at twice what it's worth.
+  - **The six tables:** three pieces of uncursed gear from a little deeper than the floor you're on (at least one weapon and one armour) on one side, and three uncursed wands and rings (at least one of each) on the other. Thrown weapons and ammunition will share them once there are some.
+
+  What the shop charges depends only on the kind of item (and, for weapons, armour and pack expansions, which one: its `value` in `items/defs.js`), never on what's hidden about it, so prices give nothing away. (The prize is the exception, being identified.) Prices rise a little on deeper floors.
+- **Buying:** walk up to an item and press **E**. The prompt shows the price, or what you're short. Gold goes, the item goes into your pack, and there's no haggling or refunds.
+- **Selling:** open your pack while you're in the shop and every item gets a **Sell** button with its price: 40% of what it's worth, as far as you know it (`worth` in `items/generate.js`). The price never tells you more than you knew:
+  - **A potion, scroll, wand or ring of a kind you don't know** fetches a low price, the same for every kind.
+  - **Known potions and scrolls** fetch their value.
+  - **Equipment you know nothing about** (not even whether it's cursed) fetches a share of what its kind is worth, cursed or not.
+  - **Known to be clean** but not identified, it fetches its full value, plus what an enchantment you know of is worth. **Identified**, add what its + is worth too.
+  - **A weakened curse you know of** halves the price. **A full curse you know of**, and the shopkeeper refuses it outright.
+  - Stacks sell one at a time, equipped items come off first (not if they're cursed), and the shopkeeper won't buy the Amulet.
+- **Buying back:** the shopkeeper sets what you sell out with its wares, at its usual price for that item. It goes on the first free spot on the counter or the display tables (never the plinths), then on the rug, which holds six. Potions, scrolls and food of the same kind pile up on one spot and sell back one at a time. When every spot is taken, the item you sold longest ago goes to make room.
+- **Monsters** never spawn, wander or get teleported into the shop. Only a monster that was chasing you when you went in may follow you in. Any other monster that comes looking waits at the door, unless you attack it from inside.
+
+**Adding a specialist room:** add a type to `dungeon/rooms.js` (size, door style, whether the normal population pass may use it, and a `furnish(ctx, room)` that places its contents), then put it in the plan in `dungeon/generator.js` as a branch, e.g. `{ type: 'treasury', locked: true }`.
