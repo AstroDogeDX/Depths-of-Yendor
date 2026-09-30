@@ -269,7 +269,12 @@ button.alt { background: linear-gradient(#5a5040, #3a3228); color: var(--ink); }
 .tab:hover { border-color: var(--gold-dim); }
 .tab.on { background: rgba(216, 184, 112, 0.18); border-color: var(--gold); color: var(--gold); }
 .tab.dim { opacity: 0.4; }
-#inv-list { --tile: 64px; display: grid; grid-auto-rows: var(--tile); gap: 6px; align-content: start; flex: none; overflow-y: auto; min-height: 0; }
+/* (Its padding leaves room inside the scrolling box for the outline round a selected tile at its edge, and the margin
+   takes it back, so the tiles stay put.) */
+#inv-list {
+  --tile: 64px; display: grid; grid-auto-rows: var(--tile); gap: 6px; align-content: start; flex: none; overflow-y: auto; min-height: 0;
+  padding: 3px; margin: -3px;
+}
 .tile {
   position: relative; cursor: pointer; user-select: none;
   background: rgba(255, 255, 255, 0.035); border: 1px solid rgba(216, 184, 112, 0.2);
