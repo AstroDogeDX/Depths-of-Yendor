@@ -64,6 +64,15 @@ const equippedIn = (p, key) => {
 const glyphColor = (k, it) => (it.kind === 'potion' ? hex(k.color(it)) : KIND_COLOR[it.kind]);
 /** An item's icon (see icons.js), `scale` times its size, or its glyph if it has none yet. */
 const itemIcon = (k, it, scale) => iconHTML(it, k, { scale, fallback: `<span style="color:${glyphColor(k, it)}">${KIND_GLYPH[it.kind]}</span>` });
+/** What the pack's tooltip says over `el` (see UI.showTip): a thing's name, and a note under it; none, without a name. */
+function setTip(el, name, note = '') {
+  if (!name) {
+    if (el.dataset.tip !== undefined) { delete el.dataset.tip; delete el.dataset.tipNote; }
+    return;
+  }
+  if (el.dataset.tip !== name) el.dataset.tip = name;
+  if (el.dataset.tipNote !== note) el.dataset.tipNote = note;
+}
 
 export class UI {
   constructor() {
@@ -82,6 +91,13 @@ export class UI {
   bind(game) {
     this.game = game;
     this.logo = new Logo($('logo'));
+    // The pack's tooltip: the name of whatever you point at in it (a tile, or a slot on the doll or the hotbar), at once.
+    this.pointer = { x: -1, y: -1 };
+    document.addEventListener('mousemove', (e) => {
+      this.pointer = { x: e.clientX, y: e.clientY };
+      this.showTip(e.target);
+    });
+    document.addEventListener('dragstart', () => this.hideTip());
     // Up in its corner, no more than about 40% of the screen's width or 30% of its height (on a narrow screen, where
     // the menu goes under it, as wide as fits).
     const fitLogo = () => {
@@ -694,8 +710,8 @@ export class UI {
       tile.className = `tile ${t.tint}${!this.selectMode || this.selectMode.filter(it) ? '' : ' dim'}`;
       tile.innerHTML = `<span class="tg">${itemIcon(k, it, 3)}</span>` +
         `<span class="c tl">${t.level}</span><span class="c tr">${t.count}</span><span class="c bl"></span>` +
-        (t.mark ? `<img class="c br mark" src="${markIcon(t.mark.name)}" width="18" height="18" alt="" draggable="false" title="${t.mark.label}" />` : '');
-      tile.title = k.name(it);
+        (t.mark ? `<img class="c br mark" src="${markIcon(t.mark.name)}" width="18" height="18" alt="" draggable="false" />` : '');
+      setTip(tile, k.name(it));
       // Click selects; double-click performs the first action. Hover only highlights.
       tile.addEventListener('click', () => this.selectRow(i));
       tile.addEventListener('dblclick', () => { this.selectRow(i); this.activate(0); });
@@ -703,6 +719,33 @@ export class UI {
       this.dragSource(tile, () => ({ item: it, from: 'pack' }));
     }
     this.selectRow(this.pick ? -1 : this.invSel);
+    this.showTip(); // (for whatever's under the pointer now)
+  }
+
+  /**
+   * Shows the pack's tooltip beside the pointer, for what's under it (`target`, by default whatever is there now) if
+   * that has one (see setTip), and hides it otherwise. Only while the pack is open.
+   */
+  showTip(target = document.elementFromPoint(this.pointer.x, this.pointer.y)) {
+    const el = this.game?.menu === 'inventory' && !this.drag ? target?.closest?.('[data-tip]') : null;
+    if (!el) return this.hideTip();
+    const tip = $('tip'), { tip: name, tipNote: note } = el.dataset;
+    if (tip.dataset.name !== name || tip.dataset.note !== note) {
+      tip.dataset.name = name;
+      tip.dataset.note = note;
+      tip.innerHTML = '<b></b><span></span>';
+      tip.firstChild.textContent = name[0].toUpperCase() + name.slice(1);
+      tip.lastChild.textContent = note;
+    }
+    tip.hidden = false;
+    // Below and to the right of the pointer, unless that would run off the screen.
+    const { x, y } = this.pointer, w = tip.offsetWidth, h = tip.offsetHeight;
+    tip.style.left = `${x + 16 + w > window.innerWidth ? x - 10 - w : x + 16}px`;
+    tip.style.top = `${y + 22 + h > window.innerHeight ? y - 8 - h : y + 22}px`;
+  }
+
+  hideTip() {
+    if (!$('tip').hidden) $('tip').hidden = true;
   }
 
   /** The line over the pack: a passing note (see packNote), a choice asked of you, or the shopkeeper buying. */
@@ -797,10 +840,10 @@ export class UI {
         const grip = d.key === 'weapon' && p.twoHanded ? '<span class="dh">2H</span>'
           : d.key === 'offhand' && p.twoHanded ? '<span class="dh">stowed</span>' : '';
         el.innerHTML = `<span class="dg">${itemIcon(k, it, d.small ? 2 : 3)}</span>${plus}${grip}`;
-        el.title = k.name(it) + (d.key === 'weapon' && p.twoHanded ? ' (in both hands)' : d.key === 'offhand' && p.twoHanded ? ' (stowed)' : '');
+        setTip(el, k.name(it), d.key === 'weapon' && p.twoHanded ? 'In both hands' : d.key === 'offhand' && p.twoHanded ? 'Stowed' : '');
       } else {
         el.innerHTML = `<span class="dl">${d.label}</span>`;
-        el.title = '';
+        setTip(el, '');
       }
     }
     // Worn armor tints the figure's torso.
@@ -999,8 +1042,10 @@ export class UI {
           }
         }
         const act = it ? (unattuned ? 'attune' : slotAction(g, it)) : '';
+        const mark = tileInfo(probe, k).mark; // (what it does, as in the pack, if you know)
         // Cooldown shade sits over the glyph but under the text, so a recharging power reads as dimmed.
         html = `<span class="glyph">${itemIcon(k, probe, 2)}</span>` +
+          (mark ? `<img class="mark" src="${markIcon(mark.name)}" width="18" height="18" alt="" draggable="false" />` : '') +
           (cd > 0 ? `<span class="cd" style="height:${Math.round(cd * 100)}%"></span>` : '') +
           html + `<span class="qty">${qty}</span><span class="act ${act}">${act}</span>${rc}`;
       }
@@ -1018,8 +1063,9 @@ export class UI {
       el.classList.toggle('sel', !!it && it === sel);
       el.classList.toggle('dim', live && !!it && !!this.selectMode && !this.selectMode.filter(it));
       el.draggable = live && !!b && !this.selectMode;
-      el.title = live && b ? k.name(it ?? { ...b, qty: 1 }) + (it ? '' : ' (none left: right-click to clear the slot)') : '';
+      setTip(el, live && b ? k.name(it ?? { ...b, qty: 1 }) : '', it ? '' : 'None left: right-click to clear the slot');
     }
+    if (!live) this.hideTip();
   }
 
   /** Sets up the hotbar's slots: drawn by updateHotbar, and live while the pack is open. */
