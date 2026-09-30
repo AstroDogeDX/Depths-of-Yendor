@@ -126,6 +126,7 @@ body.lowhp #hurt { animation: pulse 1.2s infinite; }
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   font-family: var(--mono); font-size: 24px; font-weight: bold;
 }
+#hotbar .glyph .icon { margin-top: -6px; } /* (clear of what pressing it does, along the bottom) */
 #hotbar .qty { position: absolute; right: 4px; top: 2px; font-size: 11px; font-family: var(--mono); }
 #hotbar .act {
   position: absolute; left: 0; right: 0; bottom: 3px; text-align: center;
@@ -289,6 +290,9 @@ button.alt { background: linear-gradient(#5a5040, #3a3228); color: var(--ink); }
 .tile .tr { top: 4px; right: 5px; }
 .tile .bl { bottom: 4px; left: 5px; }
 .tile .br { bottom: 4px; right: 5px; font-weight: bold; font-size: 12px; }
+.tile .mark { bottom: 3px; right: 3px; image-rendering: pixelated; pointer-events: none; }
+/* Item icons (icons.js): pixel art drawn small and shown scaled up, with crisp pixels. */
+.icon { display: block; image-rendering: pixelated; pointer-events: none; }
 #inv-detail {
   flex: 1; min-width: 0; display: flex; flex-direction: column;
   border-left: 1px solid rgba(216, 184, 112, 0.25); padding-left: 18px;

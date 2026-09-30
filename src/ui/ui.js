@@ -12,6 +12,7 @@ import { readSave } from '../save.js';
 import { STATUSES } from '../status.js';
 import { BUILD, buildLabel } from '../build.js';
 import { tileInfo } from './tiles.js';
+import { iconHTML, markIcon } from './icons.js';
 
 const $ = (id) => document.getElementById(id);
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
@@ -61,6 +62,8 @@ const equippedIn = (p, key) => {
   return p.equip.artefacts[+key[3]];
 };
 const glyphColor = (k, it) => (it.kind === 'potion' ? hex(k.color(it)) : KIND_COLOR[it.kind]);
+/** An item's icon (see icons.js), `scale` times its size, or its glyph if it has none yet. */
+const itemIcon = (k, it, scale) => iconHTML(it, k, { scale, fallback: `<span style="color:${glyphColor(k, it)}">${KIND_GLYPH[it.kind]}</span>` });
 
 export class UI {
   constructor() {
@@ -689,10 +692,9 @@ export class UI {
       }
       const t = tileInfo(it, k);
       tile.className = `tile ${t.tint}${!this.selectMode || this.selectMode.filter(it) ? '' : ' dim'}`;
-      tile.innerHTML = `<span class="tg" style="color:${glyphColor(k, it)}">${KIND_GLYPH[it.kind]}</span>` +
+      tile.innerHTML = `<span class="tg">${itemIcon(k, it, 3)}</span>` +
         `<span class="c tl">${t.level}</span><span class="c tr">${t.count}</span><span class="c bl"></span>` +
-        (t.mark ? `<span class="c br" style="color:${t.mark.color}"></span>` : '');
-      if (t.mark) tile.querySelector('.br').textContent = t.mark.text;
+        (t.mark ? `<img class="c br mark" src="${markIcon(t.mark.name)}" width="18" height="18" alt="" draggable="false" title="${t.mark.label}" />` : '');
       tile.title = k.name(it);
       // Click selects; double-click performs the first action. Hover only highlights.
       tile.addEventListener('click', () => this.selectRow(i));
@@ -794,7 +796,7 @@ export class UI {
         const plus = showPlus ? `<span class="de${against ? ' bad' : ''}">${against ? '−' : '+'}${it.plus}</span>` : '';
         const grip = d.key === 'weapon' && p.twoHanded ? '<span class="dh">2H</span>'
           : d.key === 'offhand' && p.twoHanded ? '<span class="dh">stowed</span>' : '';
-        el.innerHTML = `<span class="dg" style="color:${glyphColor(k, it)}">${KIND_GLYPH[it.kind]}</span>${plus}${grip}`;
+        el.innerHTML = `<span class="dg">${itemIcon(k, it, d.small ? 2 : 3)}</span>${plus}${grip}`;
         el.title = k.name(it) + (d.key === 'weapon' && p.twoHanded ? ' (in both hands)' : d.key === 'offhand' && p.twoHanded ? ' (stowed)' : '');
       } else {
         el.innerHTML = `<span class="dl">${d.label}</span>`;
@@ -998,7 +1000,7 @@ export class UI {
         }
         const act = it ? (unattuned ? 'attune' : slotAction(g, it)) : '';
         // Cooldown shade sits over the glyph but under the text, so a recharging power reads as dimmed.
-        html = `<span class="glyph" style="color:${glyphColor(k, probe)}">${KIND_GLYPH[b.kind]}</span>` +
+        html = `<span class="glyph">${itemIcon(k, probe, 2)}</span>` +
           (cd > 0 ? `<span class="cd" style="height:${Math.round(cd * 100)}%"></span>` : '') +
           html + `<span class="qty">${qty}</span><span class="act ${act}">${act}</span>${rc}`;
       }

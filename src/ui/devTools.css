@@ -33,6 +33,13 @@
 }
 .dev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5em, 1fr)); gap: 4px; }
 .dev-grid button { text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dev-icons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.dev-icons figure {
+  margin: 0; width: 58px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 4px 2px; background: rgba(255, 255, 255, 0.035); border: 1px solid rgba(216, 184, 112, 0.2);
+}
+.dev-icons figure > span { font-family: var(--mono); font-weight: bold; font-size: 28px; line-height: 48px; }
+.dev-icons figcaption { width: 100%; font-size: 9px; text-align: center; opacity: 0.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 760px) {
   .dev-cols { grid-template-columns: 1fr; }

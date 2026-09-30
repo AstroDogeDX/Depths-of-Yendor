@@ -1,7 +1,8 @@
 import {
   WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS, CONTAINERS,
-  POTION_COLORS, SCROLL_SYLLABLES, WAND_MATERIALS, RING_GEMS,
+  POTION_COLORS, SCROLL_SYLLABLES, SCROLL_RUNES, WAND_MATERIALS, RING_GEMS,
 } from './defs.js';
+import { RNG } from '../rng.js';
 import { DAMAGE_TYPES, damageType, describeResist } from '../damage.js';
 import { WAND_PLUS_DMG, wandRecharge } from './defs.js';
 import { enchantOf, baneOf } from './enchant.js';
@@ -59,6 +60,23 @@ export class Knowledge {
 
     const gems = rng.shuffle([...RING_GEMS]);
     Object.keys(RINGS).forEach((k, i) => (this.appearance.ring[k] = gems[i]));
+    this.giveRunes();
+  }
+
+  /**
+   * Gives each kind of scroll that hasn't one a rune of its own (see rune), drawn from the run's labels rather than the
+   * seed, so a save from before there were runes gets the same ones every time it's loaded.
+   */
+  giveRunes() {
+    const looks = Object.values(this.appearance.scroll);
+    const taken = new Set(looks.map((a) => a.rune));
+    const free = new RNG(looks.map((a) => a.name).join('|')).shuffle([...Array(SCROLL_RUNES).keys()].filter((r) => !taken.has(r)));
+    for (const a of looks) a.rune ??= free.shift() ?? 0;
+  }
+
+  /** The rune on a kind of scroll this run (a RUNES index in ui/iconArt.js): as much a mystery as its label. */
+  rune(item) {
+    return this.appearance.scroll[item.type]?.rune ?? 0;
   }
 
   isKnown(item) {
@@ -92,6 +110,7 @@ export class Knowledge {
     for (const kind in s.appearance ?? {}) {
       for (const type in s.appearance[kind]) if (this.appearance[kind]?.[type]) this.appearance[kind][type] = s.appearance[kind][type];
     }
+    this.giveRunes();
   }
 
   /** Notes that you've seen a kind of monster resist a damage type or be weak to it. True the first time. */

@@ -157,6 +157,10 @@ export const SCROLL_SYLLABLES = [
   'THA', 'RAX', 'OLM', 'PRA', 'TUR', 'XOK', 'VAS', 'HAR', 'LEP', 'DUA', 'MOR', 'KAH', 'SIN', 'EO', 'QUA',
 ];
 
+// How many runes there are for scrolls (RUNES in ui/iconArt.js): each kind of scroll has one of its own each run, as it
+// has a label (see Knowledge.rune), so there must be at least as many as kinds of scroll.
+export const SCROLL_RUNES = 16;
+
 export const WAND_MATERIALS = [
   { name: 'oak', color: 0x8a6030 }, { name: 'ebony', color: 0x1a1414 }, { name: 'iron', color: 0x6a6e74 },
   { name: 'bone', color: 0xe0d8c0 }, { name: 'copper', color: 0xc07040 }, { name: 'crystal', color: 0xa0e0ff },
