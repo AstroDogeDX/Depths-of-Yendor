@@ -116,7 +116,7 @@ Potion, scroll and food slots remember the *type*, so a slot whose stack runs ou
 - **Items:** 7 weapons with different reach, speed and damage types (spears out-reach swords, hammers hit hard but recover slowly), each to be gripped in one hand or both, the torch in your off hand, 5 armours with strength requirements, 10 potions, 10 scrolls, 5 wands, 6 rings, food. Most are found in **chests**, and the best in locked ones. See *Chests and mimics* below.
 - **A shop** on the first floor of each theme after the first (floors 6, 11, 16 and 21). See *The shop* below.
 - **6 artefacts**, 5 per run in guarded shrines on the third floor of each theme (3, 8, 13, 18 and 23): Chalice of Crimson Thirst (lifesteal), Eye of the Deep (see all monsters and traps), Horn of Thunder (stun blast), Cloak of Shadows (invisibility), Boots of the Wind (speed), Emberheart (burning strikes, fire immunity). You have two attunement slots.
-- A title screen that walks you through a floor of each theme in turn, down the stairs from one to the next (each theme's its own way: down steps, a ladder or a spiral; `stairsDescent` in `dungeon/levelBuilder.js`).
+- A title screen that walks you through a floor of each theme in turn, down the stairs from one to the next (each theme's its own way: down steps, a ladder or a spiral; `stairsDescent` in `dungeon/levelBuilder.js`). The logo sits in the top left corner and the menu down the right: Continue (with a run saved), your name and a seed for a new run, How to play, Fullscreen, and a link to this repository on GitHub.
 - A Rogue tombstone when you die. Seeds are shareable.
 
 ## Damage types

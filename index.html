@@ -133,24 +133,31 @@
     <div id="title" class="screen">
       <div class="title-shade"></div>
       <div id="title-fade"></div>
-      <div class="title-inner">
+      <!-- The logo up in one corner and the menu down the other side, with the walk through the dungeon between. -->
+      <header class="title-head">
         <h1 class="sr-only">Depths of Yendor</h1>
         <canvas id="logo" aria-hidden="true"></canvas>
         <p class="sub" id="title-sub"></p>
+      </header>
+      <nav class="title-menu" aria-label="Menu">
         <div id="continue" hidden>
-          <button id="continue-btn">Continue</button>
+          <button id="continue-btn" class="menu-btn primary">Continue</button>
           <p id="continue-info"></p>
+          <div class="menu-rule" aria-hidden="true"></div>
         </div>
-        <div class="form">
-          <label>Name <input id="name-in" maxlength="16" value="Adventurer" autocomplete="off" /></label>
-          <button id="start-btn">Descend</button>
-        </div>
-        <div class="title-options">
-          <label class="seed">Seed <input id="seed-in" maxlength="12" placeholder="random" autocomplete="off" /></label>
-          <label class="check" title="Recommended: in Chrome and Edge, Esc then pauses without leaving fullscreen (hold it to leave)"><input type="checkbox" id="fs-in" /> Fullscreen</label>
-          <button id="howto-btn" class="link">How to play</button>
-        </div>
-      </div>
+        <label class="menu-field"><span>Name</span><input id="name-in" maxlength="16" value="Adventurer" autocomplete="off" /></label>
+        <label class="menu-field"><span>Seed</span><input id="seed-in" maxlength="12" placeholder="random" autocomplete="off" /></label>
+        <button id="start-btn" class="menu-btn">Descend</button>
+        <div class="menu-rule" aria-hidden="true"></div>
+        <button id="howto-btn" class="menu-btn">How to play</button>
+        <label class="menu-btn toggle" title="Recommended: in Chrome and Edge, Esc then pauses without leaving fullscreen (hold it to leave)">
+          <input type="checkbox" id="fs-in" /> Fullscreen <span class="state"></span>
+        </label>
+        <a class="menu-btn" href="https://github.com/AstroDogeDX/Depths-of-Yendor" target="_blank" rel="noopener" title="The game's source, on GitHub (opens in a new tab)">
+          GitHub
+          <svg class="menu-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" /></svg>
+        </a>
+      </nav>
       <div id="title-caption"></div>
       <div id="title-build"></div>
     </div>

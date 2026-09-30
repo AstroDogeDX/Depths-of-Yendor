@@ -79,8 +79,12 @@ export class UI {
   bind(game) {
     this.game = game;
     this.logo = new Logo($('logo'));
-    // As wide as fits, but no more than about 40% of the screen's height.
-    const fitLogo = () => this.logo.fit(Math.min(760, window.innerWidth * 0.86, window.innerHeight * 0.42 * (this.logo.w / this.logo.h)));
+    // Up in its corner, no more than about 40% of the screen's width or 30% of its height (on a narrow screen, where
+    // the menu goes under it, as wide as fits).
+    const fitLogo = () => {
+      const wide = window.innerWidth > 820;
+      this.logo.fit(Math.min(620, window.innerWidth * (wide ? 0.4 : 0.86), window.innerHeight * (wide ? 0.3 : 0.26) * (this.logo.w / this.logo.h)));
+    };
     fitLogo();
     window.addEventListener('resize', fitLogo);
     $('title-sub').textContent = `${MAX_DEPTH} floors down, the Amulet of Yendor waits. Take it, and climb home, if you can.`;
@@ -295,7 +299,7 @@ export class UI {
     this.confirmNew = false;
     $('continue').hidden = !save;
     $('start-btn').textContent = save ? 'New run' : 'Descend';
-    $('start-btn').classList.toggle('alt', !!save);
+    $('start-btn').classList.toggle('primary', !save); // (with a run saved, Continue is)
     $('start-btn').classList.remove('warn');
     if (!save) return;
     const mins = Math.round((Date.now() - save.savedAt) / 60000);
