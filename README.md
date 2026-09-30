@@ -74,3 +74,7 @@ The details of how everything works are in [`docs/`](docs/README.md):
 - [Blockbench models](docs/models.md): the models and the conventions the game relies on
 
 The game is a work in progress: for now the boss floors between themes are built like any other floor, except the last.
+
+## License
+
+[MIT](LICENSE) © 2026 AstroDogeDX

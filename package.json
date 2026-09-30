@@ -2,6 +2,7 @@
   "name": "depths-of-yendor",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "A first-person real-time roguelike in the spirit of King's Field and Rogue, built with three.js.",
   "type": "module",
   "scripts": {
