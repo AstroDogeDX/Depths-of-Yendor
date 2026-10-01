@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { TILE, WALL_H, MODEL_PX, THEMES, POOL } from '../config.js';
 import { T } from './tiles.js';
 import { getTextures } from './textures.js';
+import { CORNER_PATTERNS, EDGE_PATTERNS } from './texturePaint.js';
 import { RNG } from '../rng.js';
 import { glowSprite } from '../fx/glow.js';
 import { Flame } from '../fx/flame.js';
@@ -203,6 +204,17 @@ class GeoBuilder {
 
 const DIR_ANGLE = [Math.PI, Math.PI / 2, 0, -Math.PI / 2]; // N, E, S, W: rotate local +z to face that way
 
+/** A surface's textures as a list: its variants (see variants in texturePaint.js), or the one it has. */
+const variants = (t) => (Array.isArray(t) ? t : [t]);
+
+/** A number for (x, y) on floor `depth`, and `salt`: the same every time the floor is built. */
+function gridHash(depth, x, y, salt) {
+  let h = Math.imul(x + 1, 73856093) ^ Math.imul(y + 1, 19349663) ^ Math.imul(salt + 1, 83492791) ^ Math.imul(depth + 1, 2654435761 | 0);
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+  h = Math.imul(h ^ (h >>> 12), 0x297a2d39);
+  return (h ^ (h >>> 15)) >>> 0;
+}
+
 /** A theme's door: a prop with moving parts (see tools/modelgen/doorkit.mjs, and buildDoor). */
 const doorModel = (theme) => `door_${theme.style}`;
 
@@ -244,11 +256,24 @@ export function buildLevelMeshes(data) {
     ...(data.shop ? [...data.shop.props, data.shop.keeper].map((p) => ({ x: p.x * TILE, z: p.y * TILE, r: 2 })) : []),
     ...(data.shop?.sconces ?? []).map((s) => ({ x: s.x, z: s.z, r: 1.4 })),
   ], { builtRooms: theme.rough === 'tunnels' }) : null;
-  const floor = new GeoBuilder(rough), ceil = new GeoBuilder(rough), walls = new GeoBuilder(rough), banks = new GeoBuilder(rough), abyss = new GeoBuilder(rough);
+  // The walls, floors and vaults come in variants of their textures (see variants in texturePaint.js), each a mesh of
+  // its own. Every corner of the grid has a flavour (one lattice of them for the floors, another for the vaults and
+  // another for the walls), and a tile of floor or vault takes the variant painted with its four corners' flavours
+  // (`tileOf`); a wall's face, the one painted with those of the corners at its ends, in a set of small features of
+  // its own, at random (`faceOf`). So neighbours share the flavours along the edge between them, and meet seamlessly.
+  const builders = (t) => variants(t).map(() => new GeoBuilder(rough));
+  const floors = builders(tex.floor), ceils = builders(tex.ceiling), walls = builders(tex.wall);
+  const banks = new GeoBuilder(rough), abyss = new GeoBuilder(rough);
   // A style with passages of its own (`tunnelWall`, `tunnelFloor`) uses them outside the rooms.
   const roomTile = new Uint8Array(w * h);
   for (const r of data.rooms) for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) roomTile[y * w + x] = 1;
-  const tunnelWalls = tex.tunnelWall ? new GeoBuilder(rough) : walls, tunnelFloor = tex.tunnelFloor ? new GeoBuilder(rough) : floor;
+  const tunnelWalls = tex.tunnelWall ? builders(tex.tunnelWall) : walls, tunnelFloors = tex.tunnelFloor ? builders(tex.tunnelFloor) : floors;
+  const flavour = (gx, gy, lattice) => gridHash(data.depth, gx, gy, lattice) & 1;
+  const tileOf = (list, x, y, lattice) => (list.length < CORNER_PATTERNS ? list[0]
+    : list[flavour(x, y, lattice) | (flavour(x + 1, y, lattice) << 1) | (flavour(x + 1, y + 1, lattice) << 2) | (flavour(x, y + 1, lattice) << 3)]);
+  // (`a` and `b`, the corners where its texture's u is 0 and 1.)
+  const faceOf = (list, x, y, face, a, b) => (list.length < EDGE_PATTERNS ? list[0]
+    : list[(flavour(...a, 0) | (flavour(...b, 0) << 1)) + EDGE_PATTERNS * (gridHash(data.depth, x, y, face) % (list.length / EDGE_PATTERNS))]);
   const violet = theme.fire === 'violet';
   const vh = WALL_H / TILE;
   const sunk = (t) => t === T.CHANNEL || t === T.BRIDGE; // a channel: the floor drops away
@@ -276,9 +301,10 @@ export function buildLevelMeshes(data) {
       // (A pool's floor is its bed, a step down, and in shadow under the water. Stairs leave a hole in the floor, or
       // the vault.)
       const y0 = t === T.POOL ? -POOL.bed : 0;
-      if (t === T.STAIRS_DOWN) holed(inRoom ? floor : tunnelFloor, x, y, 0, stairs.down, data.down.dir, ao);
+      const floor = tileOf(inRoom ? floors : tunnelFloors, x, y, 1), ceil = tileOf(ceils, x, y, 2);
+      if (t === T.STAIRS_DOWN) holed(floor, x, y, 0, stairs.down, data.down.dir, ao);
       else if (!sunk(t)) {
-        (inRoom ? floor : tunnelFloor).quad([[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], [0, 1, 0],
+        floor.quad([[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], [0, 1, 0],
           [[0, 0], [1, 0], [1, 1], [0, 1]], y0 ? ao.map((v) => v * 0.55) : ao);
       }
       if (t === T.STAIRS_UP) holed(ceil, x, y, WALL_H, stairs.up, data.up.dir, ao.map((v) => v * 0.8));
@@ -290,11 +316,12 @@ export function buildLevelMeshes(data) {
       const b = 0.62 * tint, tp = 1.0 * tint;
       const wc = [b, b, tp, tp];
       const wuv = tex.wallFullHeight ? [[0, 0], [1, 0], [1, 1], [0, 1]] : [[0, 0], [1, 0], [1, vh], [0, vh]];
-      const side = (ya, yb, uv, c, builder, open) => {
-        if (open(x, y - 1)) builder.quad([[x0, ya, z0], [x1, ya, z0], [x1, yb, z0], [x0, yb, z0]], [0, 0, 1], uv, c);
-        if (open(x, y + 1)) builder.quad([[x1, ya, z1], [x0, ya, z1], [x0, yb, z1], [x1, yb, z1]], [0, 0, -1], uv, c);
-        if (open(x - 1, y)) builder.quad([[x0, ya, z1], [x0, ya, z0], [x0, yb, z0], [x0, yb, z1]], [1, 0, 0], uv, c);
-        if (open(x + 1, y)) builder.quad([[x1, ya, z0], [x1, ya, z1], [x1, yb, z1], [x1, yb, z0]], [-1, 0, 0], uv, c);
+      // (Each face takes a variant from `list` by the corners at its ends: a pool's side, under a wall, the wall's.)
+      const side = (ya, yb, uv, c, list, open) => {
+        if (open(x, y - 1)) faceOf(list, x, y, 1, [x, y], [x + 1, y]).quad([[x0, ya, z0], [x1, ya, z0], [x1, yb, z0], [x0, yb, z0]], [0, 0, 1], uv, c);
+        if (open(x, y + 1)) faceOf(list, x, y, 2, [x + 1, y + 1], [x, y + 1]).quad([[x1, ya, z1], [x0, ya, z1], [x0, yb, z1], [x1, yb, z1]], [0, 0, -1], uv, c);
+        if (open(x - 1, y)) faceOf(list, x, y, 3, [x, y + 1], [x, y]).quad([[x0, ya, z1], [x0, ya, z0], [x0, yb, z0], [x0, yb, z1]], [1, 0, 0], uv, c);
+        if (open(x + 1, y)) faceOf(list, x, y, 4, [x + 1, y], [x + 1, y + 1]).quad([[x1, ya, z0], [x1, ya, z1], [x1, yb, z1], [x1, yb, z0]], [-1, 0, 0], uv, c);
       };
       side(0, WALL_H, wuv, wc, inRoom ? walls : tunnelWalls, isWall);
       // A channel's sides run from the floor down to its surface, under the walls at its ends and along its banks.
@@ -302,7 +329,7 @@ export function buildLevelMeshes(data) {
       if (sunk(t)) {
         const deep = fill.dark ? (q) => 0.85 * tint * Math.max(0, 1 + q[1] / fill.dark) ** 1.5 : null;
         const buv = fill.dark ? [[0, 0], [1, 0], [1, fill.depth / TILE], [0, fill.depth / TILE]] : [[0, 0], [1, 0], [1, 1], [0, 1]];
-        side(-fill.depth, 0, buv, deep ?? [0.5 * tint, 0.5 * tint, 0.85 * tint, 0.85 * tint], banks, (nx, ny) => !sunk(get(nx, ny)));
+        side(-fill.depth, 0, buv, deep ?? [0.5 * tint, 0.5 * tint, 0.85 * tint, 0.85 * tint], [banks], (nx, ny) => !sunk(get(nx, ny)));
       }
       // A pool's sides are the foot of the wall carried down to its bed, darker below the water.
       if (t === T.POOL) {
@@ -314,16 +341,20 @@ export function buildLevelMeshes(data) {
   }
 
   const group = new THREE.Group();
-  // A surface's material, with `glow` where the style paints what shines by itself (runes, veins, embers).
+  // A surface's material, with `glow` where the style paints what shines by itself (runes, veins, embers): a mesh
+  // for each variant of its texture that's used.
   const mat = (map, glow) => new THREE.MeshLambertMaterial(glow ? { map, vertexColors: true, emissive: 0xffffff, emissiveMap: glow } : { map, vertexColors: true });
-  group.add(new THREE.Mesh(floor.build(), mat(tex.floor)));
-  if (tunnelFloor !== floor) group.add(new THREE.Mesh(tunnelFloor.build(), mat(tex.tunnelFloor)));
-  group.add(new THREE.Mesh(ceil.build(), mat(tex.ceiling, tex.ceilingGlow)));
-  group.add(new THREE.Mesh(walls.build(), mat(tex.wall, tex.wallGlow)));
-  if (tunnelWalls !== walls) group.add(new THREE.Mesh(tunnelWalls.build(), mat(tex.tunnelWall, tex.tunnelGlow)));
+  const surface = (list, maps, glows) => list.forEach((b, i) => {
+    if (b.pos.length) group.add(new THREE.Mesh(b.build(), mat(variants(maps)[i], glows && variants(glows)[i])));
+  });
+  surface(floors, tex.floor);
+  if (tunnelFloors !== floors) surface(tunnelFloors, tex.tunnelFloor);
+  surface(ceils, tex.ceiling, tex.ceilingGlow);
+  surface(walls, tex.wall, tex.wallGlow);
+  if (tunnelWalls !== walls) surface(tunnelWalls, tex.tunnelWall, tex.tunnelGlow);
   if (data.channels?.length) group.add(new THREE.Mesh(banks.build(), mat(tex.channel, tex.channelGlow)));
 
-  const stoneMat = new THREE.MeshLambertMaterial({ map: tex.floor, color: 0xb0a898 });
+  const stoneMat = new THREE.MeshLambertMaterial({ map: variants(tex.floor)[0], color: 0xb0a898 });
 
   const obstacles = [];
   for (const p of [data.amulet, data.shrine].filter(Boolean)) {

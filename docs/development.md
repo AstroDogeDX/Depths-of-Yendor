@@ -61,7 +61,7 @@ src/
   dungeon/dwarvenTextures.js  the Dwarven Ruins': porphyry, gold frieze and dado, inlaid marble, coffers, rift sides and glow
   dungeon/underworldTextures.js  the Underworld's: black brick and glowing runes, veined tunnels, basalt, crystal vault, lava
   dungeon/poolTextures.js  each theme's pool water, painted from its colours in config.js
-  dungeon/texturePaint.js  helpers the themes' textures are painted with
+  dungeon/texturePaint.js  helpers the themes' textures are painted with, and their variants (see The dungeon)
   world/level.js       runtime level: collision, line of sight, doors, chests (and mimics passing for them), BFS flow field, fog of war, spawning
   world/shopkeeper.js  the shop's merchant: idle animation and remarks
   world/trapModels.js  the traps' models: their armed, active and used states, and how they move going off

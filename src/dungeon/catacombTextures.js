@@ -1,9 +1,10 @@
 import { RNG } from '../rng.js';
-import { rgb, mix, scale, paint, noise } from './texturePaint.js';
+import { rgb, mix, scale, paint, noise, cracks, cells, variants } from './texturePaint.js';
 
 // The Catacombs' own textures: heavy rough-hewn blocks blackened by centuries of torches overhead and grey
 // with bone dust at their feet, worn flagstones, a rough vault, the hacked-out sides of the spike pits fading
-// to black, the bone-strewn floor of the pits, and cobwebs.
+// to black, the bone-strewn floor of the pits, and cobwebs. The walls, floor and vault come in variants (see variants in
+// texturePaint.js).
 
 const DUST = rgb('#8e8574'); // bone dust
 const JOINT = rgb('#1c1a17');
@@ -16,7 +17,7 @@ function courses(rng, heights, w) {
     const total = weights.reduce((a, b) => a + b, 0), off = rng.int(0, w - 1);
     let at = off;
     const joints = weights.map((k) => { const j = Math.round(at) % w; at += (k / total) * w; return j; });
-    const c = { y0, h, joints: joints.sort((a, b) => a - b), shade: Array.from({ length: n }, () => 0.72 + rng.next() * 0.33) };
+    const c = { y0, h, joints: joints.sort((a, b) => a - b) };
     y0 += h;
     return c;
   });
@@ -29,93 +30,92 @@ function blockAt(course, x, w) {
   return { i: j.length - 1, lx: x + w - j[j.length - 1] };
 }
 
-/** A few hairline cracks: random walks, as a set of texel indices. */
-function cracks(rng, w, h, n, len) {
-  const out = new Set();
-  for (let k = 0; k < n; k++) {
-    let x = rng.int(0, w - 1), y = rng.int(0, h - 1);
-    for (let s = 0; s < len; s++) {
-      out.add(y * w + ((x % w) + w) % w);
-      x += rng.int(-1, 1);
-      y += rng.chance(0.7) ? 1 : 0;
-      if (y >= h) break;
-    }
-  }
-  return out;
-}
-
 /** Walls, full height once (64×90, top row at the top of the wall). */
 function wall(theme) {
-  const W = 64, H = 90, rng = new RNG('catacombs:wall');
+  const W = 64, H = 90, T = variants('catacombs:wall', W, H, { across: true });
   const pal = theme.wall.map(rgb);
-  const rows = courses(rng, [13, 15, 12, 16, 14, 20], W);
-  const colour = rows.map((r) => r.shade.map(() => rng.pick(pal)));
-  const soot = noise(rng, W, H, 8, 4), grime = noise(rng, W, H, 6, 3), crack = cracks(rng, W, H, 5, 9);
-  return paint(W, H, (x, y) => {
-    const ri = rows.findIndex((r) => y < r.y0 + r.h), r = rows[ri], ly = y - r.y0;
-    const { i, lx } = blockAt(r, x, W);
-    if (ly === 0 || lx === 0) return JOINT;
-    let k = r.shade[i] * (0.9 + rng.next() * 0.16);
-    if (ly === 1) k *= 1.12;
-    if (ly === r.h - 1) k *= 0.7;
-    if (lx === 1) k *= 1.06;
-    if (rng.chance(0.05)) k *= 0.78; // chisel marks
-    let col = scale(colour[ri][i], k);
-    if (crack.has(y * W + x)) col = scale(col, 0.55);
-    // Soot from centuries of torches, thickest under the vault.
-    const s = Math.max(0, 1 - y / (30 + soot(x, y) * 20));
-    col = scale(col, 1 - s * 0.55);
-    // Bone dust drifted against the foot of the wall.
-    const d = (y - (H - 11 - grime(x, y) * 6)) / 10;
-    if (d > 0) col = mix(col, DUST, Math.min(0.4, d * 0.4) * (0.7 + rng.next() * 0.3));
-    return col;
+  // The courses and their joints are the same in every variant, and the colour of the block that wraps round the edge.
+  const rows = courses(T.base, [13, 15, 12, 16, 14, 20], W);
+  const soots = T.pair((r) => noise(r, W, H, 8, 4)), grimes = T.pair((r) => noise(r, W, H, 6, 3));
+  return T.all((V) => {
+    const rng = V.own, soot = V.field(soots), grime = V.field(grimes);
+    const looks = rows.map((r, ri) => r.joints.map((j, i) => {
+      const kr = V.keyed(`${ri}:${i}`, i === r.joints.length - 1 && r.joints[0] > 0);
+      return { c: kr.pick(pal), k: 0.72 + kr.next() * 0.33 };
+    }));
+    const crack = cracks(rng, W, H, 5, 9, { steady: 0.7, keep: V.away });
+    return paint(W, H, (x, y) => {
+      const ri = rows.findIndex((r) => y < r.y0 + r.h), r = rows[ri], ly = y - r.y0;
+      const { i, lx } = blockAt(r, x, W);
+      if (ly === 0 || lx === 0) return JOINT;
+      let k = looks[ri][i].k * (0.9 + rng.next() * 0.16);
+      if (ly === 1) k *= 1.12;
+      if (ly === r.h - 1) k *= 0.7;
+      if (lx === 1) k *= 1.06;
+      if (rng.chance(0.05)) k *= 0.78; // chisel marks
+      let col = scale(looks[ri][i].c, k);
+      if (crack.has(y * W + x)) col = scale(col, 0.55);
+      // Soot from centuries of torches, thickest under the vault.
+      const s = Math.max(0, 1 - y / (30 + soot(x, y) * 20));
+      col = scale(col, 1 - s * 0.55);
+      // Bone dust drifted against the foot of the wall.
+      const d = (y - (H - 11 - grime(x, y) * 6)) / 10;
+      if (d > 0) col = mix(col, DUST, Math.min(0.4, d * 0.4) * (0.7 + rng.next() * 0.3));
+      return col;
+    });
   });
 }
 
 /** Big worn flagstones, two to a tile each way, joints staggered on alternate rows. */
 function floor(theme) {
-  const S = 64, rng = new RNG('catacombs:floor');
-  const pal = theme.floor.map(rgb);
-  const shade = new Map(), crack = cracks(rng, S, S, 4, 10), stain = noise(rng, S, S, 4);
-  return paint(S, S, (x, y) => {
-    const row = Math.floor(y / 32), off = row % 2 ? 16 : 0, col = Math.floor(((x + off) % S) / 32);
-    const lx = (x + off) % 32, ly = y % 32;
-    if (lx === 0 || ly === 0) return JOINT;
-    const key = `${row}:${col}`;
-    if (!shade.has(key)) shade.set(key, { c: rng.pick(pal), k: 0.8 + rng.next() * 0.3 });
-    const f = shade.get(key);
-    // Worn: smooth and pale in the middle, darker toward the edges, chipped at the corners.
-    const edge = Math.min(lx, ly, 32 - lx, 32 - ly);
-    if (edge < 3 && Math.min(lx, 32 - lx) < 4 && Math.min(ly, 32 - ly) < 4) return scale(JOINT, 1.4);
-    let c = scale(f.c, f.k * (0.9 + rng.next() * 0.14) * (0.85 + Math.min(1, edge / 8) * 0.18));
-    if (crack.has(y * S + x)) c = scale(c, 0.6);
-    if (stain(x, y) < 0.3) c = scale(c, 0.85);
-    if (rng.chance(0.006)) c = mix(c, DUST, 0.35); // specks of bone dust
-    return c;
+  const S = 64, T = variants('catacombs:floor', S, S);
+  const pal = theme.floor.map(rgb), stains = T.pair((r) => noise(r, S, S, 4));
+  return T.all((V) => {
+    const rng = V.own, stain = V.field(stains), shade = new Map();
+    const crack = cracks(rng, S, S, 4, 10, { steady: 0.7, keep: V.away });
+    return paint(S, S, (x, y) => {
+      const row = Math.floor(y / 32), off = row % 2 ? 16 : 0, col = Math.floor(((x + off) % S) / 32);
+      const lx = (x + off) % 32, ly = y % 32;
+      if (lx === 0 || ly === 0) return JOINT;
+      const key = `${row}:${col}`;
+      if (!shade.has(key)) {
+        const r = V.keyed(key, off > 0 && col === 0); // (that one wraps round the edge)
+        shade.set(key, { c: r.pick(pal), k: 0.8 + r.next() * 0.3 });
+      }
+      const f = shade.get(key);
+      // Worn: smooth and pale in the middle, darker toward the edges, chipped at the corners.
+      const edge = Math.min(lx, ly, 32 - lx, 32 - ly);
+      if (edge < 3 && Math.min(lx, 32 - lx) < 4 && Math.min(ly, 32 - ly) < 4) return scale(JOINT, 1.4);
+      let c = scale(f.c, f.k * (0.9 + rng.next() * 0.14) * (0.85 + Math.min(1, edge / 8) * 0.18));
+      if (crack.has(y * S + x)) c = scale(c, 0.6);
+      if (stain(x, y) < 0.3) c = scale(c, 0.85);
+      if (rng.chance(0.006)) c = mix(c, DUST, 0.35); // specks of bone dust
+      return c;
+    });
   });
 }
 
 /** The vault: rough rock in big irregular stones, sooty. */
 function ceiling(theme) {
-  const S = 64, rng = new RNG('catacombs:ceiling');
+  const S = 64, T = variants('catacombs:ceiling', S, S);
   const base = rgb(theme.ceiling);
-  const pts = Array.from({ length: 9 }, () => ({ x: rng.next() * S, y: rng.next() * S, k: 0.8 + rng.next() * 0.5 }));
-  const rough = noise(rng, S, S, 8);
-  return paint(S, S, (x, y) => {
-    let d1 = Infinity, d2 = Infinity, best = null;
-    for (const p of pts) for (const ox of [-S, 0, S]) for (const oy of [-S, 0, S]) {
-      const d = Math.hypot(x - p.x - ox, y - p.y - oy);
-      if (d < d1) { d2 = d1; d1 = d; best = p; } else if (d < d2) d2 = d;
-    }
-    if (d2 - d1 < 1.2) return scale(base, 0.8);
-    return scale(base, best.k * (0.85 + rough(x, y) * 0.35) * (0.9 + rng.next() * 0.15) * 1.4);
+  // The stones are the same in every variant, and so are the shades of those that reach an edge.
+  const pts = Array.from({ length: 9 }, () => ({ x: T.base.next() * S, y: T.base.next() * S, k: 0.8 + T.base.next() * 0.5 }));
+  const { cell, gap, atEdge } = cells(pts, S, S), roughs = T.pair((r) => noise(r, S, S, 8));
+  return T.all((V) => {
+    const rng = V.own, rough = V.field(roughs);
+    const ks = pts.map((p, i) => { const k = 0.8 + rng.next() * 0.5; return atEdge.has(i) ? p.k : k; });
+    return paint(S, S, (x, y) => {
+      if (gap[y * S + x] < 1.2) return scale(base, 0.8);
+      return scale(base, ks[cell[y * S + x]] * (0.85 + rough(x, y) * 0.35) * (0.9 + rng.next() * 0.15) * 1.4);
+    });
   });
 }
 
 /** A pit's hacked-out sides (64×48: 2 m wide, 1.5 m deep), falling away into darkness. */
 function channel(theme) {
   const W = 64, H = 48, rng = new RNG('catacombs:pit');
-  const pal = theme.wall.map(rgb), rough = noise(rng, W, H, 8, 6), crack = cracks(rng, W, H, 6, 12);
+  const pal = theme.wall.map(rgb), rough = noise(rng, W, H, 8, 6), crack = cracks(rng, W, H, 6, 12, { steady: 0.7 });
   return paint(W, H, (x, y) => {
     let c = scale(mix(pal[1], pal[2], rough(x, y)), 0.85 + rng.next() * 0.2);
     if (rng.chance(0.06)) c = scale(c, 0.7); // pick marks
@@ -178,10 +178,10 @@ export function cobweb() {
 
 export function catacombTextures(theme, toTexture) {
   return {
-    wall: toTexture(wall(theme)),
+    wall: wall(theme).map(toTexture),
     wallFullHeight: true,
-    floor: toTexture(floor(theme)),
-    ceiling: toTexture(ceiling(theme)),
+    floor: floor(theme).map(toTexture),
+    ceiling: ceiling(theme).map(toTexture),
     channel: toTexture(channel(theme)),
     pitFloor: toTexture(pitFloor()),
     cobweb: toTexture(cobweb()),
