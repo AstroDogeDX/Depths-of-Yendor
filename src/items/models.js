@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WEAPONS, OFFHANDS } from './defs.js';
+import { WEAPONS, OFFHANDS, SHIELDS } from './defs.js';
 import { buildBBModel } from './bbmodel.js';
 import { MODEL_PX, ITEM_MIN_SIZE } from '../config.js';
 
@@ -55,7 +55,7 @@ const ITEM_BASE = -0.16;
  */
 export function buildItemModel(item, color, { floor = false } = {}) {
   const g = new THREE.Group();
-  const model = item.kind === 'weapon' ? lyingWeapon(item) : item.kind === 'offhand' ? lyingOffhand(item) : itemModel(item, color);
+  const model = item.kind === 'weapon' ? lyingWeapon(item) : item.kind === 'offhand' || item.kind === 'shield' ? lyingOffhand(item) : itemModel(item, color);
   if (floor) {
     const bounds = new THREE.Box3().setFromObject(model);
     const longest = Math.max(...bounds.getSize(new THREE.Vector3()).toArray());
@@ -77,22 +77,30 @@ function lyingWeapon(item) {
   return w;
 }
 
-// An off-hand thing (items/defs.js OFFHANDS) has the one model, in your hand (see ViewModel) or on the floor: the
-// lantern is assets/models/hand_lantern.bbmodel. On the floor it lies on its side, like a weapon, unless it `stands`.
+// What you hold in your off hand (items/defs.js OFFHANDS and SHIELDS) has the one model, in your hand (see ViewModel)
+// or on the floor: the lantern is assets/models/hand_lantern.bbmodel, the wooden shield wooden_shield.bbmodel. On the
+// floor an off-hand thing lies on its side, like a weapon, unless it `stands`; a shield lies flat, face up.
 const HELD_FILES = import.meta.glob('../../assets/models/*.bbmodel', { import: 'default', eager: true });
 
-function lyingOffhand(item) {
-  const name = OFFHANDS[item.type].model, key = `held:${name}`;
+/** A model held in a hand, assets/models/<name>.bbmodel: a copy of it, built once. */
+export function heldModel(name) {
+  const key = `held:${name}`;
   if (!itemCache.has(key)) {
     const src = HELD_FILES[`../../assets/models/${name}.bbmodel`];
-    if (!src) console.warn(`No off-hand model assets/models/${name}.bbmodel`);
+    if (!src) console.warn(`No model assets/models/${name}.bbmodel`);
     itemCache.set(key, src ? buildBBModel(src, MODEL_PX) : box(0.05, 0.4, 0.05, lam(0x8a5a2a), 0, 0.2));
   }
-  const m = itemCache.get(key).clone();
-  if (!OFFHANDS[item.type].stands) m.rotation.z = Math.PI / 2.2;
+  return itemCache.get(key).clone();
+}
+
+function lyingOffhand(item) {
+  const shield = item.kind === 'shield', def = (shield ? SHIELDS : OFFHANDS)[item.type];
+  const m = heldModel(def.model);
+  if (shield) m.rotation.x = -Math.PI / 2;
+  else if (!def.stands) m.rotation.z = Math.PI / 2.2;
   // Centred on the item's spot, about which floor items turn (standing, its middle too, where they bob).
   const mid = new THREE.Box3().setFromObject(m).getCenter(new THREE.Vector3());
-  m.position.set(-mid.x, OFFHANDS[item.type].stands ? -mid.y : 0, OFFHANDS[item.type].stands ? -mid.z : 0);
+  m.position.set(-mid.x, def.stands ? -mid.y : 0, def.stands || shield ? -mid.z : 0);
   return m;
 }
 

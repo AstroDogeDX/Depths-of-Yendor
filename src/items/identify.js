@@ -1,5 +1,5 @@
 import {
-  WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS, CONTAINERS,
+  WEAPONS, ARMORS, SHIELDS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS, CONTAINERS,
   POTION_COLORS, SCROLL_SYLLABLES, SCROLL_RUNES, WAND_MATERIALS, RING_GEMS,
 } from './defs.js';
 import { RNG } from '../rng.js';
@@ -7,7 +7,7 @@ import { DAMAGE_TYPES, damageType, describeResist } from '../damage.js';
 import { WAND_PLUS_DMG, wandRecharge } from './defs.js';
 import { enchantOf, baneOf } from './enchant.js';
 
-const GEAR = new Set(['weapon', 'armor', 'ring', 'wand']);
+const GEAR = new Set(['weapon', 'armor', 'shield', 'ring', 'wand']);
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
 
 /** What you know of an item's curse, in words (or '' if you don't know). */
@@ -18,7 +18,7 @@ function curseNote(item) {
   return 'It is free of curses.';
 }
 
-/** A weapon's or armour's Enchantment or Curse of ___, as far as you know it: [label, description] or null. */
+/** A weapon's, armour's or shield's Enchantment or Curse of ___, as far as you know it: [label, description] or null. */
 function effectOf(item) {
   const e = (item.identified || item.enchantKnown) && enchantOf(item);
   if (e) return [`Enchantment of ${cap(e.name)}`, e];
@@ -134,6 +134,7 @@ export class Knowledge {
         return this.appearance[item.kind][item.type].color;
       case 'weapon': return 0xa8adb4;
       case 'offhand': return 0xffa050;
+      case 'shield': return 0x9a6a3a;
       case 'armor': return ARMORS[item.type].color;
       case 'artefact': return ARTEFACTS[item.type].color;
       case 'food': return 0x8a5a2a;
@@ -169,8 +170,8 @@ export class Knowledge {
         const base = WEAPONS[item.type].name;
         return (item.identified ? `${plus} ${base}` : base) + of + curseTag;
       }
-      case 'armor': {
-        const base = ARMORS[item.type].name;
+      case 'armor': case 'shield': {
+        const base = (item.kind === 'armor' ? ARMORS : SHIELDS)[item.type].name;
         return (item.identified ? `${plus} ${base}` : base) + of + curseTag;
       }
       case 'potion': {
@@ -223,6 +224,18 @@ export class Knowledge {
         if (effect) parts.push(`${effect[0]}: ${effect[1].desc}`);
         if (!item.identified) parts.push(weapon ? 'You do not know how fine it is. Fight with it for a while to learn more.'
           : 'You do not know how fine it is. Wear it into a few fights to learn more.');
+        parts.push(curseNote(item));
+        return parts.filter(Boolean).join('\n\n');
+      }
+      case 'shield': {
+        const d = SHIELDS[item.type], plus = item.identified && item.plus ? ` (+${item.plus})` : '';
+        const parts = [d.desc,
+          `Raised (hold right-click), it takes up to ${d.block}${plus} off a blow from in front of you, each point costing you ${d.stamina} stamina, and slows you to ${Math.round(d.slow * 100)}%. ` +
+          `Click while it's up to shove with it: ${d.bash.dmg[0]}–${d.bash.dmg[1]}${plus} (bash), for ${d.bash.stamina} stamina. ` +
+          `Slung on your back while you grip your weapon in both hands, it takes up to ${d.back}${plus} off a blow from behind.`];
+        const effect = effectOf(item);
+        if (effect) parts.push(`${effect[0]}: ${effect[1].desc}`);
+        if (!item.identified) parts.push('You do not know how fine it is. Turn aside a few blows with it to learn more.');
         parts.push(curseNote(item));
         return parts.filter(Boolean).join('\n\n');
       }

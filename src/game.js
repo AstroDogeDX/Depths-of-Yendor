@@ -20,6 +20,7 @@ import { loadTraps } from './world/trapModels.js';
 import { TitleScene } from './ui/titleScene.js';
 import { SAVE_VERSION, SAVE_FORMAT, writeSave, deleteSave, fingerprint } from './save.js';
 import { damageTakenMult, hitStatuses } from './status.js';
+import { blockHit } from './shield.js';
 import { BUILD } from './build.js';
 
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, matches stair `dir`
@@ -538,7 +539,7 @@ export class Game {
     this.viewmodel.update(dt, {
       moving: p.moving, bob: p.bob, charge: p.charge, time: this.time, yaw: p.yaw, sprint: p.moving && p.mode === 'sprint',
       lightLevel: p.status.blind > 0 ? 0.1 : 1, carriedLight: p.carriedLight(),
-      offhand: p.equip.offhand?.type ?? null, twoHanded: p.twoHanded, held: this.heldItem(),
+      offhand: p.equip.offhand, guard: p.guard, twoHanded: p.twoHanded, held: this.heldItem(),
     });
     this.interaction = this.findInteraction();
     this.target = this.findTarget();
@@ -564,10 +565,10 @@ export class Game {
     cam.rotation.set(pitch, yaw, roll);
 
     // The lantern you carry is the main light: held up, slightly left of and ahead of your eyes, and swaying as it
-    // swings from your hand (see ViewModel.pendulum); stowed while you grip your weapon in both hands, lower down at your
-    // belt, and dimmer (see Player.carriedLight). Its flame burns behind glass, so it flickers only a little.
+    // swings from your hand (see ViewModel.pendulum); stowed while you grip your weapon in both hands, or hung at your
+    // belt from the hotbar, lower down and dimmer (see Player.carriedLight). Its flame burns behind glass, so it flickers only a little.
     const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
-    const held = p.twoHanded ? 0 : 1, sway = this.viewmodel.pendulum.z * 0.3 * held;
+    const held = p.lightInHand() ? 1 : 0, sway = this.viewmodel.pendulum.z * 0.3 * held;
     this.lantern.position.set(p.x + fx * 0.35 * held + fz * (0.25 - sway), eye - 0.1 - 0.6 * (1 - held), p.z + fz * 0.35 * held - fx * (0.25 - sway));
     const flick = 0.95 + Math.sin(this.time * 17) * 0.02 + Math.sin(this.time * 5.3) * 0.03;
     const blind = p.status.blind > 0;
@@ -934,8 +935,12 @@ export class Game {
       if (!opts.dot) this.popup(playerPopupPos(p), 'IMMUNE', 'immune');
       return;
     }
-    let dmg = amount;
+    let dmg = amount, shielded = 0;
     if (!opts.ignoreArmor) {
+      // A shield takes its share first, raised against a blow from in front or on your back against one from behind
+      // (see shield.js), if the blow came from somewhere (`from`, or the monster that struck it); then your armour.
+      shielded = blockHit(this, p, dmg, opts.from ?? opts.monster, opts.monster);
+      dmg -= shielded;
       const def = p.defense;
       if (def > 0) dmg -= rand.int(Math.ceil(def * 0.4), def);
       const a = p.equip.armor;
@@ -946,9 +951,10 @@ export class Game {
     }
     dmg = Math.max(0, dmg);
     if (dmg > 0 && mult !== 1) dmg = Math.max(1, Math.round(dmg * mult));
+    if (shielded) this.audio.block();
     if (dmg === 0) {
       this.popup(playerPopupPos(p), 'blocked', 'miss');
-      this.audio.block();
+      if (!shielded) this.audio.block();
       return;
     }
     p.hp -= dmg;

@@ -92,7 +92,8 @@ function impact(game, level, pr, target) {
   }
   burst(level, pr.x, pr.y, pr.z, pr.color, pr.kind === 'arrow' ? 3 : 10, 2.5, 0.4);
   if (target === 'player') {
-    game.hurtPlayer(pr.dmg, { source: pr.source, type: pr.type, ranged: true });
+    // (From the way it came, for a shield: see shield.js.)
+    game.hurtPlayer(pr.dmg, { source: pr.source, type: pr.type, ranged: true, from: { x: pr.x - pr.vx, z: pr.z - pr.vz } });
   } else if (target) {
     target.takeDamage(game, pr.dmg, {
       type: pr.type, ignite: pr.type === 'fire' ? 4 : 0, knockback: { x: pr.vx / 20, z: pr.vz / 20 },

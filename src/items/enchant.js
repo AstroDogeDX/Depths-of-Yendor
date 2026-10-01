@@ -1,4 +1,4 @@
-// Enchantments and curses on weapons and armour.
+// Enchantments and curses on weapons, armour and shields.
 //
 // An Enchantment of ___ (a scroll of enchantment lays one, at random, and now and then a weapon or armour is found
 // with one) and a Curse of ___ (a cursed weapon or armour comes with one) are each an effect on the item, named after
@@ -15,6 +15,9 @@
 //            accuracy (added to your chance to hit), dmgMult (on your blows' damage)
 //   armour:  resist { type: multiplier } (see damage.js), noise (a multiplier on how far your steps carry),
 //            speed (a multiplier on how fast you move)
+//   shields: blockStamina (a multiplier on the stamina a blow it takes costs you), thorns [min, max] (damage to whoever
+//            struck a blow it took, raised), guardSpeed (a multiplier on your speed while it's raised), bashStamina (a
+//            multiplier on what a shove with it costs): see shieldStats in shield.js
 //
 // These are a first few, to be filled out.
 
@@ -29,6 +32,10 @@ export const ENCHANTMENTS = {
     embers: { name: 'embers', desc: 'Fire washes off it: half the fire damage.', resist: { fire: 0.5 } },
     silence: { name: 'silence', desc: 'It muffles your steps: monsters hear you from much less far off.', noise: 0.6 },
   },
+  shield: {
+    steadfastness: { name: 'steadfastness', desc: 'It holds firm: a blow it takes costs you half the stamina.', blockStamina: 0.5 },
+    thorns: { name: 'thorns', desc: 'A blow it takes, raised, hurts the one who struck it.', thorns: [2, 5] },
+  },
 };
 
 export const CURSES = {
@@ -40,6 +47,10 @@ export const CURSES = {
     burden: { name: 'burden', desc: 'It drags at you: you move more slowly.', speed: 0.85 },
     clamour: { name: 'clamour', desc: 'It clanks and rattles: monsters hear you from much further off.', noise: 1.5 },
   },
+  shield: {
+    burden: { name: 'burden', desc: 'It drags at your arm: raised, it slows you even more, and shoving with it costs half as much stamina again.', guardSpeed: 0.75, bashStamina: 1.5 },
+    brittleness: { name: 'brittleness', desc: 'It splinters under blows: each one it takes costs you twice the stamina.', blockStamina: 2 },
+  },
 };
 
 /** An item's enchantment's def, or null. */
@@ -48,11 +59,11 @@ export const enchantOf = (item) => (item?.enchant && ENCHANTMENTS[item.kind]?.[i
 /** An item's curse effect's def (while it has any curse), or null. */
 export const baneOf = (item) => (item?.curse > 0 && item.bane && CURSES[item.kind]?.[item.bane]) || null;
 
-/** A curse effect for a weapon or armour, at random. */
+/** A curse effect for a weapon, armour or shield, at random. */
 export const randomBane = (rng, kind) => rng.pick(Object.keys(CURSES[kind]));
 
-/** An enchantment for a weapon or armour, at random. */
+/** An enchantment for a weapon, armour or shield, at random. */
 export const randomEnchant = (rng, kind) => rng.pick(Object.keys(ENCHANTMENTS[kind]));
 
-/** Whether a weapon, armour or ring is stuck on you: fully cursed. */
+/** Whether a weapon, armour, shield or ring is stuck on you: fully cursed. */
 export const binds = (item) => item.curse >= 2 && item.kind !== 'artefact';

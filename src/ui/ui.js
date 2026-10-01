@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { KIND_GLYPH, ARTEFACTS, ARMORS, CONTAINERS, wandRecharge } from '../items/defs.js';
-import { equipSlotFor, equipItem, putAway, DOLL_SLOTS_FOR } from '../items/use.js';
+import { equipSlotFor, equipItem, putAway, unequipItem, DOLL_SLOTS_FOR } from '../items/use.js';
 import { T } from '../dungeon/tiles.js';
 import { TRAP_COLORS } from '../world/level.js';
 import { HUNGER_HUNGRY, HUNGER_FAMISHED, TILE, HOTBAR_SIZE, PLAYER_SPEED, MAX_DEPTH, THEMES, FLOORS_PER_THEME, TWO_HAND_STR, themeForDepth } from '../config.js';
-import { canHotbar, slotItem, slotHolds, slotAction, assignSlot, clearSlot, moveSlot, HELD } from '../hotbar.js';
+import { canHotbar, slotItem, slotHolds, slotAction, assignSlot, clearSlot, moveSlot, HELD, HAND_KINDS } from '../hotbar.js';
 import { stackable } from '../items/generate.js';
 import { DAMAGE_TYPES } from '../damage.js';
 import { Logo } from './logo.js';
@@ -18,7 +18,7 @@ const $ = (id) => document.getElementById(id);
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const KIND_COLOR = {
-  weapon: '#c8ccd4', offhand: '#ffa050', armor: '#c0a880', scroll: '#e8dcb0', wand: '#a0c8ff', ring: '#e0a0ff',
+  weapon: '#c8ccd4', offhand: '#ffa050', shield: '#b08050', armor: '#c0a880', scroll: '#e8dcb0', wand: '#a0c8ff', ring: '#e0a0ff',
   food: '#c09060', artefact: '#ffb040', amulet: '#ffd040', gold: '#ffd040',
 };
 // Floating text over the world, by class (see .popup in style.css): how many seconds it lasts, how far it rises
@@ -349,6 +349,7 @@ export class UI {
     $('atk-fill').style.width = `${p.charge * 100}%`;
     $('st-fill').style.width = `${(p.stamina / p.maxStamina) * 100}%`;
     $('st-bar').classList.toggle('winded', p.winded);
+    $('st-bar').classList.toggle('guard', p.guard > 0); // (a raised shield: it isn't coming back meanwhile)
     $('atk-bar').classList.toggle('ready', p.charge >= 1);
     document.body.classList.toggle('lowhp', hpFrac < 0.25);
     document.body.classList.toggle('blind', p.status.blind > 0);
@@ -369,7 +370,8 @@ export class UI {
 
     const gear = [];
     gear.push(`<div>${p.equip.weapon ? k.name(p.equip.weapon) : 'bare hands'}${p.twoHanded ? ' <span class="grip">(both hands)</span>' : ''}</div>`);
-    if (p.equip.offhand) gear.push(`<div class="off">${k.name(p.equip.offhand)}${p.twoHanded ? ' <span class="grip">(stowed)</span>' : ''}</div>`);
+    const off = p.equip.offhand, slung = off?.kind === 'shield' ? 'on your back' : 'stowed';
+    if (off) gear.push(`<div class="off">${k.name(off)}${p.twoHanded ? ` <span class="grip">(${slung})</span>` : p.guarding ? ' <span class="grip">(raised)</span>' : ''}</div>`);
     p.equip.artefacts.forEach((a, i) => {
       if (!a) return;
       const def = ARTEFACTS[a.type];
@@ -834,13 +836,14 @@ export class UI {
       el.classList.toggle('stowed', !!it && d.key === 'offhand' && p.twoHanded);
       if (it) {
         // Its + (a cursed ring's shown as what it does to you: against you).
-        const showPlus = it.identified && (it.kind === 'weapon' || it.kind === 'armor' || (it.kind === 'ring' && it.type !== 'teleportation'));
+        const showPlus = it.identified && (['weapon', 'armor', 'shield'].includes(it.kind) || (it.kind === 'ring' && it.type !== 'teleportation'));
         const against = it.kind === 'ring' && it.curse > 0;
         const plus = showPlus ? `<span class="de${against ? ' bad' : ''}">${against ? '−' : '+'}${it.plus}</span>` : '';
         const grip = d.key === 'weapon' && p.twoHanded ? '<span class="dh">2H</span>'
-          : d.key === 'offhand' && p.twoHanded ? '<span class="dh">stowed</span>' : '';
+          : d.key === 'offhand' && p.twoHanded ? `<span class="dh">${it.kind === 'shield' ? 'on back' : 'stowed'}</span>` : '';
         el.innerHTML = `<span class="dg">${itemIcon(k, it, d.small ? 2 : 3)}</span>${plus}${grip}`;
-        setTip(el, k.name(it), d.key === 'weapon' && p.twoHanded ? 'In both hands' : d.key === 'offhand' && p.twoHanded ? 'Stowed' : '');
+        setTip(el, k.name(it), d.key === 'weapon' && p.twoHanded ? 'In both hands'
+          : d.key === 'offhand' && p.twoHanded ? (it.kind === 'shield' ? 'On your back' : 'Stowed') : '');
       } else {
         el.innerHTML = `<span class="dl">${d.label}</span>`;
         setTip(el, '');
@@ -1090,7 +1093,7 @@ export class UI {
       this.dragSource(el, () => (p().hotbar[i] ? { item: slotItem(p(), i), from: 'hotbar', slot: i } : null));
       this.dropTarget(el, (d) => (d.from === 'hotbar' ? d.slot !== i : !!d.item && canHotbar(d.item)), (d) => {
         if (d.from === 'hotbar') moveSlot(p(), d.slot, i);
-        else if (!slotHolds(p().hotbar[i], d.item) && !assignSlot(p(), i, d.item)) this.packNote("There's no room in your pack for what's in that slot.");
+        else if (!slotHolds(p().hotbar[i], d.item)) this.toHotbar(i, d.item);
       });
     });
     // Dropped back on the pack (its tabs or its grid), off the doll or the hotbar.
@@ -1115,19 +1118,33 @@ export class UI {
     const it = this.selected();
     if (this.selectMode || !it) return;
     if (!canHotbar(it)) {
-      this.packNote(it.kind === 'artefact' ? 'That artefact has no power to invoke.' : 'Only potions, scrolls, food, wands and artefact powers go on the hotbar.');
+      this.packNote(it.kind === 'artefact' ? 'That artefact has no power to invoke.'
+        : 'Only potions, scrolls, food, wands, artefact powers and things you hold in your hands go on the hotbar.');
       return;
     }
-    this.perform(it, () => {
-      if (!assignSlot(p, i, it)) this.packNote("There's no room in your pack for that.");
-    });
+    this.perform(it, () => this.toHotbar(i, it));
+  }
+
+  /**
+   * Puts `it` in hotbar slot `i` (see assignSlot), or takes it off if it's there already. Something you hold that's in
+   * your hand comes out of it to hang at your belt there (see HAND_KINDS), unless a curse binds it to you.
+   */
+  toHotbar(i, it) {
+    const g = this.game, p = g.player, was = [...p.hotbar];
+    if (!assignSlot(p, i, it)) {
+      this.packNote("There's no room in your pack for what's in that slot.");
+      return;
+    }
+    if (!HAND_KINDS.has(it.kind) || !p.isEquipped(it) || !p.onHotbar(it)) return;
+    if (unequipItem(g, it, true)) g.log(`You hang the ${g.knowledge.name(it)} at your belt.`);
+    else p.hotbar = was;
   }
 }
 
 function equipTag(p, it) {
   const e = p.equip;
   if (e.weapon === it) return p.twoHanded ? 'in both hands' : 'in hand';
-  if (e.offhand === it) return p.twoHanded ? 'stowed' : 'in off hand';
+  if (e.offhand === it) return p.twoHanded ? (it.kind === 'shield' ? 'on your back' : 'stowed') : 'in off hand';
   if (e.armor === it) return 'worn';
   if (e.rings.includes(it)) return 'on finger';
   if (e.artefacts.includes(it)) return 'attuned';

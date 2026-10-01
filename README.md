@@ -18,7 +18,7 @@ No install needed: it runs in any modern desktop browser, with a keyboard and mo
 - **Rogue in real time:** an attack meter instead of turns, monsters that telegraph their blows so you can step out of reach, and sneak attacks on sleeping or unaware monsters. Monsters see you and hear your footsteps, so sprinting is fast but loud, and sneaking is slow but near-silent.
 - **13 monsters,** from rats and oozes to trolls, stone golems and the Warden of Yendor, each with its own strengths and weaknesses: a mace is the answer to skeletons, fire is the troll's bane. Some of the chests are mimics.
 - **Unidentified items:** potions, scrolls, wands and rings look different every run, so you learn what they do by using them. Some equipment is cursed, and won't come off.
-- **Loot and gear:** weapons you can grip in one hand or two, armour, potions, scrolls, wands, rings and food, mostly found in chests, the best in locked ones. Artefacts of power wait in guarded shrines, and a shop opens on the first floor of each theme after the first.
+- **Loot and gear:** weapons you can grip in one hand or two, shields to raise against blows, armour, potions, scrolls, wands, rings and food, mostly found in chests, the best in locked ones. Artefacts of power wait in guarded shrines, and a shop opens on the first floor of each theme after the first.
 - **Traps, locked rooms and keys,** and floors that stay as you left them when you go back up.
 - **Made in code:** the dungeon, its textures and the sound are all generated, and the models are [Blockbench](https://www.blockbench.net) projects built by code too.
 
@@ -34,9 +34,9 @@ No install needed: it runs in any modern desktop browser, with a keyboard and mo
 | E | Pick up, open a chest or door, buy, use stairs |
 | I or Tab | Your pack |
 | M | Map |
-| 1–4 | Hotbar: scrolls and food are used at once; hold the key for a potion or wand, then click to throw or zap it, or right-click to drink it or zap yourself |
+| 1–4 | Hotbar: scrolls and food are used at once; hold the key for a potion or wand, then click to throw or zap it, or right-click to drink it or zap yourself. A weapon, lantern or shield there swaps into your hand |
 | F | Grip your weapon in both hands, or one |
-| Right-click | Use what's in your off hand |
+| Right-click | Hold to raise your shield (click to shove with it) |
 | Q | Drink a potion you know is healing |
 | R / T | Artefact powers |
 | P | Pixel size |

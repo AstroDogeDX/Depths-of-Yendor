@@ -3,11 +3,12 @@ import {
   STAMINA_BASE, STAMINA_PER_LEVEL, STAMINA_DRAIN, STAMINA_REGEN, STAMINA_REGEN_DELAY, STAMINA_RECOVER, MODE_SPEED, NOISE,
   TWO_HAND_STR, EYE_H, CROUCH_DROP, POOL, WADE_SPEED,
 } from './config.js';
-import { WEAPONS, ARMORS, ARTEFACTS, OFFHANDS, FOOD, CONTAINERS, CONTAINER_SIZE, wandRecharge } from './items/defs.js';
+import { WEAPONS, ARMORS, SHIELDS, ARTEFACTS, OFFHANDS, FOOD, CONTAINERS, CONTAINER_SIZE, wandRecharge } from './items/defs.js';
 import { enchantOf, baneOf } from './items/enchant.js';
 import { stackable } from './items/generate.js';
 import { slotHolds } from './hotbar.js';
 import { playerStrike } from './combat.js';
+import { updateGuard, shieldBash, shieldOf, shieldStats } from './shield.js';
 import { damageType, damageMult } from './damage.js';
 import { STATUSES, blankStatus, restoreStatus, saveStatus, afflict, tickStatuses, wade } from './status.js';
 import { rand } from './rng.js';
@@ -21,11 +22,11 @@ const SAVED = [
 ];
 
 // The pack keeps things of a kind together, in this order (anything else last), so you know roughly where to look.
-// Weapons, armour, off-hand things, artefacts and food, whose type you can always see, go by their type in the order of
-// their table in items/defs.js (weakest first); potions, scrolls, wands and rings in the order you got them, since an
-// order by type would give away what you don't know.
-const PACK_ORDER = ['weapon', 'offhand', 'armor', 'ring', 'artefact', 'wand', 'potion', 'scroll', 'food', 'amulet'];
-const TYPE_ORDER = Object.fromEntries(Object.entries({ weapon: WEAPONS, armor: ARMORS, offhand: OFFHANDS, artefact: ARTEFACTS, food: FOOD })
+// Weapons, armour, shields, off-hand things, artefacts and food, whose type you can always see, go by their type in the
+// order of their table in items/defs.js (weakest first); potions, scrolls, wands and rings in the order you got them,
+// since an order by type would give away what you don't know.
+const PACK_ORDER = ['weapon', 'offhand', 'shield', 'armor', 'ring', 'artefact', 'wand', 'potion', 'scroll', 'food', 'amulet'];
+const TYPE_ORDER = Object.fromEntries(Object.entries({ weapon: WEAPONS, armor: ARMORS, shield: SHIELDS, offhand: OFFHANDS, artefact: ARTEFACTS, food: FOOD })
   .map(([kind, defs]) => [kind, Object.keys(defs)]));
 const rankOf = (kind) => (PACK_ORDER.includes(kind) ? PACK_ORDER.indexOf(kind) : PACK_ORDER.length);
 export function packOrder(a, b) {
@@ -56,8 +57,13 @@ export class Player {
     this.charge = 1;
     this.maxStamina = STAMINA_BASE;
     this.stamina = STAMINA_BASE;
-    this.winded = false; // ran dry: no sprinting or sneaking until it recovers
+    this.winded = false; // ran dry: no sprinting or sneaking (nor a shield raised) until it recovers
     this.staminaRestT = 0;
+    // A shield in your off hand (see shield.js): `guard` eases from down (0) to up (1) as you hold right-click, and
+    // `guarding` is whether it's all the way up; `bashT`, seconds until it can shove again.
+    this.guard = 0;
+    this.guarding = false;
+    this.bashT = 0;
     this.mode = 'walk'; // walk | sprint | sneak
     this.sneaking = false; // toggled with C (see update)
     this.crouch = 0; // 0..1, eases the camera down while sneaking
@@ -153,7 +159,19 @@ export class Player {
    */
   carriedLight() {
     const o = this.equip.offhand;
-    return o ? (this.twoHanded ? OFFHANDS[o.type].stowedLight : OFFHANDS[o.type].light) ?? 0 : 0;
+    if (o?.kind === 'offhand' && OFFHANDS[o.type].light) return this.twoHanded ? OFFHANDS[o.type].stowedLight : OFFHANDS[o.type].light;
+    // Not in your hand, but on the hotbar, a lantern hangs at your belt, as one stowed.
+    let light = 0;
+    for (const b of this.hotbar) {
+      if (b?.kind === 'offhand' && this.inventory.some((it) => slotHolds(b, it))) light = Math.max(light, OFFHANDS[b.type].stowedLight ?? 0);
+    }
+    return light;
+  }
+
+  /** Whether the light you carry is up in your hand: not stowed while you grip your weapon in both, nor at your belt. */
+  lightInHand() {
+    const o = this.equip.offhand;
+    return o?.kind === 'offhand' && !!OFFHANDS[o.type].light && !this.twoHanded;
   }
 
   /** What your armour's Enchantment or Curse of ___ does to `stat` (a multiplier: noise, speed; see items/enchant.js). */
@@ -186,6 +204,8 @@ export class Player {
     if (a) s *= Math.max(0.6, 1 - Math.max(0, ARMORS[a.type].str - this.str) * 0.08);
     if (this.hunger <= 0) s *= 0.8;
     if (this.wading) s *= WADE_SPEED;
+    // A raised shield slows you as it comes up (see shield.js).
+    if (this.guard > 0 && shieldOf(this)) s *= 1 - (1 - shieldStats(shieldOf(this)).slow) * this.guard;
     return s;
   }
 
@@ -363,7 +383,10 @@ export class Player {
     // into a crouch the moment it came back). Neither costs anything while standing still.
     if (!para && input.wasPressed('KeyC')) this.sneaking = !this.sneaking;
     if (input.sprint || this.winded) this.sneaking = false;
-    let mode = para ? 'walk' : this.sneaking ? 'sneak' : input.sprint ? 'sprint' : 'walk';
+    // Holding right-click raises a shield in your off hand (see shield.js), though not while you're held fast, or
+    // holding something up from the hotbar. You can't sprint behind it.
+    updateGuard(this, input.guard, !para && !game.hold, dt);
+    let mode = para ? 'walk' : this.sneaking ? 'sneak' : input.sprint && this.guard === 0 ? 'sprint' : 'walk';
     if (this.winded) mode = 'walk';
     this.mode = mode;
     this.crouch += ((mode === 'sneak' ? 1 : 0) - this.crouch) * Math.min(1, dt * 8);
@@ -406,6 +429,7 @@ export class Player {
     // holding the button only re-swings at full charge, so mashing never beats timing.
     const w = this.weaponStats();
     this.charge = Math.min(1, this.charge + dt / w.recharge);
+    this.bashT = Math.max(0, this.bashT - dt);
     if (this.swingT >= 0) {
       this.swingT += dt;
       if (!this.swingHit && this.swingT >= this.swingDur * 0.45) {
@@ -413,6 +437,9 @@ export class Player {
         playerStrike(game, this.swingPower);
       }
       if (this.swingT >= this.swingDur) this.swingT = -1;
+    } else if (this.guard > 0) {
+      // Behind a raised shield, a click shoves with it instead (see shieldBash).
+      if (this.guarding && !para && input.attackPressed && game.canFight()) shieldBash(game);
     } else if (!para && !game.hold && ((input.attackPressed && this.charge >= 0.2) || (input.attack && this.charge >= 1)) && game.canFight()) {
       this.swingPower = 0.3 + 0.7 * this.charge;
       this.charge = 0;
@@ -463,6 +490,11 @@ export class Player {
         this.mode = 'walk';
         game.log('You are out of breath.', 'warn');
       }
+      return;
+    }
+    // Behind a raised shield, you don't get your breath back.
+    if (this.guard > 0) {
+      this.staminaRestT = 0;
       return;
     }
     this.staminaRestT += dt;

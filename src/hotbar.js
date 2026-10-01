@@ -1,16 +1,21 @@
 import { ARTEFACTS } from './items/defs.js';
-import { drinkPotion, throwPotion, readScroll, zapWand, zapSelf, eatFood, activateArtefact } from './items/use.js';
+import { drinkPotion, throwPotion, readScroll, zapWand, zapSelf, eatFood, activateArtefact, equipItem } from './items/use.js';
 import { stackable } from './items/generate.js';
 
 // Hotbar bindings live on the player as { kind, type, uid? }.
 // Potions, scrolls and food bind by type, so a slot survives an empty stack and refills on pickup;
-// wands and artefacts bind to the specific item.
+// wands, artefacts and things you hold bind to the specific item.
 // What a slot holds is out of the pack (see Player.bags): it takes no pack slot, and taking it off the hotbar puts it
 // back in the pack, so that needs room there.
+//
+// Things you hold in a hand (HAND_KINDS) hang at your belt on the hotbar: pressing the slot's key swaps one with what's
+// in that hand (see swapSlot), so you can change weapons, or take up your shield or your lantern, without opening the
+// pack. A lantern there still gives some light, hung at your belt (see Player.carriedLight).
+export const HAND_KINDS = new Set(['weapon', 'offhand', 'shield']);
 
 export function canHotbar(item) {
   return item.kind === 'potion' || item.kind === 'scroll' || item.kind === 'food' || item.kind === 'wand' ||
-    (item.kind === 'artefact' && !!ARTEFACTS[item.type].active);
+    (item.kind === 'artefact' && !!ARTEFACTS[item.type].active) || HAND_KINDS.has(item.kind);
 }
 
 function bindingFor(item) {
@@ -69,9 +74,10 @@ export const HELD = {
   wand: { left: 'Zap', right: 'Zap yourself' },
 };
 
-/** What pressing the slot does: for what's HELD, 'hold' (you choose, holding its key). */
+/** What pressing the slot does: for what's HELD, 'hold' (you choose, holding its key); for what you hold, 'swap'. */
 export function slotAction(game, item) {
   if (HELD[item.kind]) return 'hold';
+  if (HAND_KINDS.has(item.kind)) return 'swap';
   switch (item.kind) {
     case 'scroll': return 'read';
     case 'food': return 'eat';
@@ -93,6 +99,7 @@ export function useSlot(game, i) {
   }
   switch (slotAction(game, item)) {
     case 'hold': return false;
+    case 'swap': return swapSlot(game, i, item);
     case 'read': readScroll(game, item); break;
     case 'eat': eatFood(game, item); break;
     case 'zap': zapWand(game, item); break;
@@ -107,6 +114,21 @@ export function useSlot(game, i) {
     }
   }
   return true;
+}
+
+/**
+ * Takes up `item`, from slot `i`, in its hand (your weapon's, or your off hand), and hangs what was in that hand at your
+ * belt in its place, in the slot (or leaves the slot empty, if your hand was). A cursed thing in your hand won't let go.
+ * Returns whether it swapped.
+ */
+function swapSlot(game, i, item) {
+  const p = game.player, hand = item.kind === 'weapon' ? 'weapon' : 'offhand';
+  const held = p.equip[hand], was = p.hotbar[i];
+  p.hotbar[i] = held ? bindingFor(held) : null;
+  equipItem(game, item);
+  if (p.equip[hand] === item) return true;
+  p.hotbar[i] = was;
+  return false;
 }
 
 /**

@@ -180,6 +180,26 @@ export const ICONS = {
     '................',
   ], colors: { g: '#ffd27a', h: '#d8883a', i: '#8c4c1c' } },
 
+  // --- Shields
+  'shield:wooden': { map: [
+    '................',
+    '......BBCC......',
+    '....BBEEFGCC....',
+    '...BFGEEFGEEC...',
+    '..BEFGEEFGEEFC..',
+    '..BEFGEEFGEEFC..',
+    '.BEEFGEABGEEFGC.',
+    '.BEEFGAWBCEEFGC.',
+    '.BEEFGBBCDEEFGC.',
+    '.BEEFGECDGEEFGC.',
+    '..CEFGEEFGEEFD..',
+    '..CEFGEEFGEEFD..',
+    '...CFGEEFGEED...',
+    '....CCEEFGDD....',
+    '......CCDD......',
+    '................',
+  ] },
+
   // --- Armour: one tunic's shape, in leather, mail or plate.
   'armor:leather': { map: [
     '................',
@@ -684,4 +704,6 @@ export const MARK_ICONS = {
   protection: { map: ['.........', '.sssssss.', '.sWsssst.', '.sssssst.', '.sssssst.', '..sssst..', '...sst...', '....t....', '.........'], colors: { s: '#c8d0dc', t: '#7c8898' } },
   food: { map: ['.........', '....bbb..', '...bbbbb.', '...bbbbc.', '....bbc..', '...w.....', '..ww.....', '.w.......', '.........'], colors: { b: '#c8783a', c: '#8a4a1e', w: '#f0e8d8' } },
   quiet: { map: ['.........', '......ww.', '.....wgw.', '....wgw..', '...wgw...', '..wgw....', '..g......', '.g.......', '.........'], colors: { w: '#dde4ee', g: '#8894a4' } },
+  steady: { map: ['.........', '...aaa...', '...a.a...', '....a....', '..aaaaa..', '....a....', '.a..a..a.', '..aaaaa..', '.........'], colors: { a: '#a8bcd4' } },
+  thorns: { map: ['.........', '...t.t...', '...t.t...', '..tt.tt..', '..tt.tt..', '.ttttttt.', '.uuuuuuu.', '.........', '.........'], colors: { t: '#e0dcc0', u: '#8a4a2a' } },
 };

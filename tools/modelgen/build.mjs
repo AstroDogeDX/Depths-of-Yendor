@@ -11,6 +11,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { weapons } from './weapons.mjs';
 import { handLantern } from './lantern.mjs';
+import { woodenShield } from './shields.mjs';
 import { sconce } from './sconce.mjs';
 import { items } from './items.mjs';
 import { armors } from './armor.mjs';
@@ -30,6 +31,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const MODELS = {
   ...Object.fromEntries(Object.entries(weapons).map(([name, build]) => [name, { file: `weapons/${name}.bbmodel`, build }])),
   hand_lantern: { file: 'hand_lantern.bbmodel', build: handLantern },
+  wooden_shield: { file: 'wooden_shield.bbmodel', build: woodenShield },
   sconce: { file: 'sconce.bbmodel', build: sconce },
   ...Object.fromEntries(Object.entries({ ...monsters, mimic }).map(([name, build]) => [name, { file: `monsters/${name}.bbmodel`, build }])),
   ...Object.fromEntries(Object.entries({ ...props, ...chests, ...sewers, ...catacombs, ...caves, ...dwarven, ...underworld }).map(([name, build]) => [name, { file: `props/${name}.bbmodel`, build }])),

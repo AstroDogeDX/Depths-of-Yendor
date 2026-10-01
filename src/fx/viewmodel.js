@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { buildWeaponMesh, buildItemModel } from '../items/models.js';
+import { buildWeaponMesh, buildItemModel, heldModel } from '../items/models.js';
+import { SHIELDS } from '../items/defs.js';
 import { buildBBModel } from '../items/bbmodel.js';
 import { MODEL_PX } from '../config.js';
 import { glowSprite } from './glow.js';
@@ -80,6 +81,13 @@ const ACTS = {
 // with each stride (`stride`).
 const LANTERN_AT = [-0.4, -0.03, -0.9], LANTERN_SCALE = 0.86, LANTERN_TURN = 0.55;
 const LANTERN_SWING = { pull: 55, damp: 3.2, turn: 0.09, most: 0.5, walk: 0.1, run: 0.24, stride: 0.07 };
+// A shield in your off hand (held by the grip on its back, its face away from you): down at your side, its face turned
+// out to your left; raised before you (as Player.guard rises: see shield.js), across the middle of your view, its rim
+// just under your eyes, your weapon pushed aside (`weapon`: moved by `p`, its point tipped down by `arc`); and shoved
+// forward over `dur` seconds in a bash, by `p` and tipped back by `r` at the height of it.
+const SHIELD_DOWN = { p: [-0.56, -0.56, -0.78], r: [0.3, Math.PI + 0.5, 0.3] };
+const SHIELD_UP = { p: [-0.07, -0.31, -0.56], r: [0.06, Math.PI - 0.06, 0.02], weapon: { p: [0.12, -0.13, 0.04], arc: 0.45 } };
+const SHIELD_BASH = { dur: 0.28, p: [0.06, 0.05, -0.22], r: -0.18 };
 
 const smooth = (x) => x * x * (3 - 2 * x);
 const lerp = (a, b, k) => a + (b - a) * k;
@@ -143,6 +151,15 @@ export class ViewModel {
     // How it swings (see LANTERN_SWING): `x` back and forth and `z` side to side, in radians, and how fast each is
     // changing. (Not `swing`: that's the weapon's, below.)
     this.pendulum = { x: 0, z: 0, vx: 0, vz: 0 };
+
+    // A shield in your off hand (see setShield): `shieldOut` eases between in your hand (1) and on your back (0), and
+    // `bashT` runs through a bash (see bash), or is -1.
+    this.shieldPivot = new THREE.Group();
+    this.scene.add(this.shieldPivot);
+    this.shieldType = null;
+    this.shieldModel = null;
+    this.shieldOut = 0;
+    this.bashT = -1;
     this.lean = 0;
     this.lastYaw = null;
 
@@ -206,12 +223,26 @@ export class ViewModel {
     this.camera.updateProjectionMatrix();
   }
 
+  /** Shows the shield of `type` (SHIELDS) in your off hand, or none. */
+  setShield(type) {
+    if (type === this.shieldType) return;
+    this.shieldType = type;
+    if (this.shieldModel) this.shieldPivot.remove(this.shieldModel);
+    this.shieldModel = type ? heldModel(SHIELDS[type].model) : null;
+    if (this.shieldModel) this.shieldPivot.add(this.shieldModel);
+  }
+
+  /** A shove with your shield (see shieldBash). */
+  bash() {
+    this.bashT = 0;
+  }
+
   /**
-   * `offhand`: the type of what's in your off hand (only the lantern has a model yet), or null; `twoHanded`: your
-   * weapon gripped in both hands, with it stowed; `carriedLight`: how brightly your lantern lights you
-   * (Player.carriedLight).
+   * `offhand`: what's in your off hand (an item), or null; `guard`: how far a shield there is raised (Player.guard);
+   * `twoHanded`: your weapon gripped in both hands, with it stowed; `carriedLight`: how brightly your lantern lights
+   * you (Player.carriedLight).
    */
-  update(dt, { moving, bob, charge, time, lightLevel, carriedLight = 1, offhand = 'lantern', twoHanded = false, yaw = 0, sprint = false, held = null }) {
+  update(dt, { moving, bob, charge, time, lightLevel, carriedLight = 1, offhand = null, guard = 0, twoHanded = false, yaw = 0, sprint = false, held = null }) {
     // What's held up from the hotbar: a new one waits for the last to go down (or, from the weapon, goes straight in).
     const want = held?.item ?? null;
     if (want !== this.heldItem && this.swap <= 0.5) this.showHeld(want, held?.color);
@@ -223,7 +254,10 @@ export class ViewModel {
     // Changing grip eases the weapon between its poses, and the lantern up or down.
     const ease = Math.min(1, dt * 9);
     this.grip += ((twoHanded ? 1 : 0) - this.grip) * ease;
-    this.lanternUp += ((offhand === 'lantern' && !twoHanded ? 1 : 0) - this.lanternUp) * ease;
+    this.lanternUp += ((offhand?.kind === 'offhand' && offhand.type === 'lantern' && !twoHanded ? 1 : 0) - this.lanternUp) * ease;
+    const shield = offhand?.kind === 'shield';
+    this.setShield(shield ? offhand.type : null);
+    this.shieldOut += ((shield && !twoHanded ? 1 : 0) - this.shieldOut) * ease;
     const at = (t) => blend(sample(this.keys, t), sample(this.keys2, t), this.grip);
     let pose = at(0);
     if (this.swingT >= 0) {
@@ -240,6 +274,10 @@ export class ViewModel {
       if (this.dipT >= 1) this.dipT = -1;
       else pose.p[1] -= Math.sin(Math.PI * this.dipT) * 0.25;
     }
+    // Behind a raised shield, your weapon is pushed aside and down, out of use (see SHIELD_UP).
+    const guarded = smooth(guard), aside = SHIELD_UP.weapon;
+    pose.p = pose.p.map((v, j) => v + aside.p[j] * guarded);
+    pose.arc += aside.arc * guarded;
     // Running: the weapon drops a little and swings more with each stride.
     const sway = sprint ? 2.2 : 1;
     if (sprint && this.swingT < 0) pose.p[1] -= 0.06;
@@ -280,6 +318,23 @@ export class ViewModel {
     this.flame.update(time, flick, this.lean);
     if (this.glass) this.glass.color.setScalar(0.62 + (flick - 0.9) * 1.6);
     this.halo.material.opacity = 0.4 + (flick - 0.9) * 1.5;
+    // A shield: at your side, or raised before you as `guard` rises, shoved forward in a bash, and slung on your back
+    // (down out of sight) while you grip your weapon in both hands.
+    if (this.shieldModel) {
+      const g = smooth(guard);
+      let kick = 0;
+      if (this.bashT >= 0) {
+        this.bashT += dt / SHIELD_BASH.dur;
+        if (this.bashT >= 1) this.bashT = -1;
+        else kick = Math.sin(Math.PI * this.bashT);
+      }
+      const pos = (j) => lerp(SHIELD_DOWN.p[j], SHIELD_UP.p[j], g) + SHIELD_BASH.p[j] * kick;
+      const tilt = (j) => lerp(SHIELD_DOWN.r[j], SHIELD_UP.r[j], g);
+      this.shieldPivot.position.set(pos(0) - bx, pos(1) + by - (1 - this.shieldOut) * 0.8, pos(2));
+      this.shieldPivot.rotation.set(tilt(0) + SHIELD_BASH.r * kick, tilt(1), tilt(2));
+      this.shieldPivot.visible = this.shieldOut > 0.01;
+    }
+
     // It lights your weapon from where its flame is: up beside it, or low at your belt.
     this.flame.getWorldPosition(this.light.position);
     this.light.intensity = 2.2 * flick * lightLevel * carriedLight;

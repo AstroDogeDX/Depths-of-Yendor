@@ -40,7 +40,8 @@ src/
   combat.js            player melee resolution
   damage.js            damage types (physical, magic and the elements) and the resistances to them
   status.js            statuses for the player and monsters alike: what they do, what wards them off, how they meet
-  hotbar.js            hotbar bindings and what each slot does when pressed
+  hotbar.js            hotbar bindings and what each slot does when pressed (swapping a weapon, lantern or shield into your hand)
+  shield.js            shields: raising one, what it blocks (in front raised, behind on your back) and what that costs, the bash
   input.js / audio.js  pointer-lock input; WebAudio synth sfx + ambient drone
   save.js              the saved run in local storage, and the helpers floors are saved with
   dungeon/generator.js pure data: plans the loop and branches, lays out rooms, routes corridors, populates (seeded)

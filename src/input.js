@@ -32,6 +32,7 @@ export class Input {
     this.settleUntil = 0; // ignore mouse motion until then (see LOCK_SETTLE)
     this.spikes = 0; // how many spikes have been dropped, for checking from the console
     this.mouseDown = false;
+    this.rightDown = false; // right-click held: a shield raised (see shield.js)
     this.locked = false;
     this.onLockChange = null;
 
@@ -44,7 +45,7 @@ export class Input {
       this.keys.add(e.code);
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => { this.keys.clear(); this.mouseDown = false; });
+    window.addEventListener('blur', () => { this.keys.clear(); this.mouseDown = false; this.rightDown = false; });
     document.addEventListener('mousemove', (e) => {
       if (!this.locked) return;
       const now = performance.now();
@@ -60,13 +61,16 @@ export class Input {
     canvas.addEventListener('mousedown', (e) => {
       if (!this.locked) return;
       if (e.button === 0) { this.mouseDown = true; this.pressed.add('Mouse0'); }
-      if (e.button === 2) this.pressed.add('Mouse2');
+      if (e.button === 2) { this.rightDown = true; this.pressed.add('Mouse2'); }
     });
-    window.addEventListener('mouseup', (e) => { if (e.button === 0) this.mouseDown = false; });
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 0) this.mouseDown = false;
+      if (e.button === 2) this.rightDown = false;
+    });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === canvas;
-      if (!this.locked) this.mouseDown = false;
+      if (!this.locked) this.mouseDown = this.rightDown = false;
       if (this.locked) {
         this.settleUntil = performance.now() + LOCK_SETTLE;
         this.motion.length = 0;
@@ -94,6 +98,7 @@ export class Input {
   get attack() { return this.mouseDown || this.keys.has('Space'); }
   get attackPressed() { return this.pressed.has('Mouse0') || this.pressed.has('Space'); }
   get sprint() { return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'); }
+  get guard() { return this.rightDown; }
 
   lock() {
     try {

@@ -95,6 +95,10 @@ export class Sfx {
     }
   }
   block() { this.tone({ f: 1000, f2: 750, dur: 0.09, type: 'triangle', vol: 0.15 }); }
+  guardBreak() {
+    this.noise({ dur: 0.3, vol: 0.28, freq: 500, freq2: 120, type: 'lowpass', q: 1 });
+    this.tone({ f: 240, f2: 80, dur: 0.25, type: 'square', vol: 0.1 });
+  }
   hurt() {
     this.tone({ f: 200, f2: 90, dur: 0.22, type: 'sawtooth', vol: 0.2 });
     this.noise({ dur: 0.1, vol: 0.2, freq: 300, q: 0.5 });

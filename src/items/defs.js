@@ -19,6 +19,28 @@ export const WEAPONS = {
                 value: 220, desc: 'A crushing maul that only the strong can swing well.' },
 };
 
+// Shields (kind 'shield'), carried in your off hand in place of the lantern: how one works is in shield.js, and a new
+// one is an entry here.
+//   block      what a raised shield (hold right-click) takes off a blow from in front of you, as armour takes its
+//              defense (a roll up to it), each point of it costing you `stamina`
+//   back       what it takes off a blow from behind, for nothing, slung on your back while you grip your weapon in
+//              both hands
+//   arc        how far either side of where you face (or where you face away from) counts as in front (or behind),
+//              in radians
+//   slow       your speed while it's raised (and you can't sprint)
+//   bash       a shove with it, a click while it's raised: its `dmg` (bash), the `stamina` it costs, its `reach`, how
+//              far it `push`es a monster back, and its `recharge` (seconds)
+//   stow, unstow  what gripping your weapon in both hands does with it, and taking it back in one
+//   model      its Blockbench model in assets/models/ (it lies flat on the floor, face up)
+// Its + adds to `block` and `back`, and to its bash's damage. It's learnt by use, a few blows taken (SHIELD_HITS_TO_ID).
+export const SHIELDS = {
+  wooden: { name: 'wooden shield', tier: 1, value: 70, block: 3, back: 2, arc: 1.05, stamina: 5, slow: 0.65, model: 'wooden_shield',
+            bash: { dmg: [1, 3], stamina: 12, reach: 1.6, push: 1.5, recharge: 0.8 },
+            stow: 'sling your shield onto your back', unstow: 'take your shield on your arm again',
+            desc: 'A round shield of oak boards bound in iron, with an iron boss.' },
+};
+export const SHIELD_HITS_TO_ID = 10;
+
 // resist: how much of each kind of blow gets through the armour (see damage.js). Each turns some kinds of blow
 // better than others.
 export const ARMORS = {
@@ -175,6 +197,6 @@ export const RING_GEMS = [
 ];
 
 export const KIND_GLYPH = {
-  weapon: ')', offhand: '(', armor: '[', potion: '!', scroll: '?', wand: '/', ring: '=', food: '%',
+  weapon: ')', offhand: '(', shield: ']', armor: '[', potion: '!', scroll: '?', wand: '/', ring: '=', food: '%',
   artefact: '*', amulet: '"', gold: '$', key: '-', container: '&',
 };
