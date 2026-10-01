@@ -1,4 +1,4 @@
-import { WEAPONS, ARMORS, SHIELDS, FOOD, ARTEFACTS, WANDS, OFFHANDS, WAND_PLUS_DMG } from './defs.js';
+import { WEAPONS, ARMORS, SHIELDS, BOWS, FOOD, ARTEFACTS, WANDS, OFFHANDS, WAND_PLUS_DMG } from './defs.js';
 import { ENCHANTMENTS, binds, enchantOf } from './enchant.js';
 import { buildItemModel } from './models.js';
 import { HUNGER_MAX, TWO_HAND_STR } from '../config.js';
@@ -14,12 +14,15 @@ import { lookDir } from '../combat.js';
 
 // What the pack calls equipping and unequipping each kind of equipment.
 const EQUIP_LABELS = {
-  weapon: ['Wield', 'Unwield'], offhand: ['Hold', 'Put away'], shield: ['Hold', 'Put away'], armor: ['Wear', 'Remove'],
-  ring: ['Put on', 'Remove'], artefact: ['Put on', 'Remove'],
+  weapon: ['Wield', 'Unwield'], offhand: ['Hold', 'Put away'], shield: ['Hold', 'Put away'], bow: ['Hold', 'Put away'],
+  arrow: ['Put in quiver', 'Take out of quiver'], armor: ['Wear', 'Remove'], ring: ['Put on', 'Remove'], artefact: ['Put on', 'Remove'],
 };
 
-/** What's in your off hand's def: a shield's (SHIELDS) or another off-hand thing's (OFFHANDS). */
-export const offhandDef = (item) => (item.kind === 'shield' ? SHIELDS : OFFHANDS)[item.type];
+// What can be in your off hand, by kind, and their defs.
+const OFFHAND_DEFS = { offhand: OFFHANDS, shield: SHIELDS, bow: BOWS };
+
+/** What's in your off hand's def: a shield's (SHIELDS), a bow's (BOWS) or another off-hand thing's (OFFHANDS). */
+export const offhandDef = (item) => OFFHAND_DEFS[item.kind][item.type];
 
 export function itemActions(game, item) {
   const p = game.player;
@@ -36,7 +39,7 @@ export function itemActions(game, item) {
       acts.push({ label: 'Zap', fn: () => zapWand(game, item) });
       acts.push({ label: 'Zap yourself', fn: () => zapSelf(game, item) });
       break;
-    case 'weapon': case 'offhand': case 'shield': case 'armor': case 'ring': case 'artefact': {
+    case 'weapon': case 'offhand': case 'shield': case 'bow': case 'arrow': case 'armor': case 'ring': case 'artefact': {
       const [on, off] = EQUIP_LABELS[item.kind];
       acts.push(equipped ? { label: off, fn: () => putAway(game, item) } : { label: on, fn: () => equipItem(game, item) });
       break;
@@ -219,10 +222,10 @@ export function readScroll(game, item) {
     }
     case 'enchant': {
       announce();
-      // Weapons, armour and shields, but none you know to be cursed (one you don't, it fails on: see enchantItem).
-      const can = (it) => ['weapon', 'armor', 'shield'].includes(it.kind) && !(it.curseKnown && it.curse > 0);
-      if (!p.inventory.some(can)) { game.log('The magic finds nothing it can take hold of: only weapons, armour and shields free of curses.', 'info'); return false; }
-      game.ui.selectItem('Enchant which weapon, armour or shield?', can, (it) => enchantItem(game, it));
+      // Weapons, armour, shields and bows, but none you know to be cursed (one you don't, it fails on: see enchantItem).
+      const can = (it) => ['weapon', 'armor', 'shield', 'bow'].includes(it.kind) && !(it.curseKnown && it.curse > 0);
+      if (!p.inventory.some(can)) { game.log('The magic finds nothing it can take hold of: only weapons, armour, shields and bows free of curses.', 'info'); return false; }
+      game.ui.selectItem('Enchant which weapon, armour, shield or bow?', can, (it) => enchantItem(game, it));
       return 'select';
     }
     case 'removecurse': {
@@ -287,11 +290,11 @@ export function readScroll(game, item) {
 function fullyKnown(game, it) {
   if (it.kind === 'potion' || it.kind === 'scroll') return game.knowledge.isKnown(it);
   if (it.kind === 'wand' || it.kind === 'ring') return game.knowledge.isKnown(it) && it.identified;
-  if (it.kind === 'weapon' || it.kind === 'armor' || it.kind === 'shield') return it.identified;
+  if (it.kind === 'weapon' || it.kind === 'armor' || it.kind === 'shield' || it.kind === 'bow') return it.identified;
   return true;
 }
 
-const GEAR = ['weapon', 'armor', 'shield', 'ring', 'wand'];
+const GEAR = ['weapon', 'armor', 'shield', 'bow', 'ring', 'wand'];
 const LIFT_CHANCE = 0.2; // an upgrade on something fully cursed lifts the curse outright, rather than weakening it
 
 /**
@@ -319,7 +322,7 @@ function upgrade(game, it) {
   game.log(`Your ${k.name(it)} glows blue for a moment.`, 'good');
 }
 
-/** A scroll of enchantment on a weapon, armour or shield: a new enchantment at random, if it's free of every curse. */
+/** A scroll of enchantment on a weapon, armour, shield or bow: a new enchantment at random, if it's free of every curse. */
 function enchantItem(game, it) {
   const k = game.knowledge;
   if (it.curse > 0) {
@@ -531,16 +534,17 @@ function wildZap(game, item, power, bolt) {
 // --- Equipment ---
 
 /**
- * Which paper-doll slot equipping `item` would fill: 'weapon' | 'offhand' | 'armor' | 'ring0' | 'ring1' | 'art0' |
- * 'art1', or null if it can't go anywhere (both rings cursed). Equipped cursed items always have curseKnown set,
+ * Which paper-doll slot equipping `item` would fill: 'weapon' | 'offhand' | 'armor' | 'arrows' | 'ring0' | 'ring1' |
+ * 'art0' | 'art1', or null if it can't go anywhere (both rings cursed). Equipped cursed items always have curseKnown set,
  * so this never reveals a hidden curse.
  */
 export function equipSlotFor(p, item) {
   const e = p.equip;
   switch (item.kind) {
     case 'weapon': return 'weapon';
-    case 'offhand': case 'shield': return 'offhand';
+    case 'offhand': case 'shield': case 'bow': return 'offhand';
     case 'armor': return 'armor';
+    case 'arrow': return 'arrows';
     case 'ring': {
       let s = e.rings.indexOf(null);
       if (s < 0) s = !binds(e.rings[0]) ? 0 : !binds(e.rings[1]) ? 1 : -1;
@@ -565,7 +569,8 @@ function cursedStuck(game, item) {
 
 /** The paper-doll slots each kind of equipment can go in (see equipSlotFor). */
 export const DOLL_SLOTS_FOR = {
-  weapon: ['weapon'], offhand: ['offhand'], shield: ['offhand'], armor: ['armor'], ring: ['ring0', 'ring1'], artefact: ['art0', 'art1'],
+  weapon: ['weapon'], offhand: ['offhand'], shield: ['offhand'], bow: ['offhand'], arrow: ['arrows'], armor: ['armor'],
+  ring: ['ring0', 'ring1'], artefact: ['art0', 'art1'],
 };
 
 /**
@@ -612,15 +617,28 @@ export function equipItem(game, item, slot = null) {
       bind();
       break;
     }
-    case 'offhand': case 'shield': {
+    case 'offhand': case 'shield': case 'bow': {
       if (e.offhand && e.offhand !== item && binds(e.offhand)) return cursedStuck(game, e.offhand);
       offBelt();
-      // Taking something in your off hand takes your weapon back into one.
+      // Taking something in your off hand takes your weapon back into one; taking up a bow lowers it, for an arrow.
       const was = p.twoHanded && e.weapon;
       e.offhand = item;
       p.twoHanded = false;
-      game.log(`You take the ${name()} ${item.kind === 'shield' ? 'on your arm' : 'in your off hand'}${was ? `, and your ${WEAPONS[was.type].name} back in one` : ''}.`);
-      if (item.kind === 'shield') bind();
+      if (item.kind === 'bow') {
+        game.log(`You take up the ${name()}${e.weapon ? `, lowering your ${WEAPONS[e.weapon.type].name}` : ''}.`);
+        if (!p.equip.arrows) game.log('Your quiver is empty: put some arrows in it from your pack.', 'warn');
+        else if (!game.toldBow) {
+          game.log('Hold right-click to nock an arrow, then hold click to draw, and let go to loose it.', 'info');
+          game.toldBow = true;
+        }
+      } else game.log(`You take the ${name()} ${item.kind === 'shield' ? 'on your arm' : 'in your off hand'}${was ? `, and your ${WEAPONS[was.type].name} back in one` : ''}.`);
+      if (item.kind !== 'offhand') bind();
+      break;
+    }
+    case 'arrow': {
+      // (What was in your quiver goes back in the pack, where this leaves room for it.)
+      e.arrows = item;
+      game.log(`You put ${k.name(item, { article: true })} in your quiver.`);
       break;
     }
     case 'armor':
@@ -689,15 +707,21 @@ export function unequipItem(game, item, silent = false) {
   if (e.weapon === item) { e.weapon = null; p.twoHanded = false; game.viewmodel.setWeapon(null); }
   if (e.offhand === item) e.offhand = null;
   if (e.armor === item) e.armor = null;
+  if (e.arrows === item) {
+    e.arrows = null;
+    if (!silent) game.log(`You take ${k.name(item, { article: true })} out of your quiver.`);
+    return true;
+  }
   e.rings = e.rings.map((r) => (r === item ? null : r));
   e.artefacts = e.artefacts.map((r) => (r === item ? null : r));
-  if (!silent) game.log(item.kind === 'offhand' || item.kind === 'shield' ? `You put away the ${k.name(item)}.` : `You take off the ${k.name(item)}.`);
+  if (!silent) game.log(OFFHAND_DEFS[item.kind] ? `You put away the ${k.name(item)}.` : `You take off the ${k.name(item)}.`);
   return true;
 }
 
 /**
  * F: grips your weapon in both hands, stowing what's in your off hand (see OFFHANDS: it can't be used, and a lantern
- * lights less; a shield is slung on your back, see shield.js), or takes it back into one. Changing grip empties your attack meter, as changing equipment does.
+ * lights less; a shield is slung on your back, see shield.js, and a bow over your shoulder, see bow.js), or takes it back
+ * into one. Changing grip empties your attack meter, as changing equipment does.
  */
 export function toggleGrip(game) {
   const p = game.player, w = p.equip.weapon, off = p.equip.offhand;
@@ -708,7 +732,9 @@ export function toggleGrip(game) {
   p.twoHanded = !p.twoHanded;
   p.charge = 0;
   const name = WEAPONS[w.type].name, o = off && offhandDef(off);
+  // (Back from both hands to a bow, your weapon goes down for an arrow.)
   game.log(p.twoHanded ? `You grip your ${name} in both hands${o ? `, and ${o.stow}` : ''}.`
+    : off?.kind === 'bow' ? `You lower your ${name}, and ${o.unstow}.`
     : `You take your ${name} in one hand${o ? `, and ${o.unstow}` : ''}.`);
   game.audio.equip();
   return true;
@@ -716,8 +742,8 @@ export function toggleGrip(game) {
 
 // What right-click does (see useOffhand): what's in your off hand, by its `use` (items/defs.js OFFHANDS), or, while
 // you grip your weapon in both hands, the weapon's two-handed special, by its `special` (WEAPONS). Neither has any
-// yet: each goes here, as (game, item) => whether it did anything. (A shield is raised by holding right-click: see
-// shield.js.)
+// yet: each goes here, as (game, item) => whether it did anything. (A shield is raised by holding right-click, and a
+// bow nocked: see shield.js and bow.js.)
 const OFFHAND_USES = {};
 const TWO_HAND_SPECIALS = {};
 
@@ -741,10 +767,10 @@ export function dropItem(game, item) {
   return false;
 }
 
-/** Sells one of an item (one from a stack) to the shopkeeper. */
+/** Sells one of an item (one from a stack: arrows from your quiver stay there) to the shopkeeper. */
 export function sellItem(game, item) {
   const p = game.player, level = game.level;
-  if (p.isEquipped(item) && !unequipItem(game, item, true)) return false;
+  if (p.isEquipped(item) && item.kind !== 'arrow' && !unequipItem(game, item, true)) return false;
   const one = p.takeOne(item);
   const price = sellPrice(one, level.depth, game.knowledge);
   p.gold += price;

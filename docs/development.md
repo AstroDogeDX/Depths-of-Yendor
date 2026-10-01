@@ -40,8 +40,9 @@ src/
   combat.js            player melee resolution
   damage.js            damage types (physical, magic and the elements) and the resistances to them
   status.js            statuses for the player and monsters alike: what they do, what wards them off, how they meet
-  hotbar.js            hotbar bindings and what each slot does when pressed (swapping a weapon, lantern or shield into your hand)
+  hotbar.js            hotbar bindings and what each slot does when pressed (swapping a weapon, lantern, shield or bow into your hand)
   shield.js            shields: raising one, what it blocks (in front raised, behind on your back) and what that costs, the bash
+  bow.js               bows and arrows: nocking, drawing and loosing, the jab, where an arrow lands and what it does there
   input.js / audio.js  pointer-lock input; WebAudio synth sfx + ambient drone
   save.js              the saved run in local storage, and the helpers floors are saved with
   dungeon/generator.js pure data: plans the loop and branches, lays out rooms, routes corridors, populates (seeded)
@@ -96,5 +97,5 @@ Balance numbers live in `monsters/defs.js`, `items/defs.js` and `config.js`. `wi
 - More furniture for other room types
 - More level shapes: caves via cellular automata, chasms that drop you a floor, rooms designed round their pools (a flooded crypt, a cistern, a bathhouse)
 - Splitting oozes, invisible stalkers, thieves who steal and teleport away
-- A shield/block action, and alchemy or crafting for spare potions
+- Alchemy or crafting for spare potions, and more kinds of arrow, and thrown weapons, for the bullet pouch
 - Music, and positional audio for monsters you can hear but not see

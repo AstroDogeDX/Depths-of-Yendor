@@ -1,13 +1,14 @@
 import {
-  WEAPONS, ARMORS, SHIELDS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS, CONTAINERS,
+  WEAPONS, ARMORS, SHIELDS, BOWS, ARROWS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS, CONTAINERS,
   POTION_COLORS, SCROLL_SYLLABLES, SCROLL_RUNES, WAND_MATERIALS, RING_GEMS,
 } from './defs.js';
 import { RNG } from '../rng.js';
 import { DAMAGE_TYPES, damageType, describeResist } from '../damage.js';
 import { WAND_PLUS_DMG, wandRecharge } from './defs.js';
 import { enchantOf, baneOf } from './enchant.js';
+import { JAB } from '../bow.js';
 
-const GEAR = new Set(['weapon', 'armor', 'shield', 'ring', 'wand']);
+const GEAR = new Set(['weapon', 'armor', 'shield', 'bow', 'ring', 'wand']);
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
 
 /** What you know of an item's curse, in words (or '' if you don't know). */
@@ -18,7 +19,7 @@ function curseNote(item) {
   return 'It is free of curses.';
 }
 
-/** A weapon's, armour's or shield's Enchantment or Curse of ___, as far as you know it: [label, description] or null. */
+/** A weapon's, armour's, shield's or bow's Enchantment or Curse of ___, as far as you know it: [label, description] or null. */
 function effectOf(item) {
   const e = (item.identified || item.enchantKnown) && enchantOf(item);
   if (e) return [`Enchantment of ${cap(e.name)}`, e];
@@ -135,6 +136,8 @@ export class Knowledge {
       case 'weapon': return 0xa8adb4;
       case 'offhand': return 0xffa050;
       case 'shield': return 0x9a6a3a;
+      case 'bow': return 0x8a5a2a;
+      case 'arrow': return 0xb0a080;
       case 'armor': return ARMORS[item.type].color;
       case 'artefact': return ARTEFACTS[item.type].color;
       case 'food': return 0x8a5a2a;
@@ -170,8 +173,8 @@ export class Knowledge {
         const base = WEAPONS[item.type].name;
         return (item.identified ? `${plus} ${base}` : base) + of + curseTag;
       }
-      case 'armor': case 'shield': {
-        const base = (item.kind === 'armor' ? ARMORS : SHIELDS)[item.type].name;
+      case 'armor': case 'shield': case 'bow': {
+        const base = { armor: ARMORS, shield: SHIELDS, bow: BOWS }[item.kind][item.type].name;
         return (item.identified ? `${plus} ${base}` : base) + of + curseTag;
       }
       case 'potion': {
@@ -200,6 +203,7 @@ export class Knowledge {
         const base = FOOD[item.type].name;
         return plural ? `${q} ${base}s` : base;
       }
+      case 'arrow': return plural ? `${q} ${ARROWS[item.type].name}s` : ARROWS[item.type].name;
       case 'offhand': return OFFHANDS[item.type].name;
       case 'artefact': return ARTEFACTS[item.type].name;
       case 'amulet': return 'the Amulet of Yendor';
@@ -238,6 +242,26 @@ export class Knowledge {
         if (!item.identified) parts.push('You do not know how fine it is. Turn aside a few blows with it to learn more.');
         parts.push(curseNote(item));
         return parts.filter(Boolean).join('\n\n');
+      }
+      case 'bow': {
+        const d = BOWS[item.type], plus = item.identified && item.plus ? ` (+${item.plus})` : '';
+        // (Its own numbers: not what an unknown + or curse makes of them.)
+        const [lo, hi] = d.dmg, jab = (v) => Math.max(1, Math.round(v * JAB));
+        const parts = [d.desc,
+          `Hold right-click to nock an arrow from your quiver, then hold click to draw it, and let go to loose it. At full draw ` +
+          `(${d.draw.toFixed(2)}s) an arrow does ${lo}–${hi}${plus} (${DAMAGE_TYPES[ARROWS.standard.dmgType].name}); drawn less, it flies slower ` +
+          `and does less. Drawn, the bow slows you to ${Math.round(d.slow * 100)}%. A click alone jabs with the arrow in your hand, ` +
+          `for ${jab(lo)}–${jab(hi)}.`];
+        const effect = effectOf(item);
+        if (effect) parts.push(`${effect[0]}: ${effect[1].desc}`);
+        if (!item.identified) parts.push('You do not know how fine it is. Put a few arrows home with it to learn more.');
+        parts.push(curseNote(item));
+        return parts.filter(Boolean).join('\n\n');
+      }
+      case 'arrow': {
+        const a = ARROWS[item.type];
+        return [a.desc, `Shot from a bow in your quiver.${a.dmg ? ` It adds ${a.dmg} to the bow's damage.` : ''} One that strikes something may break; ` +
+          'the rest fall where they strike, to be picked up again.'].join('\n\n');
       }
       case 'potion': return known ? POTIONS[item.type].desc
         : `A flask of ${this.appearance.potion[item.type].name} liquid. Who knows what it does?` +

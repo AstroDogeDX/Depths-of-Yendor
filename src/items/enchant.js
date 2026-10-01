@@ -1,4 +1,4 @@
-// Enchantments and curses on weapons, armour and shields.
+// Enchantments and curses on weapons, armour, shields and bows.
 //
 // An Enchantment of ___ (a scroll of enchantment lays one, at random, and now and then a weapon or armour is found
 // with one) and a Curse of ___ (a cursed weapon or armour comes with one) are each an effect on the item, named after
@@ -18,6 +18,9 @@
 //   shields: blockStamina (a multiplier on the stamina a blow it takes costs you), thorns [min, max] (damage to whoever
 //            struck a blow it took, raised), guardSpeed (a multiplier on your speed while it's raised), bashStamina (a
 //            multiplier on what a shove with it costs): see shieldStats in shield.js
+//   bows:    onHit (as a weapon's, brought by every arrow it shoots, with the arrow's own), accuracy (as a weapon's),
+//            dmgMult (on its arrows' damage), spread (radians its arrows may fly wide of where you aim): see bowStats
+//            in bow.js
 //
 // These are a first few, to be filled out.
 
@@ -36,6 +39,11 @@ export const ENCHANTMENTS = {
     steadfastness: { name: 'steadfastness', desc: 'It holds firm: a blow it takes costs you half the stamina.', blockStamina: 0.5 },
     thorns: { name: 'thorns', desc: 'A blow it takes, raised, hurts the one who struck it.', thorns: [2, 5] },
   },
+  bow: {
+    flames: { name: 'flames', desc: 'Its arrows set what they strike alight.', onHit: { ignite: 3 } },
+    frost: { name: 'frost', desc: 'Its arrows chill what they strike to the bone.', onHit: { chill: 5 } },
+    venom: { name: 'venom', desc: 'Its arrows poison what they strike.', onHit: { poison: 6 } },
+  },
 };
 
 export const CURSES = {
@@ -51,6 +59,10 @@ export const CURSES = {
     burden: { name: 'burden', desc: 'It drags at your arm: raised, it slows you even more, and shoving with it costs half as much stamina again.', guardSpeed: 0.75, bashStamina: 1.5 },
     brittleness: { name: 'brittleness', desc: 'It splinters under blows: each one it takes costs you twice the stamina.', blockStamina: 2 },
   },
+  bow: {
+    wavering: { name: 'wavering', desc: 'It twists as you loose: your arrows fly wide of where you aim.', spread: 0.07 },
+    frailty: { name: 'frailty', desc: 'Its string is slack: its arrows strike feebly, for a quarter less damage.', dmgMult: 0.75 },
+  },
 };
 
 /** An item's enchantment's def, or null. */
@@ -59,11 +71,11 @@ export const enchantOf = (item) => (item?.enchant && ENCHANTMENTS[item.kind]?.[i
 /** An item's curse effect's def (while it has any curse), or null. */
 export const baneOf = (item) => (item?.curse > 0 && item.bane && CURSES[item.kind]?.[item.bane]) || null;
 
-/** A curse effect for a weapon, armour or shield, at random. */
+/** A curse effect for a weapon, armour, shield or bow, at random. */
 export const randomBane = (rng, kind) => rng.pick(Object.keys(CURSES[kind]));
 
-/** An enchantment for a weapon, armour or shield, at random. */
+/** An enchantment for a weapon, armour, shield or bow, at random. */
 export const randomEnchant = (rng, kind) => rng.pick(Object.keys(ENCHANTMENTS[kind]));
 
-/** Whether a weapon, armour, shield or ring is stuck on you: fully cursed. */
+/** Whether a weapon, armour, shield, bow or ring is stuck on you: fully cursed. */
 export const binds = (item) => item.curse >= 2 && item.kind !== 'artefact';

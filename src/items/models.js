@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WEAPONS, OFFHANDS, SHIELDS } from './defs.js';
+import { WEAPONS, OFFHANDS, SHIELDS, BOWS, ARROWS } from './defs.js';
 import { buildBBModel } from './bbmodel.js';
 import { MODEL_PX, ITEM_MIN_SIZE } from '../config.js';
 
@@ -55,7 +55,8 @@ const ITEM_BASE = -0.16;
  */
 export function buildItemModel(item, color, { floor = false } = {}) {
   const g = new THREE.Group();
-  const model = item.kind === 'weapon' ? lyingWeapon(item) : item.kind === 'offhand' || item.kind === 'shield' ? lyingOffhand(item) : itemModel(item, color);
+  const model = item.kind === 'weapon' ? lyingWeapon(item) : OFFHAND_DEFS[item.kind] ? lyingOffhand(item)
+    : item.kind === 'arrow' ? lyingArrows(item) : itemModel(item, color);
   if (floor) {
     const bounds = new THREE.Box3().setFromObject(model);
     const longest = Math.max(...bounds.getSize(new THREE.Vector3()).toArray());
@@ -77,10 +78,13 @@ function lyingWeapon(item) {
   return w;
 }
 
-// What you hold in your off hand (items/defs.js OFFHANDS and SHIELDS) has the one model, in your hand (see ViewModel)
-// or on the floor: the lantern is assets/models/hand_lantern.bbmodel, the wooden shield wooden_shield.bbmodel. On the
-// floor an off-hand thing lies on its side, like a weapon, unless it `stands`; a shield lies flat, face up.
+// What you hold in your off hand (items/defs.js OFFHANDS, SHIELDS and BOWS) has the one model, in your hand (see
+// ViewModel) or on the floor: the lantern is assets/models/hand_lantern.bbmodel, the wooden shield wooden_shield.bbmodel,
+// the wooden bow wooden_bow.bbmodel. On the floor an off-hand thing lies on its side, like a weapon, unless it `stands`;
+// a shield lies flat, face up. Arrows (ARROWS) are models of their own there too (arrow.bbmodel), as they are nocked and
+// in flight.
 const HELD_FILES = import.meta.glob('../../assets/models/*.bbmodel', { import: 'default', eager: true });
+const OFFHAND_DEFS = { offhand: OFFHANDS, shield: SHIELDS, bow: BOWS };
 
 /** A model held in a hand, assets/models/<name>.bbmodel: a copy of it, built once. */
 export function heldModel(name) {
@@ -94,14 +98,29 @@ export function heldModel(name) {
 }
 
 function lyingOffhand(item) {
-  const shield = item.kind === 'shield', def = (shield ? SHIELDS : OFFHANDS)[item.type];
+  const shield = item.kind === 'shield', bow = item.kind === 'bow', def = OFFHAND_DEFS[item.kind][item.type];
   const m = heldModel(def.model);
   if (shield) m.rotation.x = -Math.PI / 2;
+  else if (bow) m.rotation.z = Math.PI / 2;
   else if (!def.stands) m.rotation.z = Math.PI / 2.2;
   // Centred on the item's spot, about which floor items turn (standing, its middle too, where they bob).
   const mid = new THREE.Box3().setFromObject(m).getCenter(new THREE.Vector3());
-  m.position.set(-mid.x, def.stands ? -mid.y : 0, def.stands || shield ? -mid.z : 0);
+  m.position.set(-mid.x, def.stands ? -mid.y : 0, def.stands || shield || bow ? -mid.z : 0);
   return m;
+}
+
+/** A pile of arrows on the floor: one, two or three of them (as many as there are, to three), side by side. */
+function lyingArrows(item) {
+  const g = new THREE.Group(), n = Math.min(3, item.qty);
+  for (let i = 0; i < n; i++) {
+    const m = heldModel(ARROWS[item.type].model);
+    m.rotation.set(0, (i - (n - 1) / 2) * 0.12, -Math.PI / 2);
+    m.position.z = (i - (n - 1) / 2) * 0.05;
+    g.add(m);
+  }
+  const mid = new THREE.Box3().setFromObject(g).getCenter(new THREE.Vector3());
+  for (const m of g.children) m.position.x -= mid.x;
+  return g;
 }
 
 function itemModel(item, color) {

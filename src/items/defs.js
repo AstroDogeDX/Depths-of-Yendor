@@ -41,6 +41,32 @@ export const SHIELDS = {
 };
 export const SHIELD_HITS_TO_ID = 10;
 
+// Bows (kind 'bow'), carried in your off hand: with one there, your weapon goes down and your main hand takes an arrow
+// from your quiver (Player.equip.arrows). How one shoots is in bow.js, and a new one is an entry here.
+//   dmg        what an arrow shot from it does at full draw (the arrow's damage type), with the arrow's own `dmg`
+//   draw       seconds to draw it all the way (the attack meter fills as you do)
+//   nock       seconds to set an arrow to the string
+//   speed      how fast an arrow leaves it at full draw, in m/s: drawn less, it flies slower and drops sooner
+//   slow       your speed while it's drawn
+//   stow, unstow  what gripping your weapon in both hands does with it, and taking it back in one
+//   model      its Blockbench model in assets/models/ (see tools/modelgen/bows.mjs)
+// Its + adds to its damage, and to your aim. It's learnt by use, a few arrows on target (BOW_HITS_TO_ID).
+export const BOWS = {
+  wooden: { name: 'wooden bow', tier: 1, value: 90, dmg: [3, 8], draw: 0.9, nock: 0.35, speed: 28, slow: 0.6, model: 'wooden_bow',
+            stow: 'sling your bow over your shoulder', unstow: 'take up your bow again',
+            desc: 'A self bow of yew, its grip bound in leather, with horn nocks at its tips.' },
+};
+export const BOW_HITS_TO_ID = 12;
+
+// Arrows (kind 'arrow'), a stack to a type, which a bow shoots from your quiver (see bow.js). `dmg`: what one adds to
+// the bow's; `dmgType`: the damage it deals (see damage.js); `breaks`: the chance one breaks when it strikes a monster
+// (else it falls there, to be picked up again); `onHit`: what it brings, as an enchanted weapon's blows do (none yet:
+// see items/enchant.js); `model`: its Blockbench model in assets/models/. `value` is for one.
+export const ARROWS = {
+  standard: { name: 'arrow', value: 4, dmg: 0, dmgType: 'stab', breaks: 0.35, model: 'arrow',
+              desc: 'A shaft of ash with an iron bodkin point, fletched with goose feathers.' },
+};
+
 // resist: how much of each kind of blow gets through the armour (see damage.js). Each turns some kinds of blow
 // better than others.
 export const ARMORS = {
@@ -82,7 +108,7 @@ export const SCROLLS = {
   summon:      { name: 'summon monster',  freq: 7,  value: 15, desc: 'Calls monsters to your side. Not in a good way.' },
   recharge:    { name: 'recharging',      freq: 8,  value: 70, desc: 'Restores all charges to your wands.' },
   enchant:     { name: 'enchantment',     freq: 8,  value: 90,
-                 desc: 'Lays a random enchantment on a weapon or armour, in place of any it had. It takes only on something free of every curse.' },
+                 desc: 'Lays a random enchantment on a weapon, armour, shield or bow, in place of any it had. It takes only on something free of every curse.' },
 };
 
 // dmg and dmgType: what a wand's zap does, for those that hurt (see damage.js); each + adds WAND_PLUS_DMG to both
@@ -197,6 +223,6 @@ export const RING_GEMS = [
 ];
 
 export const KIND_GLYPH = {
-  weapon: ')', offhand: '(', shield: ']', armor: '[', potion: '!', scroll: '?', wand: '/', ring: '=', food: '%',
+  weapon: ')', offhand: '(', shield: ']', bow: '}', arrow: '|', armor: '[', potion: '!', scroll: '?', wand: '/', ring: '=', food: '%',
   artefact: '*', amulet: '"', gold: '$', key: '-', container: '&',
 };

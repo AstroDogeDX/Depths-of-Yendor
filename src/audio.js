@@ -183,6 +183,22 @@ export class Sfx {
     if (kind === 'arrow') this.noise({ dur: 0.16, vol: 0.14, freq: 2600, freq2: 1100, q: 1.5 });
     else this.tone({ f: 520, f2: 140, dur: 0.35, type: 'sine', vol: 0.14 });
   }
+  // Your bow (see bow.js): the string creaking back, loosed with a twang and the hiss of the arrow, eased off, and an
+  // arrow clattering off a wall.
+  drawBow() {
+    this.tone({ f: 70, f2: 95, dur: 0.5, type: 'sawtooth', vol: 0.025 });
+    this.noise({ dur: 0.45, vol: 0.04, freq: 500, freq2: 900, q: 6 });
+  }
+  loose() {
+    this.tone({ f: 190, f2: 120, dur: 0.18, type: 'triangle', vol: 0.18 });
+    this.tone({ f: 380, f2: 240, dur: 0.1, type: 'triangle', vol: 0.06 });
+    this.noise({ dur: 0.22, vol: 0.12, freq: 3200, freq2: 1200, q: 1.2, delay: 0.02 });
+  }
+  ease() { this.noise({ dur: 0.18, vol: 0.05, freq: 700, freq2: 400, q: 4 }); }
+  thunk() {
+    this.noise({ dur: 0.07, vol: 0.18, freq: 1400, q: 2 });
+    this.tone({ f: 260, f2: 160, dur: 0.08, type: 'triangle', vol: 0.08 });
+  }
   levelUp() { [523, 659, 784, 1046].forEach((f, i) => this.tone({ f, dur: 0.18, type: 'triangle', vol: 0.14, delay: i * 0.1 })); }
   trap() { this.tone({ f: 90, f2: 420, dur: 0.22, type: 'square', vol: 0.2 }); }
   // Traps going off, after the click of the plate (trap()): spikes shearing up, gas hissing out, an alarm bell.

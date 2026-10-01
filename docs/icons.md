@@ -21,7 +21,7 @@ Each icon is a map of 16 rows of 16 characters, one character to a pixel: `.` is
 
 `icons.js` draws a dark outline round everything, so the maps hold only the coloured pixels. Leave a pixel's margin all round for it. The game shows icons at three times their size in the pack and on the paper doll (twice in the ring slots), and twice on the hotbar, lifted clear of the label along the bottom that says what pressing the key does. They're scaled in whole pixels, so they stay crisp. Each look is painted once and kept.
 
-The weapons lie on the diagonal, blade or head up to the right and hilt down to the left, their blades a band two pixels wide (three for the long sword) with the guard across it. The armours share one tunic's shape, in leather, mail or plate.
+The weapons lie on the diagonal, blade or head up to the right and hilt down to the left, their blades a band two pixels wide (three for the long sword) with the guard across it. An arrow lies the same way, point up to the right, and the bow bends toward the top left, its string straight from tip to tip. The armours share one tunic's shape, in leather, mail or plate.
 
 ## What changes from run to run
 

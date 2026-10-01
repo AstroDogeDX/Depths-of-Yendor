@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { buildWeaponMesh, buildItemModel, heldModel } from '../items/models.js';
-import { SHIELDS } from '../items/defs.js';
+import { SHIELDS, BOWS, ARROWS } from '../items/defs.js';
 import { buildBBModel } from '../items/bbmodel.js';
 import { MODEL_PX } from '../config.js';
 import { glowSprite } from './glow.js';
@@ -9,7 +9,8 @@ import lanternModel from '../../assets/models/hand_lantern.bbmodel';
 
 // First-person hands: weapon on the right, what's in your off hand (the lantern) on the left. Rendered in its own
 // scene after the world (with the depth buffer cleared) so the weapon never clips into walls. Gripped in both hands
-// (F), the weapon takes a two-handed pose (see SLASH_2H), and the lantern goes down out of sight, to your belt.
+// (F), the weapon takes a two-handed pose (see SLASH_2H), and the lantern goes down out of sight, to your belt. With a
+// bow in your off hand, your main hand holds an arrow in place of your weapon (see BOW_DOWN).
 
 // The weapon hangs off four nested groups so its edge always leads the cut:
 //   pivot (hand position + yaw) -> plane (roll: tilts the plane the cut travels in)
@@ -88,8 +89,38 @@ const LANTERN_SWING = { pull: 55, damp: 3.2, turn: 0.09, most: 0.5, walk: 0.1, r
 const SHIELD_DOWN = { p: [-0.56, -0.56, -0.78], r: [0.3, Math.PI + 0.5, 0.3] };
 const SHIELD_UP = { p: [-0.07, -0.31, -0.56], r: [0.06, Math.PI - 0.06, 0.02], weapon: { p: [0.12, -0.13, 0.04], arc: 0.45 } };
 const SHIELD_BASH = { dur: 0.28, p: [0.06, 0.05, -0.22], r: -0.18 };
+// A bow in your off hand (see bow.js), held by its grip, its back away from you, at BOW_SCALE: down at your side
+// until an arrow's nocked, then up before you, held out in your left hand, canted (BOW_UP), the arrow on its string
+// lying along your line of sight, so it points at the crosshair. Drawn, it comes over to the right as your right hand
+// brings the string back toward your shoulder (BOW_DRAWN, at full draw), the nock coming back as far as the arrow
+// reaches (ARROW_REACH, in the bow's own frame), on the line from the crosshair BOW_AIM metres ahead through the grip,
+// so the arrow still points at it; and the limbs bend (BOW_BEND: how much shorter and deeper the bow grows at full
+// draw). Loosed, it kicks (BOW_KICK, over `dur` seconds), the string shivers, and the bow eases back. Meanwhile your
+// main hand holds an arrow to nock, as a weapon (see ARROW_GRIP), which goes down out of sight as you nock it.
+const BOW_SCALE = 0.52;
+const BOW_DOWN = { p: [-0.3, -0.31, -0.55], r: [0.2, 0.7, -0.4] };
+const BOW_UP = { p: [-0.03, -0.1, -0.45], r: [0, 0, 0.3] };
+const BOW_DRAWN = { p: [0.1, -0.1, -0.45], r: [0, 0, 0.05] };
+const BOW_AIM = 12, ARROW_REACH = 0.66, BOW_BEND = [0.05, 0.45];
+const BOW_KICK = { dur: 0.22, p: [0, 0.02, -0.03], r: 0.12 };
+const STRING_THICK = 0.008;
+const ARROW_GRIP = 0.1; // how far up the arrow from its nock your hand holds it, to jab
 
 const smooth = (x) => x * x * (3 - 2 * x);
+const Z_AXIS = new THREE.Vector3(0, 0, 1);
+
+// The arrow in your main hand, as a weapon's def for showInHand: one per kind of arrow (ARROWS), so it's the same def
+// from frame to frame.
+const ARROW_DEFS = {};
+const arrowDef = (type) => (ARROW_DEFS[type] ??= { model: ARROWS[type].model, dmgType: 'stab', arrow: true });
+
+/** An arrow held as a weapon is (see items/models.js): pointing up, held ARROW_GRIP up from its nock. */
+function arrowInHand(model) {
+  const g = new THREE.Group(), m = heldModel(model);
+  m.position.y = -ARROW_GRIP;
+  g.add(m);
+  return g;
+}
 const lerp = (a, b, k) => a + (b - a) * k;
 const blend = (a, b, k) => ({
   p: a.p.map((v, j) => lerp(v, b.p[j], k)),
@@ -126,7 +157,9 @@ export class ViewModel {
     this.keys = SLASH; // one-handed
     this.keys2 = SLASH_2H; // two-handed
     this.grip = 0; // eases between one hand (0) and two (1)
-    this.lanternUp = 1; // eases between the lantern held up (1) and down out of sight at your belt (0)
+    this.lanternUp = 0; // eases between the lantern held up (1) and down out of sight at your belt (0)
+    // What's shown in your off hand (an item), which changes to what's there once it's gone down out of sight (see update).
+    this.offShown = null;
     this.swingT = -1;
     this.swingDur = 0.3;
     this.dipT = -1;
@@ -162,6 +195,36 @@ export class ViewModel {
     this.bashT = -1;
     this.lean = 0;
     this.lastYaw = null;
+
+    // A bow in your off hand (see setBow): `bowOut` eases between in your hand (1) and over your shoulder (0); `aim` from
+    // down at your side (0) to up before you (1); `nockShown` and `drawShown` follow how far an arrow's nocked and drawn
+    // (Player.nock, Player.draw), easing back when you let go (but not once it's loosed: see loose); `kickT` runs through
+    // the kick of a shot, or is -1; `twang`, how hard the string shivers.
+    this.bowPivot = new THREE.Group();
+    this.bowBody = new THREE.Group();
+    this.bowBody.rotation.y = Math.PI;
+    this.bowBody.scale.setScalar(BOW_SCALE);
+    this.bowPivot.add(this.bowBody);
+    this.scene.add(this.bowPivot);
+    const stringMat = new THREE.MeshLambertMaterial({ color: 0xc8bc9c });
+    this.strings = [0, 1].map(() => new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), stringMat));
+    this.bowBody.add(...this.strings);
+    this.bowType = null;
+    this.bowModel = null;
+    this.nockedArrow = null;
+    this.bowOut = 0;
+    this.aim = 0;
+    this.nockShown = 0;
+    this.drawShown = 0;
+    this.slide = 0; // how far over to the right the bow has come as it's drawn (see BOW_DRAWN)
+    this.kickT = -1;
+    this.twang = 0;
+    this.handAway = 0; // the arrow in your main hand, going down as it's nocked (1)
+    // What's in your main hand: `weaponDef` the weapon you wield, `handDef` what's shown (see showInHand), and
+    // `handDown` how far it's gone down for something else to come up (1).
+    this.weaponDef = null;
+    this.handDef = null;
+    this.handDown = 0;
 
     // What's held up from the hotbar (see update's `held`): `heldItem` the item it shows, and `swap` how far along the
     // change is: 0 the weapon up, 0.5 both down, 1 the item up.
@@ -199,14 +262,63 @@ export class ViewModel {
     this.heldPivot.add(turn);
   }
 
-  /** Holds the weapon with this def (items/defs.js WEAPONS), or nothing. Stabbing weapons thrust. */
+  /**
+   * Holds the weapon with this def (items/defs.js WEAPONS), or nothing: in your hand, unless you've a bow in hand, when
+   * an arrow is there instead (see update).
+   */
   setWeapon(def) {
+    this.weaponDef = def;
+  }
+
+  /** Puts this weapon in your main hand (or an arrow, `arrow`: see arrowInHand), or nothing. Stabbing weapons thrust. */
+  showInHand(def) {
+    this.handDef = def;
     if (this.weapon) this.weaponTwist.remove(this.weapon);
-    this.weapon = def ? buildWeaponMesh(def.model) : null;
+    this.weapon = !def ? null : def.arrow ? arrowInHand(def.model) : buildWeaponMesh(def.model);
     const stab = def?.dmgType === 'stab';
     this.keys = stab ? THRUST : SLASH;
     this.keys2 = KEYS_2H[def?.model] ?? (stab ? THRUST_2H : SLASH_2H);
     if (this.weapon) this.weaponTwist.add(this.weapon);
+  }
+
+  /**
+   * Shows the bow of `type` (BOWS) in your off hand, or none: its own string hidden for one drawn here (see update), and
+   * an arrow to nock on it, of the kind in your quiver (`arrow`, an ARROWS type, or null).
+   */
+  setBow(type, arrow) {
+    if (type !== this.bowType) {
+      this.bowType = type;
+      if (this.bowModel) this.bowBody.remove(this.bowModel);
+      this.bowModel = type ? heldModel(BOWS[type].model) : null;
+      if (this.bowModel) {
+        for (const m of this.bowModel.children) if (m.name.endsWith('_string')) m.visible = false;
+        this.bowBody.add(this.bowModel);
+      }
+    }
+    if ((arrow ?? null) !== (this.nockedArrow?.userData.type ?? null)) {
+      if (this.nockedArrow) this.bowBody.remove(this.nockedArrow);
+      this.nockedArrow = null;
+      if (arrow) {
+        // (Turned to point the way the bow does, +z, nock first.)
+        this.nockedArrow = new THREE.Group();
+        const m = heldModel(ARROWS[arrow].model);
+        m.rotation.x = Math.PI / 2;
+        this.nockedArrow.add(m);
+        this.nockedArrow.userData.type = arrow;
+        this.bowBody.add(this.nockedArrow);
+      }
+    }
+  }
+
+  /**
+   * Your bow looses its arrow (see bow.js): it's gone from the string, which snaps forward, and the bow kicks. The next
+   * arrow is nocked from scratch, coming up onto the string as the last one did.
+   */
+  loose() {
+    this.nockShown = 0;
+    this.drawShown = 0;
+    this.kickT = 0;
+    this.twang = 1;
   }
 
   swing(duration) {
@@ -242,7 +354,10 @@ export class ViewModel {
    * `twoHanded`: your weapon gripped in both hands, with it stowed; `carriedLight`: how brightly your lantern lights
    * you (Player.carriedLight).
    */
-  update(dt, { moving, bob, charge, time, lightLevel, carriedLight = 1, offhand = null, guard = 0, twoHanded = false, yaw = 0, sprint = false, held = null }) {
+  update(dt, {
+    moving, bob, charge, time, lightLevel, carriedLight = 1, offhand = null, guard = 0, twoHanded = false, yaw = 0, sprint = false,
+    held = null, nock = 0, draw = 0, quiver = null,
+  }) {
     // What's held up from the hotbar: a new one waits for the last to go down (or, from the weapon, goes straight in).
     const want = held?.item ?? null;
     if (want !== this.heldItem && this.swap <= 0.5) this.showHeld(want, held?.color);
@@ -251,13 +366,27 @@ export class ViewModel {
     this.swap = to > this.swap ? Math.min(to, this.swap + step) : Math.max(to, this.swap - step);
     const lowered = smooth(Math.min(1, this.swap * 2)), raised = smooth(Math.max(0, this.swap * 2 - 1));
 
-    // Changing grip eases the weapon between its poses, and the lantern up or down.
+    // Changing grip eases the weapon between its poses, and what's in your off hand up or down. Changing what's in your
+    // off hand (from the hotbar, say) lowers the old out of sight before the new comes up.
     const ease = Math.min(1, dt * 9);
     this.grip += ((twoHanded ? 1 : 0) - this.grip) * ease;
-    this.lanternUp += ((offhand?.kind === 'offhand' && offhand.type === 'lantern' && !twoHanded ? 1 : 0) - this.lanternUp) * ease;
-    const shield = offhand?.kind === 'shield';
-    this.setShield(shield ? offhand.type : null);
-    this.shieldOut += ((shield && !twoHanded ? 1 : 0) - this.shieldOut) * ease;
+    if (offhand !== this.offShown && Math.max(this.lanternUp, this.shieldOut, this.bowOut) < 0.06) this.offShown = offhand;
+    const shown = offhand === this.offShown && !twoHanded ? offhand : null;
+    this.lanternUp += ((shown?.kind === 'offhand' && shown.type === 'lantern' ? 1 : 0) - this.lanternUp) * ease;
+    this.setShield(this.offShown?.kind === 'shield' ? this.offShown.type : null);
+    this.shieldOut += ((shown?.kind === 'shield' ? 1 : 0) - this.shieldOut) * ease;
+    this.setBow(this.offShown?.kind === 'bow' ? this.offShown.type : null, quiver);
+    this.bowOut += ((shown?.kind === 'bow' ? 1 : 0) - this.bowOut) * ease;
+    // A bow in hand: an arrow from your quiver in your main hand in place of your weapon, which goes down as it's nocked.
+    // Changing what's in your main hand (a weapon from the hotbar, or an arrow for your bow) lowers the old out of sight
+    // and raises the new, half of HOLD_RAISE each, as holding something up from the hotbar does.
+    const archery = offhand?.kind === 'bow' && !twoHanded;
+    const inHand = archery ? (quiver ? arrowDef(quiver) : null) : this.weaponDef;
+    if (inHand !== this.handDef) {
+      this.handDown = this.weapon ? Math.min(1, this.handDown + step * 2) : 1;
+      if (this.handDown >= 1) this.showInHand(inHand);
+    } else this.handDown = Math.max(0, this.handDown - step * 2);
+    this.handAway += ((archery && (nock > 0 || draw > 0) ? 1 : 0) - this.handAway) * Math.min(1, dt * 14);
     const at = (t) => blend(sample(this.keys, t), sample(this.keys2, t), this.grip);
     let pose = at(0);
     if (this.swingT >= 0) {
@@ -283,9 +412,10 @@ export class ViewModel {
     if (sprint && this.swingT < 0) pose.p[1] -= 0.06;
     const bx = moving ? Math.sin(bob) * 0.012 * sway : 0;
     const by = moving ? Math.abs(Math.cos(bob)) * 0.014 * sway : Math.sin(time * 1.5) * 0.003;
-    pose.p[1] -= lowered * 0.75;
-    pose.arc += lowered * 0.7;
-    this.weaponPivot.visible = lowered < 0.99;
+    const away = Math.max(lowered, smooth(this.handAway), smooth(this.handDown));
+    pose.p[1] -= away * 0.75;
+    pose.arc += away * 0.7;
+    this.weaponPivot.visible = !!this.weapon && away < 0.99;
     this.weaponPivot.position.set(pose.p[0] + bx, pose.p[1] + by, pose.p[2]);
     this.weaponPivot.rotation.set(0, pose.yaw, 0);
     this.weaponPlane.rotation.set(0, 0, pose.roll);
@@ -335,10 +465,75 @@ export class ViewModel {
       this.shieldPivot.visible = this.shieldOut > 0.01;
     }
 
+    if (this.bowModel) this.updateBow(dt, time, { nock, draw, bx, by });
+    else this.bowPivot.visible = false;
+
     // It lights your weapon from where its flame is: up beside it, or low at your belt.
     this.flame.getWorldPosition(this.light.position);
     this.light.intensity = 2.2 * flick * lightLevel * carriedLight;
     this.ambient.intensity = 0.25 + lightLevel * 0.45;
+  }
+
+  /**
+   * Poses the bow: down at your side or up before you as an arrow's nocked, slung away while you grip your weapon in
+   * both hands, its string drawn back to the nocked arrow, and its limbs bent as it is (see BOW_UP).
+   */
+  updateBow(dt, time, { nock, draw, bx, by }) {
+    // What's shown follows the arrow up, and eases back when you let go (or, loosed, the string snaps forward).
+    this.nockShown = nock >= this.nockShown ? nock : Math.max(nock, this.nockShown - dt / 0.2);
+    this.drawShown = draw >= this.drawShown ? draw : Math.max(draw, this.drawShown - dt / 0.12);
+    this.aim += ((nock > 0 || draw > 0 ? 1 : 0) - this.aim) * Math.min(1, dt * (nock > 0 ? 12 : 7));
+    this.slide = this.drawShown >= this.slide ? this.drawShown : this.slide + (this.drawShown - this.slide) * Math.min(1, dt * 5);
+    let kick = 0;
+    if (this.kickT >= 0) {
+      this.kickT += dt / BOW_KICK.dur;
+      if (this.kickT >= 1) this.kickT = -1;
+      else kick = Math.sin(Math.PI * this.kickT);
+    }
+    this.twang = Math.max(0, this.twang - dt * 5);
+    const a = smooth(this.aim), d = this.drawShown;
+    // A full draw, held, trembles a little.
+    const shake = d >= 1 ? Math.sin(time * 23) * 0.002 + Math.sin(time * 37) * 0.0015 : 0;
+    const s = smooth(this.slide), up = (key, j) => lerp(BOW_UP[key][j], BOW_DRAWN[key][j], s);
+    const at = (j) => lerp(BOW_DOWN.p[j], up('p', j), a) + BOW_KICK.p[j] * kick;
+    const turn = (j) => lerp(BOW_DOWN.r[j], up('r', j), a);
+    this.bowPivot.position.set(at(0) - bx * (1 - a) + shake, at(1) + by * (1 - a * 0.7) - (1 - this.bowOut) * 0.9, at(2));
+    this.bowPivot.rotation.set(turn(0) - BOW_KICK.r * kick, turn(1), turn(2));
+    this.bowPivot.visible = this.bowOut > 0.01;
+    // Its limbs bend as it's drawn, and the string goes from tip to tip by the nock.
+    const sy = 1 - BOW_BEND[0] * d, sz = 1 + BOW_BEND[1] * d;
+    this.bowModel.scale.set(1, sy, sz);
+    const { string_top: top, string_bottom: bottom, rest } = this.bowModel.userData.anchors;
+    const t = new THREE.Vector3(top[0], top[1] * sy, top[2] * sz), b = new THREE.Vector3(bottom[0], bottom[1] * sy, bottom[2] * sz);
+    const nocked = this.nockedArrow && this.nockShown >= 0.5;
+    const shiver = Math.sin(time * 90) * 0.012 * this.twang;
+    const across = new THREE.Vector3(rest[0], rest[1], 0); // where the arrow lies across the grip
+    let n = new THREE.Vector3(0, rest[1], t.z + shiver);
+    if (nocked) {
+      // Drawn, the nock comes back as far as the arrow reaches, on the line from the crosshair (BOW_AIM ahead) through
+      // the grip, so the arrow points at it.
+      this.bowPivot.updateMatrixWorld(true);
+      const full = across.clone().sub(this.bowBody.worldToLocal(new THREE.Vector3(0, 0, -BOW_AIM)));
+      full.setLength(ARROW_REACH).add(across);
+      n = new THREE.Vector3(rest[0], rest[1], t.z).lerp(full, d);
+    }
+    this.placeString(this.strings[0], t, n);
+    this.placeString(this.strings[1], n, b);
+    if (this.nockedArrow) {
+      // Nocked, it slides up onto the string from below, and lies from the nock across the grip.
+      const k = smooth(Math.min(1, Math.max(0, (this.nockShown - 0.5) * 2)));
+      this.nockedArrow.visible = nocked;
+      this.nockedArrow.position.set(n.x, n.y - (1 - k) * 0.12, n.z - (1 - k) * 0.06);
+      this.nockedArrow.quaternion.setFromUnitVectors(Z_AXIS, across.sub(this.nockedArrow.position).normalize());
+    }
+  }
+
+  /** Stretches a piece of the string from `a` to `b` (in the bow's frame). */
+  placeString(seg, a, b) {
+    const dir = b.clone().sub(a), len = dir.length();
+    seg.position.copy(a).addScaledVector(dir, 0.5);
+    seg.quaternion.setFromUnitVectors(Z_AXIS, dir.divideScalar(len || 1));
+    seg.scale.set(STRING_THICK, STRING_THICK, len);
   }
 
   /** Poses what's held up: `raised` how far (0..1), and what using it looks like, if it's being used. */

@@ -1,6 +1,7 @@
 import { THEMES, FLOORS_PER_THEME, TILE, HUNGER_MAX, isBossDepth, isShopDepth } from '../config.js';
 import {
-  WEAPONS, ARMORS, SHIELDS, SHIELD_HITS_TO_ID, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS, CONTAINERS, WAND_ZAPS_TO_ID,
+  WEAPONS, ARMORS, SHIELDS, SHIELD_HITS_TO_ID, BOWS, BOW_HITS_TO_ID, ARROWS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS,
+  CONTAINERS, WAND_ZAPS_TO_ID,
   POTION_COLORS, WAND_MATERIALS, RING_GEMS,
 } from '../items/defs.js';
 import { makeItem, stackable, chestLoot } from '../items/generate.js';
@@ -24,7 +25,8 @@ import './devTools.css';
 
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, as stairs' `dir`
 const KINDS = [
-  ['weapon', 'Weapons', WEAPONS], ['offhand', 'Off hand', OFFHANDS], ['shield', 'Shields', SHIELDS], ['armor', 'Armour', ARMORS], ['potion', 'Potions', POTIONS],
+  ['weapon', 'Weapons', WEAPONS], ['offhand', 'Off hand', OFFHANDS], ['shield', 'Shields', SHIELDS], ['bow', 'Bows', BOWS],
+  ['arrow', 'Arrows', ARROWS], ['armor', 'Armour', ARMORS], ['potion', 'Potions', POTIONS],
   ['scroll', 'Scrolls', SCROLLS], ['wand', 'Wands', WANDS], ['ring', 'Rings', RINGS], ['artefact', 'Artefacts', ARTEFACTS],
   ['food', 'Food', FOOD], ['container', 'Pack expansions', CONTAINERS],
   ['special', 'Other', { amulet: { name: 'Amulet of Yendor' }, key: { name: 'iron key (this floor)' }, goldkey: { name: 'gold key (this floor)' } }],
@@ -322,6 +324,7 @@ export class DevTools {
       case 'weapon': item = makeItem('weapon', type, { hitsToId: 20 }); break;
       case 'armor': item = makeItem('armor', type, { hitsToId: 14 }); break;
       case 'shield': item = makeItem('shield', type, { hitsToId: SHIELD_HITS_TO_ID }); break;
+      case 'bow': item = makeItem('bow', type, { hitsToId: BOW_HITS_TO_ID }); break;
       case 'ring': item = makeItem('ring', type, { wornTime: 0 }); break;
       case 'wand': {
         const max = WANDS[type].charges[1] + plus; // for a wand, each + is a charge more
@@ -334,9 +337,9 @@ export class DevTools {
         break;
       default: item = makeItem(kind, type);
     }
-    // Its +, its curse (a weapon's, armour's or shield's comes with a Curse of ___), and an enchantment, if it can take the
-    // one asked for: a weapon, armour or shield, free of curses (see items/enchant.js).
-    if (['weapon', 'armor', 'shield', 'ring', 'wand'].includes(kind)) {
+    // Its +, its curse (a weapon's, armour's, shield's or bow's comes with a Curse of ___), and an enchantment, if it can take the
+    // one asked for: a weapon, armour, shield or bow, free of curses (see items/enchant.js).
+    if (['weapon', 'armor', 'shield', 'bow', 'ring', 'wand'].includes(kind)) {
       item.plus = plus;
       item.curse = curse;
       if (curse && CURSES[kind]) item.bane = rand.pick(Object.keys(CURSES[kind]));

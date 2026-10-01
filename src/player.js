@@ -3,12 +3,13 @@ import {
   STAMINA_BASE, STAMINA_PER_LEVEL, STAMINA_DRAIN, STAMINA_REGEN, STAMINA_REGEN_DELAY, STAMINA_RECOVER, MODE_SPEED, NOISE,
   TWO_HAND_STR, EYE_H, CROUCH_DROP, POOL, WADE_SPEED,
 } from './config.js';
-import { WEAPONS, ARMORS, SHIELDS, ARTEFACTS, OFFHANDS, FOOD, CONTAINERS, CONTAINER_SIZE, wandRecharge } from './items/defs.js';
+import { WEAPONS, ARMORS, SHIELDS, BOWS, ARROWS, ARTEFACTS, OFFHANDS, FOOD, CONTAINERS, CONTAINER_SIZE, wandRecharge } from './items/defs.js';
 import { enchantOf, baneOf } from './items/enchant.js';
 import { stackable } from './items/generate.js';
 import { slotHolds } from './hotbar.js';
 import { playerStrike } from './combat.js';
 import { updateGuard, shieldBash, shieldOf, shieldStats } from './shield.js';
+import { archer, updateBow, jabStats, bowOf, bowStats, quiverOf } from './bow.js';
 import { damageType, damageMult } from './damage.js';
 import { STATUSES, blankStatus, restoreStatus, saveStatus, afflict, tickStatuses, wade } from './status.js';
 import { rand } from './rng.js';
@@ -22,11 +23,13 @@ const SAVED = [
 ];
 
 // The pack keeps things of a kind together, in this order (anything else last), so you know roughly where to look.
-// Weapons, armour, shields, off-hand things, artefacts and food, whose type you can always see, go by their type in the
-// order of their table in items/defs.js (weakest first); potions, scrolls, wands and rings in the order you got them,
+// Weapons, bows, arrows, armour, shields, off-hand things, artefacts and food, whose type you can always see, go by their
+// type in the order of their table in items/defs.js (weakest first); potions, scrolls, wands and rings in the order you got them,
 // since an order by type would give away what you don't know.
-const PACK_ORDER = ['weapon', 'offhand', 'shield', 'armor', 'ring', 'artefact', 'wand', 'potion', 'scroll', 'food', 'amulet'];
-const TYPE_ORDER = Object.fromEntries(Object.entries({ weapon: WEAPONS, armor: ARMORS, shield: SHIELDS, offhand: OFFHANDS, artefact: ARTEFACTS, food: FOOD })
+const PACK_ORDER = ['weapon', 'bow', 'arrow', 'offhand', 'shield', 'armor', 'ring', 'artefact', 'wand', 'potion', 'scroll', 'food', 'amulet'];
+const TYPE_ORDER = Object.fromEntries(Object.entries({
+  weapon: WEAPONS, bow: BOWS, arrow: ARROWS, armor: ARMORS, shield: SHIELDS, offhand: OFFHANDS, artefact: ARTEFACTS, food: FOOD,
+})
   .map(([kind, defs]) => [kind, Object.keys(defs)]));
 const rankOf = (kind) => (PACK_ORDER.includes(kind) ? PACK_ORDER.indexOf(kind) : PACK_ORDER.length);
 export function packOrder(a, b) {
@@ -47,7 +50,8 @@ export class Player {
     this.hunger = HUNGER_MAX;
     this.inventory = [];
     this.containers = []; // the pack expansions you have (see bags), by type
-    this.equip = { weapon: null, offhand: null, armor: null, rings: [null, null], artefacts: [null, null] };
+    // `arrows`: the stack in your quiver, which a bow in your off hand shoots (see bow.js).
+    this.equip = { weapon: null, offhand: null, armor: null, arrows: null, rings: [null, null], artefacts: [null, null] };
     // Your weapon gripped in both hands (F), with whatever's in your off hand stowed: it can't be used, and a lantern
     // lights less (see carriedLight). Only ever with a weapon in hand.
     this.twoHanded = false;
@@ -64,6 +68,12 @@ export class Player {
     this.guard = 0;
     this.guarding = false;
     this.bashT = 0;
+    // A bow in your off hand (see bow.js): `nock` rises from 0 to 1 as an arrow goes to the string, and `draw` as it's
+    // drawn (`drawing`, while click's held for it); `latch`, a click that must be let go before it does anything more.
+    this.nock = 0;
+    this.draw = 0;
+    this.drawing = false;
+    this.latch = false;
     this.mode = 'walk'; // walk | sprint | sneak
     this.sneaking = false; // toggled with C (see update)
     this.crouch = 0; // 0..1, eases the camera down while sneaking
@@ -71,6 +81,7 @@ export class Player {
     this.sink = 0; // 0..1, eases the camera down the step into a pool
     this.noise = 0; // metres of walking distance at which monsters can hear you this frame
     this.swingT = -1; this.swingDur = 0.3; this.swingHit = false; this.swingPower = 1;
+    this.swingWith = null; // a swing's stats, if not your weapon's: a jab with an arrow (see bow.js)
     this.status = blankStatus(true); // seconds left of each status (see status.js)
     this.isPlayer = true;
     this.boss = false;
@@ -93,7 +104,8 @@ export class Player {
     const uid = (item) => item?.uid ?? null;
     const e = this.equip;
     s.equip = {
-      weapon: uid(e.weapon), offhand: uid(e.offhand), armor: uid(e.armor), rings: e.rings.map(uid), artefacts: e.artefacts.map(uid),
+      weapon: uid(e.weapon), offhand: uid(e.offhand), armor: uid(e.armor), arrows: uid(e.arrows), rings: e.rings.map(uid),
+      artefacts: e.artefacts.map(uid),
     };
     s.status = saveStatus(this.status);
     return s;
@@ -104,7 +116,7 @@ export class Player {
     for (const k of SAVED) if (k in s) this[k] = s[k];
     const byUid = (uid) => (uid == null ? null : this.inventory.find((it) => it.uid === uid) ?? null);
     this.equip = {
-      weapon: byUid(s.equip.weapon), offhand: byUid(s.equip.offhand), armor: byUid(s.equip.armor),
+      weapon: byUid(s.equip.weapon), offhand: byUid(s.equip.offhand), armor: byUid(s.equip.armor), arrows: byUid(s.equip.arrows),
       rings: s.equip.rings.map(byUid), artefacts: s.equip.artefacts.map(byUid),
     };
     this.twoHanded = this.twoHanded && !!this.equip.weapon;
@@ -204,8 +216,9 @@ export class Player {
     if (a) s *= Math.max(0.6, 1 - Math.max(0, ARMORS[a.type].str - this.str) * 0.08);
     if (this.hunger <= 0) s *= 0.8;
     if (this.wading) s *= WADE_SPEED;
-    // A raised shield slows you as it comes up (see shield.js).
+    // A raised shield slows you as it comes up (see shield.js), and so does a drawn bow (see bow.js).
     if (this.guard > 0 && shieldOf(this)) s *= 1 - (1 - shieldStats(shieldOf(this)).slow) * this.guard;
+    if (this.draw > 0 && bowOf(this)) s *= bowStats(bowOf(this)).slow;
     return s;
   }
 
@@ -329,6 +342,12 @@ export class Player {
         return true;
       }
     }
+    // Arrows go straight into an empty quiver, which needs no room in the pack.
+    if (item.kind === 'arrow' && !quiverOf(this)) {
+      this.inventory.push(item);
+      this.equip.arrows = item;
+      return true;
+    }
     // The Amulet always fits (see packFits).
     if (!this.hasRoom(item) && item.kind !== 'amulet') return false;
     this.inventory.push(item);
@@ -343,12 +362,14 @@ export class Player {
     }
     const i = this.inventory.indexOf(item);
     if (i >= 0) this.inventory.splice(i, 1);
+    if (this.equip.arrows === item) this.equip.arrows = null; // (the last arrow in your quiver)
     return item;
   }
 
   isEquipped(item) {
     const e = this.equip;
-    return e.weapon === item || e.offhand === item || e.armor === item || e.rings.includes(item) || e.artefacts.includes(item);
+    return e.weapon === item || e.offhand === item || e.armor === item || e.arrows === item || e.rings.includes(item) ||
+      e.artefacts.includes(item);
   }
 
   // --- Per-frame ---
@@ -384,9 +405,9 @@ export class Player {
     if (!para && input.wasPressed('KeyC')) this.sneaking = !this.sneaking;
     if (input.sprint || this.winded) this.sneaking = false;
     // Holding right-click raises a shield in your off hand (see shield.js), though not while you're held fast, or
-    // holding something up from the hotbar. You can't sprint behind it.
+    // holding something up from the hotbar. You can't sprint behind it, nor with an arrow nocked (see bow.js).
     updateGuard(this, input.guard, !para && !game.hold, dt);
-    let mode = para ? 'walk' : this.sneaking ? 'sneak' : input.sprint && this.guard === 0 ? 'sprint' : 'walk';
+    let mode = para ? 'walk' : this.sneaking ? 'sneak' : input.sprint && this.guard === 0 && this.nock === 0 ? 'sprint' : 'walk';
     if (this.winded) mode = 'walk';
     this.mode = mode;
     this.crouch += ((mode === 'sneak' ? 1 : 0) - this.crouch) * Math.min(1, dt * 8);
@@ -426,28 +447,39 @@ export class Player {
     this.sink += ((inWater ? 1 : 0) - this.sink) * Math.min(1, dt * 10);
 
     // King's Field attack meter: a click swings once it's above 20% and damage scales with the charge;
-    // holding the button only re-swings at full charge, so mashing never beats timing.
-    const w = this.weaponStats();
+    // holding the button only re-swings at full charge, so mashing never beats timing. With a bow in hand (see bow.js),
+    // a click jabs with the arrow in your hand instead, and right-click held nocks one, to draw and loose.
+    const archery = archer(this);
+    const w = archery ? jabStats(this) : this.weaponStats();
     this.charge = Math.min(1, this.charge + dt / w.recharge);
     this.bashT = Math.max(0, this.bashT - dt);
+    if (!input.attack) this.latch = false;
+    if (!archery) this.nock = this.draw = 0;
     if (this.swingT >= 0) {
       this.swingT += dt;
       if (!this.swingHit && this.swingT >= this.swingDur * 0.45) {
         this.swingHit = true;
-        playerStrike(game, this.swingPower);
+        playerStrike(game, this.swingPower, this.swingWith ?? this.weaponStats(), !!this.swingWith);
       }
       if (this.swingT >= this.swingDur) this.swingT = -1;
     } else if (this.guard > 0) {
       // Behind a raised shield, a click shoves with it instead (see shieldBash).
       if (this.guarding && !para && input.attackPressed && game.canFight()) shieldBash(game);
-    } else if (!para && !game.hold && ((input.attackPressed && this.charge >= 0.2) || (input.attack && this.charge >= 1)) && game.canFight()) {
-      this.swingPower = 0.3 + 0.7 * this.charge;
-      this.charge = 0;
-      this.swingT = 0;
-      this.swingHit = false;
-      this.swingDur = Math.max(0.24, Math.min(0.45, w.recharge * 0.35));
-      game.viewmodel.swing(this.swingDur);
-      game.audio.swing();
+    } else if (archery && updateBow(game, this, input, dt, !para && !game.hold)) {
+      // (The bow has the mouse: an arrow's nocked, or being nocked.)
+    } else if (!para && !game.hold && !this.latch && ((input.attackPressed && this.charge >= 0.2) || (input.attack && this.charge >= 1)) && game.canFight()) {
+      if (archery && !quiverOf(this)) {
+        if (input.attackPressed) game.log('Your quiver is empty: you have no arrow in hand.', 'warn');
+      } else {
+        this.swingPower = 0.3 + 0.7 * this.charge;
+        this.swingWith = archery ? w : null;
+        this.charge = 0;
+        this.swingT = 0;
+        this.swingHit = false;
+        this.swingDur = Math.max(0.24, Math.min(0.45, w.recharge * 0.35));
+        game.viewmodel.swing(this.swingDur);
+        game.audio.swing();
+      }
     }
 
     for (let i = 0; i < 2; i++) this.artefactCD[i] = Math.max(0, this.artefactCD[i] - dt);

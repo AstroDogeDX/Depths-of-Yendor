@@ -22,7 +22,7 @@ export const MARKS = {
 };
 
 // Which mark each thing gets: by type for potions, scrolls, wands, rings and artefacts (once you know what kind it is),
-// by enchantment for weapons, armour and shields (once you know it's there).
+// by enchantment for weapons, armour, shields and bows (once you know it's there).
 const MARK_OF = {
   potion: {
     healing: 'heal', strength: 'strength', experience: 'experience', haste: 'haste', mindvision: 'mind', poison: 'poison',
@@ -38,9 +38,10 @@ const MARK_OF = {
   weapon: { flames: 'fire', frost: 'ice', venom: 'poison' },
   armor: { warding: 'magic', embers: 'fire', silence: 'quiet' },
   shield: { steadfastness: 'steady', thorns: 'thorns' },
+  bow: { flames: 'fire', frost: 'ice', venom: 'poison' },
 };
 
-const CURSABLE = new Set(['weapon', 'armor', 'shield', 'ring', 'wand']);
+const CURSABLE = new Set(['weapon', 'armor', 'shield', 'bow', 'ring', 'wand']);
 
 /**
  * A tile's corners and tint for `item`, as far as `k` (the run's Knowledge) says you know it: { level, count, mark
@@ -57,7 +58,7 @@ export function tileInfo(item, k) {
   }
   if (item.kind === 'wand') count = item.identified ? `${item.charges}/${item.maxCharges}` : '?';
   else if (item.qty > 1) count = String(item.qty);
-  if (item.kind === 'weapon' || item.kind === 'armor' || item.kind === 'shield') {
+  if (['weapon', 'armor', 'shield', 'bow'].includes(item.kind)) {
     if (item.enchant && (item.identified || item.enchantKnown)) mark = MARK_OF[item.kind][item.enchant];
   } else if (k.isKnown(item)) mark = MARK_OF[item.kind]?.[item.type];
   return { level, count, mark: mark ? { name: mark, label: MARKS[mark] } : null, tint };

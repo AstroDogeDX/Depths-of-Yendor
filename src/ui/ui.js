@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { KIND_GLYPH, ARTEFACTS, ARMORS, CONTAINERS, wandRecharge } from '../items/defs.js';
+import { KIND_GLYPH, ARTEFACTS, ARMORS, BOWS, ARROWS, CONTAINERS, wandRecharge } from '../items/defs.js';
 import { equipSlotFor, equipItem, putAway, unequipItem, DOLL_SLOTS_FOR } from '../items/use.js';
 import { T } from '../dungeon/tiles.js';
 import { TRAP_COLORS } from '../world/level.js';
@@ -13,12 +13,15 @@ import { STATUSES } from '../status.js';
 import { BUILD, buildLabel } from '../build.js';
 import { tileInfo } from './tiles.js';
 import { iconHTML, markIcon } from './icons.js';
+import { archer, bowOf, quiverOf } from '../bow.js';
+import { baneOf } from '../items/enchant.js';
 
 const $ = (id) => document.getElementById(id);
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const KIND_COLOR = {
-  weapon: '#c8ccd4', offhand: '#ffa050', shield: '#b08050', armor: '#c0a880', scroll: '#e8dcb0', wand: '#a0c8ff', ring: '#e0a0ff',
+  weapon: '#c8ccd4', offhand: '#ffa050', shield: '#b08050', bow: '#c09060', arrow: '#d8c8a0', armor: '#c0a880', scroll: '#e8dcb0',
+  wand: '#a0c8ff', ring: '#e0a0ff',
   food: '#c09060', artefact: '#ffb040', amulet: '#ffd040', gold: '#ffd040',
 };
 // Floating text over the world, by class (see .popup in style.css): how many seconds it lasts, how far it rises
@@ -51,6 +54,7 @@ const DOLL_SLOTS = [
   { key: 'armor', label: 'Armor', x: 94, y: 88 },
   { key: 'weapon', label: 'Weapon', x: 14, y: 150 },
   { key: 'offhand', label: 'Off hand', x: 174, y: 150 },
+  { key: 'arrows', label: 'Arrows', x: 180, y: 94, small: true },
   { key: 'ring0', label: 'Ring', x: 20, y: 228, small: true },
   { key: 'ring1', label: 'Ring', x: 180, y: 228, small: true },
 ];
@@ -58,10 +62,13 @@ const equippedIn = (p, key) => {
   if (key === 'weapon') return p.equip.weapon;
   if (key === 'offhand') return p.equip.offhand;
   if (key === 'armor') return p.equip.armor;
+  if (key === 'arrows') return p.equip.arrows;
   if (key.startsWith('ring')) return p.equip.rings[+key[4]];
   return p.equip.artefacts[+key[3]];
 };
 const glyphColor = (k, it) => (it.kind === 'potion' ? hex(k.color(it)) : KIND_COLOR[it.kind]);
+/** Whether what's in your off hand is slung on your back (a shield, a bow) while you grip your weapon in both, or stowed. */
+const slung = (it) => it.kind === 'shield' || it.kind === 'bow';
 /** An item's icon (see icons.js), `scale` times its size, or its glyph if it has none yet. */
 const itemIcon = (k, it, scale) => iconHTML(it, k, { scale, fallback: `<span style="color:${glyphColor(k, it)}">${KIND_GLYPH[it.kind]}</span>` });
 /** What the pack's tooltip says over `el` (see UI.showTip): a thing's name, and a note under it; none, without a name. */
@@ -370,8 +377,13 @@ export class UI {
 
     const gear = [];
     gear.push(`<div>${p.equip.weapon ? k.name(p.equip.weapon) : 'bare hands'}${p.twoHanded ? ' <span class="grip">(both hands)</span>' : ''}</div>`);
-    const off = p.equip.offhand, slung = off?.kind === 'shield' ? 'on your back' : 'stowed';
-    if (off) gear.push(`<div class="off">${k.name(off)}${p.twoHanded ? ` <span class="grip">(${slung})</span>` : p.guarding ? ' <span class="grip">(raised)</span>' : ''}</div>`);
+    const off = p.equip.offhand, put = off && slung(off) ? 'on your back' : 'stowed';
+    if (off) gear.push(`<div class="off">${k.name(off)}${p.twoHanded ? ` <span class="grip">(${put})</span>` : p.guarding ? ' <span class="grip">(raised)</span>' : ''}</div>`);
+    // With a bow in hand, how many arrows are left.
+    if (archer(p)) {
+      const q = quiverOf(p);
+      gear.push(`<div class="off">${q ? `${q.qty} ${ARROWS[q.type].name}${q.qty > 1 ? 's' : ''} in your quiver` : '<span class="cd">your quiver is empty</span>'}</div>`);
+    }
     p.equip.artefacts.forEach((a, i) => {
       if (!a) return;
       const def = ARTEFACTS[a.type];
@@ -832,18 +844,22 @@ export class UI {
       el.classList.toggle('target', d.key === target);
       el.classList.toggle('dim', !!it && !!this.selectMode && !this.selectMode.filter(it));
       el.draggable = !!it && !this.selectMode;
-      // Gripping your weapon in both hands: it says so, and what's in your off hand is shown stowed.
-      el.classList.toggle('stowed', !!it && d.key === 'offhand' && p.twoHanded);
+      // Gripping your weapon in both hands: it says so, and what's in your off hand is shown stowed; with a bow in hand,
+      // your weapon is shown lowered.
+      el.classList.toggle('stowed', !!it && ((d.key === 'offhand' && p.twoHanded) || (d.key === 'weapon' && archer(p))));
       if (it) {
-        // Its + (a cursed ring's shown as what it does to you: against you).
-        const showPlus = it.identified && (['weapon', 'armor', 'shield'].includes(it.kind) || (it.kind === 'ring' && it.type !== 'teleportation'));
+        // Its + (a cursed ring's shown as what it does to you: against you), or how many arrows are in your quiver.
+        const showPlus = it.identified && (['weapon', 'armor', 'shield', 'bow'].includes(it.kind) || (it.kind === 'ring' && it.type !== 'teleportation'));
         const against = it.kind === 'ring' && it.curse > 0;
-        const plus = showPlus ? `<span class="de${against ? ' bad' : ''}">${against ? '−' : '+'}${it.plus}</span>` : '';
+        const plus = showPlus ? `<span class="de${against ? ' bad' : ''}">${against ? '−' : '+'}${it.plus}</span>`
+          : it.kind === 'arrow' ? `<span class="de">${it.qty}</span>` : '';
         const grip = d.key === 'weapon' && p.twoHanded ? '<span class="dh">2H</span>'
-          : d.key === 'offhand' && p.twoHanded ? `<span class="dh">${it.kind === 'shield' ? 'on back' : 'stowed'}</span>` : '';
+          : d.key === 'weapon' && archer(p) ? '<span class="dh">lowered</span>'
+          : d.key === 'offhand' && p.twoHanded ? `<span class="dh">${slung(it) ? 'on back' : 'stowed'}</span>` : '';
         el.innerHTML = `<span class="dg">${itemIcon(k, it, d.small ? 2 : 3)}</span>${plus}${grip}`;
         setTip(el, k.name(it), d.key === 'weapon' && p.twoHanded ? 'In both hands'
-          : d.key === 'offhand' && p.twoHanded ? (it.kind === 'shield' ? 'On your back' : 'Stowed') : '');
+          : d.key === 'weapon' && archer(p) ? 'Lowered, for your bow'
+          : d.key === 'offhand' && p.twoHanded ? (slung(it) ? 'On your back' : 'Stowed') : d.key === 'arrows' ? 'In your quiver' : '');
       } else {
         el.innerHTML = `<span class="dl">${d.label}</span>`;
         setTip(el, '');
@@ -857,24 +873,39 @@ export class UI {
     // An unknown + or curse must not leak through the numbers.
     const known = !wi || wi.identified;
     const mult = !wi || wi.curseKnown ? w.dmgMult : 1;
-    const heavy = w.short > 0; // (with your grip: see Player.weaponStats)
+    const heavy = w.short > 0 && !archer(p); // (with your grip: see Player.weaponStats)
     const slow = !!a && ARMORS[a.type].str > p.str;
     const lo = Math.max(1, Math.round((w.dmg[0] + (known ? w.plus : 0)) * mult));
     const hi = Math.max(1, Math.round((w.dmg[1] + (known ? w.plus : 0) + w.excess) * mult));
-    // Two label/value pairs per row: wide values on the left, short ones on the right.
-    const rows = [
+    // Two label/value pairs per row: wide values on the left, short ones on the right. With a bow in hand, its shots'.
+    const rows = archer(p) ? this.bowRows(p) : [
       ['Damage', `${lo}–${hi}${known ? '' : ' (+?)'} ${DAMAGE_TYPES[w.dmgType].name}`, heavy], ['Reach', `${w.reach}m`],
       ['Recovery', `${w.recharge.toFixed(2)}s`, heavy], ['Defense', String(p.defense)],
-      ['Speed', `${Math.round((p.moveSpeed() / PLAYER_SPEED) * 100)}%`, slow], ['Strength', String(p.str)],
     ];
+    rows.push(['Speed', `${Math.round((p.moveSpeed() / PLAYER_SPEED) * 100)}%`, slow], ['Strength', String(p.str)]);
     let html = rows.map(([label, v, bad]) => `<span>${label}</span><b${bad ? ' class="bad"' : ''}>${v}</b>`).join('');
-    if (heavy) {
+    if (archer(p)) html += `<div class="note">${quiverOf(p) ? 'Your bow is in hand, and your weapon lowered (F for your weapon).' : 'Your quiver is empty: put arrows in it.'}</div>`;
+    else if (heavy) {
       html += `<div class="warn">${p.twoHanded ? 'Your weapon is too heavy for you, even in both hands.'
         : w.short <= TWO_HAND_STR ? 'Your weapon is too heavy for you in one hand: F grips it in both.'
         : 'Your weapon is too heavy for you. Gripping it in both hands (F) would help.'}</div>`;
     } else if (p.twoHanded) html += '<div class="note">Your weapon is gripped in both hands (F for one).</div>';
     if (slow) html += '<div class="warn">Your armor is weighing you down.</div>';
     $('inv-stats').innerHTML = html;
+  }
+
+  /**
+   * The pack's stats for your bow, in hand (see renderDoll): what an arrow from it does at full draw (its + and curse
+   * only as far as you know them), how long it takes to draw, your defense, and the arrows in your quiver.
+   */
+  bowRows(p) {
+    const bow = bowOf(p), d = BOWS[bow.type], q = quiverOf(p), arrow = ARROWS[q?.type ?? 'standard'];
+    const plus = bow.identified ? bow.plus : 0, mult = bow.curseKnown ? baneOf(bow)?.dmgMult ?? 1 : 1;
+    const [lo, hi] = d.dmg.map((v) => Math.max(1, Math.round((v + plus + arrow.dmg) * mult)));
+    return [
+      ['Shot', `${lo}–${hi}${bow.identified ? '' : ' (+?)'} ${DAMAGE_TYPES[arrow.dmgType].name}`], ['Arrows', String(q?.qty ?? 0), !q],
+      ['Draw', `${d.draw.toFixed(2)}s`], ['Defense', String(p.defense)],
+    ];
   }
 
   /** Sets up the paper doll's slots: click to select what's in one, drag to or from them to put things on or away. */
@@ -1144,7 +1175,8 @@ export class UI {
 function equipTag(p, it) {
   const e = p.equip;
   if (e.weapon === it) return p.twoHanded ? 'in both hands' : 'in hand';
-  if (e.offhand === it) return p.twoHanded ? (it.kind === 'shield' ? 'on your back' : 'stowed') : 'in off hand';
+  if (e.offhand === it) return p.twoHanded ? (slung(it) ? 'on your back' : 'stowed') : 'in off hand';
+  if (e.arrows === it) return 'in quiver';
   if (e.armor === it) return 'worn';
   if (e.rings.includes(it)) return 'on finger';
   if (e.artefacts.includes(it)) return 'attuned';

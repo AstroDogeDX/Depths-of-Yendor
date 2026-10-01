@@ -9,9 +9,9 @@ import { stackable } from './items/generate.js';
 // back in the pack, so that needs room there.
 //
 // Things you hold in a hand (HAND_KINDS) hang at your belt on the hotbar: pressing the slot's key swaps one with what's
-// in that hand (see swapSlot), so you can change weapons, or take up your shield or your lantern, without opening the
-// pack. A lantern there still gives some light, hung at your belt (see Player.carriedLight).
-export const HAND_KINDS = new Set(['weapon', 'offhand', 'shield']);
+// in that hand (see swapSlot), so you can change weapons, or take up your shield, your bow or your lantern, without
+// opening the pack. A lantern there still gives some light, hung at your belt (see Player.carriedLight).
+export const HAND_KINDS = new Set(['weapon', 'offhand', 'shield', 'bow']);
 
 export function canHotbar(item) {
   return item.kind === 'potion' || item.kind === 'scroll' || item.kind === 'food' || item.kind === 'wand' ||

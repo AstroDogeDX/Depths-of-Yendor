@@ -6,7 +6,7 @@ import { Level } from './world/level.js';
 import { Player } from './player.js';
 import { Knowledge } from './items/identify.js';
 import { ARTEFACTS, WEAPONS, CONTAINERS } from './items/defs.js';
-import { makeItem, randomItem, nextItemUid, reserveUids } from './items/generate.js';
+import { makeItem, randomItem, nextItemUid, reserveUids, arrows, soldByThePile } from './items/generate.js';
 import { itemActions, activateArtefact, toggleGrip, useOffhand } from './items/use.js';
 import { ViewModel, HOLD_RAISE, HOLD_USE, actTime } from './fx/viewmodel.js';
 import { burst, ring, gasCloud, lightColumn } from './fx/particles.js';
@@ -21,6 +21,7 @@ import { TitleScene } from './ui/titleScene.js';
 import { SAVE_VERSION, SAVE_FORMAT, writeSave, deleteSave, fingerprint } from './save.js';
 import { damageTakenMult, hitStatuses } from './status.js';
 import { blockHit } from './shield.js';
+import { quiverOf } from './bow.js';
 import { BUILD } from './build.js';
 
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, matches stair `dir`
@@ -34,6 +35,8 @@ function ruined(item, fire) {
     food: fire ? ['is burnt to a crisp', 'are burnt to a crisp'] : ['is crushed', 'are crushed'],
     ring: fire ? ['is lost in the flames', 'are lost in the flames'] : ['is crushed', 'are crushed'],
     weapon: fire ? ['is lost in the flames', 'are lost in the flames'] : ['is broken', 'are broken'],
+    bow: fire ? ['burns', 'burn'] : ['snaps in two', 'snap in two'],
+    arrow: fire ? ['burns', 'burn'] : ['snaps', 'snap'],
   }[item.kind] ?? (fire ? ['is lost in the flames', 'are lost in the flames'] : ['is ruined', 'are ruined']);
   return item.qty > 1 ? many : one;
 }
@@ -540,6 +543,7 @@ export class Game {
       moving: p.moving, bob: p.bob, charge: p.charge, time: this.time, yaw: p.yaw, sprint: p.moving && p.mode === 'sprint',
       lightLevel: p.status.blind > 0 ? 0.1 : 1, carriedLight: p.carriedLight(),
       offhand: p.equip.offhand, guard: p.guard, twoHanded: p.twoHanded, held: this.heldItem(),
+      nock: p.nock, draw: p.draw, quiver: quiverOf(p)?.type ?? null,
     });
     this.interaction = this.findInteraction();
     this.target = this.findTarget();
@@ -640,10 +644,12 @@ export class Game {
     }
     if (best) {
       if (!best.price) return { kind: 'item', entry: best, label: `Pick up ${this.knowledge.name(best.item, { article: true })}` };
-      // Piles in the shop sell one at a time.
-      const name = this.knowledge.name({ ...best.item, qty: 1 }, { article: true });
-      const left = best.item.qty > 1 ? ` (${best.item.qty} left)` : '';
-      const label = p.gold >= best.price ? `Buy ${name} for ${best.price} gold${left}` : `${name}: ${best.price} gold (you have ${p.gold})`;
+      // Piles in the shop sell one at a time, and arrows by the pile, as many as you can pay for (see buy).
+      const pile = soldByThePile(best.item), n = pile ? Math.max(1, Math.min(best.item.qty, Math.floor(p.gold / best.price))) : 1;
+      const name = this.knowledge.name({ ...best.item, qty: n }, { article: true });
+      const left = best.item.qty <= 1 ? '' : !pile ? ` (${best.item.qty} left)` : n < best.item.qty ? ` (of ${best.item.qty})` : '';
+      const label = p.gold >= best.price ? `Buy ${name} for ${best.price * n} gold${left}`
+        : pile ? `${this.knowledge.name(best.item)}: ${best.price} gold each (you have ${p.gold})` : `${name}: ${best.price} gold (you have ${p.gold})`;
       return { kind: 'buy', entry: best, label: label[0].toUpperCase() + label.slice(1) };
     }
     const door = level.doorAt(level.toTile(p.x + fx * 1.4), level.toTile(p.z + fz * 1.4));
@@ -724,7 +730,9 @@ export class Game {
         : 'You pick up an iron key. Somewhere on this floor, a lock is waiting for it.', 'good');
       return;
     }
-    this.log(`You pick up ${k.name(item, { article: true })}.`);
+    // Arrows go into your quiver, if they're the kind in it (see Player.addItem).
+    const q = item.kind === 'arrow' && quiverOf(p);
+    this.log(`You pick up ${k.name(item, { article: true })}${q?.type === item.type ? `: ${q.qty} in your quiver` : ''}.`);
     if (item.kind === 'artefact') {
       this.log(`${ARTEFACTS[item.type].name}: ${ARTEFACTS[item.type].desc} Put it on from your pack.`, 'good');
     }
@@ -753,16 +761,18 @@ export class Game {
       level.shopkeeper?.cantAfford(this);
       return;
     }
-    const one = entry.item.qty > 1 ? { ...entry.item, qty: 1 } : entry.item; // piles sell one at a time
+    // Piles sell one at a time, and arrows by the pile, as many as you can pay for (see soldByThePile).
+    const n = soldByThePile(entry.item) ? Math.min(entry.item.qty, Math.floor(p.gold / entry.price)) : 1;
+    const one = entry.item.qty > n ? { ...entry.item, qty: n } : entry.item;
     if (!p.addItem(one)) {
       this.log('Your pack is full.', 'warn');
       return;
     }
-    p.gold -= entry.price;
+    p.gold -= entry.price * n;
     if (one === entry.item) level.removeItem(entry);
-    else entry.item.qty--;
+    else entry.item.qty -= n;
     this.audio.coins();
-    this.log(`You buy ${this.knowledge.name(one, { article: true })} for ${entry.price} gold.`, 'good');
+    this.log(`You buy ${this.knowledge.name(one, { article: true })} for ${entry.price * n} gold.`, 'good');
     this.noteContainer(one);
     level.shopkeeper?.sold(this, level);
   }
@@ -998,6 +1008,7 @@ export class Game {
     }
     const at = level.landSpot(m.x, m.z);
     if (m.guardian || rand.chance(0.12)) level.addItem(randomItem(rand, level.depth), at.x, at.z);
+    if (m.def.ranged?.kind === 'arrow' && rand.chance(0.4)) level.addItem(arrows(rand, 2, 5), at.x - 0.3, at.z - 0.2); // some of its arrows
     if (rand.chance(0.15)) level.addItem(makeItem('gold', 'gold', { qty: rand.int(4, 12) + Math.round(danger(level.depth) * 3) }), at.x + 0.3, at.z + 0.2);
   }
 

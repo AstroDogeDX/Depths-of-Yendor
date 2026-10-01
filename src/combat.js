@@ -9,10 +9,13 @@ export function lookDir(p) {
   return { x: -Math.sin(p.yaw) * cp, y: Math.sin(p.pitch), z: -Math.cos(p.yaw) * cp };
 }
 
-/** Resolve the player's melee swing at the moment the blade connects. power is 0.3..1 from the attack meter. */
-export function playerStrike(game, power) {
+/**
+ * Resolve the player's melee swing at the moment the blade connects. power is 0.3..1 from the attack meter. `w`: what
+ * strikes, as Player.weaponStats gives it; `jab`: it's a jab with an arrow (see bow.js), which teaches you nothing of
+ * your weapon.
+ */
+export function playerStrike(game, power, w = game.player.weaponStats(), jab = false) {
   const p = game.player, level = game.level;
-  const w = p.weaponStats();
   const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
 
   // The nearest monster in reach, in front of you; your allies only if there's nothing else to hit.
@@ -78,7 +81,7 @@ export function playerStrike(game, power) {
   if (p.hasArtefact('ember') && !m.dead) m.afflict(game, 'burning', 3, false);
 
   const weapon = p.equip.weapon;
-  if (weapon && !weapon.identified && --weapon.hitsToId <= 0) {
+  if (weapon && !jab && !weapon.identified && --weapon.hitsToId <= 0) {
     game.knowledge.identify(weapon);
     game.log(`You are now familiar enough with your weapon to know it: ${game.knowledge.name(weapon)}.`, 'info');
   }

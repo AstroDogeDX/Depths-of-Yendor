@@ -10,16 +10,17 @@ const ORB_GEO = new THREE.IcosahedronGeometry(1, 0);
  * o: { x, y, z, vx, vy, vz, owner: 'monster'|'player'|'ally', attacker (the monster that shot it), dmg, kind, color,
  *      size, source,
  *      type? (its damage type, see damage.js: fire sets what it hits burning), harmless? (a spell that does no harm:
- *      teleport other), gravity?, life?, onImpact?(game, pr, target) }
+ *      teleport other), gravity?, life?, mesh? (a model of its own: an arrow's points +z, the way it flies),
+ *      onImpact?(game, pr, target) }
  * A shot stops at a shut chest. One of yours strikes it (see Game.hitChest), and if that wakes a mimic, the shot hits
  * the mimic; `pr.chest` is the chest it hit.
  */
 export function spawnProjectile(level, o) {
   let mesh;
-  if (o.kind === 'arrow') {
-    mesh = new THREE.Mesh(ARROW_GEO, new THREE.MeshLambertMaterial({ color: o.color }));
-  } else if (o.mesh) {
+  if (o.mesh) {
     mesh = o.mesh;
+  } else if (o.kind === 'arrow') {
+    mesh = new THREE.Mesh(ARROW_GEO, new THREE.MeshLambertMaterial({ color: o.color }));
   } else {
     mesh = new THREE.Mesh(ORB_GEO, new THREE.MeshBasicMaterial({ color: o.color, fog: false }));
     mesh.scale.setScalar(o.size ?? 0.15);

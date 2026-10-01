@@ -18,7 +18,7 @@ No install needed: it runs in any modern desktop browser, with a keyboard and mo
 - **Rogue in real time:** an attack meter instead of turns, monsters that telegraph their blows so you can step out of reach, and sneak attacks on sleeping or unaware monsters. Monsters see you and hear your footsteps, so sprinting is fast but loud, and sneaking is slow but near-silent.
 - **13 monsters,** from rats and oozes to trolls, stone golems and the Warden of Yendor, each with its own strengths and weaknesses: a mace is the answer to skeletons, fire is the troll's bane. Some of the chests are mimics.
 - **Unidentified items:** potions, scrolls, wands and rings look different every run, so you learn what they do by using them. Some equipment is cursed, and won't come off.
-- **Loot and gear:** weapons you can grip in one hand or two, shields to raise against blows, armour, potions, scrolls, wands, rings and food, mostly found in chests, the best in locked ones. Artefacts of power wait in guarded shrines, and a shop opens on the first floor of each theme after the first.
+- **Loot and gear:** weapons you can grip in one hand or two, shields to raise against blows, bows and arrows, armour, potions, scrolls, wands, rings and food, mostly found in chests, the best in locked ones. Artefacts of power wait in guarded shrines, and a shop opens on the first floor of each theme after the first.
 - **Traps, locked rooms and keys,** and floors that stay as you left them when you go back up.
 - **Made in code:** the dungeon, its textures and the sound are all generated, and the models are [Blockbench](https://www.blockbench.net) projects built by code too.
 
@@ -28,15 +28,15 @@ No install needed: it runs in any modern desktop browser, with a keyboard and mo
 | --- | --- |
 | WASD / arrows | Move (← → turn) |
 | Mouse | Look (click the view to capture the pointer) |
-| Click / Space | Attack: a full meter hits hardest |
+| Click / Space | Attack: a full meter hits hardest (with a bow in hand, jab with an arrow) |
 | Shift | Sprint: fast, but loud |
 | C | Sneak: slow and near-silent, for sneak attacks and creeping over traps you've found |
 | E | Pick up, open a chest or door, buy, use stairs |
 | I or Tab | Your pack |
 | M | Map |
-| 1–4 | Hotbar: scrolls and food are used at once; hold the key for a potion or wand, then click to throw or zap it, or right-click to drink it or zap yourself. A weapon, lantern or shield there swaps into your hand |
-| F | Grip your weapon in both hands, or one |
-| Right-click | Hold to raise your shield (click to shove with it) |
+| 1–4 | Hotbar: scrolls and food are used at once; hold the key for a potion or wand, then click to throw or zap it, or right-click to drink it or zap yourself. A weapon, lantern, shield or bow there swaps into your hand |
+| F | Grip your weapon in both hands, or one (with a bow, change between your bow and your weapon) |
+| Right-click | Hold to raise your shield (click to shove with it), or nock an arrow to your bow (hold click to draw, let go to shoot) |
 | Q | Drink a potion you know is healing |
 | R / T | Artefact powers |
 | P | Pixel size |
