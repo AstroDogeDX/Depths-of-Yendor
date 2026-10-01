@@ -115,14 +115,15 @@ export const FOOD = {
   apple:  { name: 'withered apple', nutrition: 250, value: 5, desc: 'Better than nothing.' },
 };
 
-// What you can hold in your off hand (Player.equip.offhand), in place of the torch you start with. While you grip
+// What you can hold in your off hand (Player.equip.offhand), in place of the lantern you start with. While you grip
 // your weapon in both hands (F), it's stowed: `stow` and `unstow` say how. `light`: how brightly it lights your way
-// held up, and `stowedLight` stowed (a share of the torch's light: see Player.torchLight). `use`: what right-clicking
-// does with it, a key of OFFHAND_USES in use.js (none yet). `model`: its Blockbench model in assets/models/.
+// held up, and `stowedLight` stowed (a share of the lantern's light: see Player.carriedLight). `use`: what
+// right-clicking does with it, a key of OFFHAND_USES in use.js (none yet). `model`: its Blockbench model in
+// assets/models/. `stands`: on the floor it stands up, where most things lie on their side.
 export const OFFHANDS = {
-  torch: { name: 'torch', value: 10, light: 1, stowedLight: 0.45, model: 'torch',
-           stow: 'tuck your torch into your belt', unstow: 'hold your torch up again',
-           desc: 'A pitch-soaked brand, burning steadily. Held up in your off hand, it lights your way. While you grip your weapon in both hands, it hangs at your belt, and lights far less.' },
+  lantern: { name: 'lantern', value: 10, light: 1, stowedLight: 0.45, model: 'hand_lantern', stands: true,
+             stow: 'hang your lantern from your belt', unstow: 'hold your lantern up again',
+             desc: 'An iron lantern with a brass cap, its oil burning steadily behind glass. Held up in your off hand, it lights your way. While you grip your weapon in both hands, it hangs at your belt, and lights far less.' },
 };
 
 // Pack expansions (kind 'container'). Each has CONTAINER_SIZE slots of its own, on a tab of the pack, for the kinds of

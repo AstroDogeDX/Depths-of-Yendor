@@ -4,11 +4,11 @@ import { buildBBModel } from '../items/bbmodel.js';
 import { MODEL_PX } from '../config.js';
 import { glowSprite } from './glow.js';
 import { Flame } from './flame.js';
-import torchModel from '../../assets/models/torch.bbmodel';
+import lanternModel from '../../assets/models/hand_lantern.bbmodel';
 
-// First-person hands: weapon on the right, what's in your off hand (the torch) on the left. Rendered in its own
+// First-person hands: weapon on the right, what's in your off hand (the lantern) on the left. Rendered in its own
 // scene after the world (with the depth buffer cleared) so the weapon never clips into walls. Gripped in both hands
-// (F), the weapon takes a two-handed pose (see SLASH_2H), and the torch goes down out of sight, to your belt.
+// (F), the weapon takes a two-handed pose (see SLASH_2H), and the lantern goes down out of sight, to your belt.
 
 // The weapon hangs off four nested groups so its edge always leads the cut:
 //   pivot (hand position + yaw) -> plane (roll: tilts the plane the cut travels in)
@@ -73,6 +73,14 @@ const ACTS = {
   self: { dur: 0.55, pose: (k) => ({ p: [-0.12 * k, 0.06 * k, 0.12 * k], r: [0, 2.4 * k, 0] }) }, // turned on yourself
 };
 
+// Where your off hand holds the lantern up, by the top of its bail, how big it looks, and how far it's turned to show
+// you a corner; it hangs below. And how it swings from there: a
+// pendulum (`pull` toward where it would hang still, `damp` the slowing), pulled out as you turn (`turn` radians for
+// each radian a second you turn, up to `most`), back as you walk or run (`walk`, `run`), and a little side to side
+// with each stride (`stride`).
+const LANTERN_AT = [-0.4, -0.03, -0.9], LANTERN_SCALE = 0.86, LANTERN_TURN = 0.55;
+const LANTERN_SWING = { pull: 55, damp: 3.2, turn: 0.09, most: 0.5, walk: 0.1, run: 0.24, stride: 0.07 };
+
 const smooth = (x) => x * x * (3 - 2 * x);
 const lerp = (a, b, k) => a + (b - a) * k;
 const blend = (a, b, k) => ({
@@ -95,9 +103,8 @@ export class ViewModel {
     this.camera = new THREE.PerspectiveCamera(62, 1, 0.01, 10);
     this.ambient = new THREE.AmbientLight(0xffe0c0, 0.7);
     this.scene.add(this.ambient);
-    this.torchLight = new THREE.PointLight(0xffa050, 2.2, 3, 1.5);
-    this.torchLight.position.set(-0.4, -0.15, -0.7);
-    this.scene.add(this.torchLight);
+    this.light = new THREE.PointLight(0xffa050, 2.2, 3, 1.5); // your lantern's, on your weapon (see update)
+    this.scene.add(this.light);
 
     this.weaponPivot = new THREE.Group();
     this.weaponPlane = new THREE.Group();
@@ -111,27 +118,33 @@ export class ViewModel {
     this.keys = SLASH; // one-handed
     this.keys2 = SLASH_2H; // two-handed
     this.grip = 0; // eases between one hand (0) and two (1)
-    this.torchUp = 1; // eases between the torch held up (1) and down out of sight (0)
+    this.lanternUp = 1; // eases between the lantern held up (1) and down out of sight at your belt (0)
     this.swingT = -1;
     this.swingDur = 0.3;
     this.dipT = -1;
 
-    // Torch: a Blockbench model whose empty "flame" group marks where the fire sits. Its glowing crown
-    // uses an emissive (unlit) texture, which pulses with the flame.
-    this.torch = new THREE.Group();
-    const model = buildBBModel(torchModel, MODEL_PX);
-    this.embers = model.children.find((m) => m.material.isMeshBasicMaterial)?.material;
-    const top = new THREE.Vector3().fromArray(model.userData.anchors.flame);
-    this.flame = new Flame({ width: 0.14, height: 0.26, pixel: 0.01 });
-    this.flame.position.copy(top);
-    this.halo = glowSprite(0xff9030, 0.42, 0.55);
-    this.halo.position.set(top.x, top.y + 0.07, top.z);
-    this.torch.add(model, this.flame, this.halo);
+    // The lantern: a Blockbench model held by its origin, at the top of its bail, whose empty "flame" group marks where
+    // its flame stands. Its glass is additive, lit from within, and brightens and dims with the flame.
+    // (`lantern` swings from your hand, and the lantern turns within it.)
+    this.lantern = new THREE.Group();
+    const body = new THREE.Group();
+    const model = buildBBModel(lanternModel, MODEL_PX);
+    this.glass = model.children.find((m) => m.material.blending === THREE.AdditiveBlending)?.material;
+    const wick = new THREE.Vector3().fromArray(model.userData.anchors.flame);
+    this.flame = new Flame({ width: 0.05, height: 0.09, pixel: 0.006 });
+    this.flame.position.copy(wick);
+    this.halo = glowSprite(0xffa040, 0.32, 0.45);
+    this.halo.position.set(wick.x, wick.y + 0.03, wick.z);
+    body.add(model, this.flame, this.halo);
+    body.rotation.y = LANTERN_TURN;
+    this.lantern.add(body);
+    this.lantern.scale.setScalar(LANTERN_SCALE);
+    this.scene.add(this.lantern);
+    // How it swings (see LANTERN_SWING): `x` back and forth and `z` side to side, in radians, and how fast each is
+    // changing. (Not `swing`: that's the weapon's, below.)
+    this.pendulum = { x: 0, z: 0, vx: 0, vz: 0 };
     this.lean = 0;
     this.lastYaw = null;
-    this.torch.position.set(-0.5, -0.52, -0.95);
-    this.torch.rotation.set(-0.25, 0, 0.2);
-    this.scene.add(this.torch);
 
     // What's held up from the hotbar (see update's `held`): `heldItem` the item it shows, and `swap` how far along the
     // change is: 0 the weapon up, 0.5 both down, 1 the item up.
@@ -194,10 +207,11 @@ export class ViewModel {
   }
 
   /**
-   * `offhand`: the type of what's in your off hand (only the torch has a model yet), or null; `twoHanded`: your weapon
-   * gripped in both hands, with it stowed; `torchLight`: how brightly your torch lights you (Player.torchLight).
+   * `offhand`: the type of what's in your off hand (only the lantern has a model yet), or null; `twoHanded`: your
+   * weapon gripped in both hands, with it stowed; `carriedLight`: how brightly your lantern lights you
+   * (Player.carriedLight).
    */
-  update(dt, { moving, bob, charge, time, lightLevel, torchLight = 1, offhand = 'torch', twoHanded = false, yaw = 0, sprint = false, held = null }) {
+  update(dt, { moving, bob, charge, time, lightLevel, carriedLight = 1, offhand = 'lantern', twoHanded = false, yaw = 0, sprint = false, held = null }) {
     // What's held up from the hotbar: a new one waits for the last to go down (or, from the weapon, goes straight in).
     const want = held?.item ?? null;
     if (want !== this.heldItem && this.swap <= 0.5) this.showHeld(want, held?.color);
@@ -206,10 +220,10 @@ export class ViewModel {
     this.swap = to > this.swap ? Math.min(to, this.swap + step) : Math.max(to, this.swap - step);
     const lowered = smooth(Math.min(1, this.swap * 2)), raised = smooth(Math.max(0, this.swap * 2 - 1));
 
-    // Changing grip eases the weapon between its poses, and the torch up or down.
+    // Changing grip eases the weapon between its poses, and the lantern up or down.
     const ease = Math.min(1, dt * 9);
     this.grip += ((twoHanded ? 1 : 0) - this.grip) * ease;
-    this.torchUp += ((offhand === 'torch' && !twoHanded ? 1 : 0) - this.torchUp) * ease;
+    this.lanternUp += ((offhand === 'lantern' && !twoHanded ? 1 : 0) - this.lanternUp) * ease;
     const at = (t) => blend(sample(this.keys, t), sample(this.keys2, t), this.grip);
     let pose = at(0);
     if (this.swingT >= 0) {
@@ -240,22 +254,35 @@ export class ViewModel {
     this.weaponArc.rotation.set(pose.arc, 0, 0);
     this.weaponTwist.rotation.set(0, pose.twist, 0);
     this.updateHeld(dt, raised, bx, by);
-    const down = 1 - this.torchUp;
-    this.torch.position.set(-0.5 - bx, -0.52 + by - down * 0.75, -0.95);
-    this.torch.visible = this.torchUp > 0.01;
+    const down = 1 - this.lanternUp;
+    this.lantern.position.set(LANTERN_AT[0] - bx, LANTERN_AT[1] + by - down * 0.75, LANTERN_AT[2]);
+    this.lantern.visible = this.lanternUp > 0.01;
 
-    const flick = 0.85 + Math.sin(time * 23) * 0.06 + Math.sin(time * 7.3) * 0.08;
-    // The flame trails behind when you turn and sways with your stride.
+    // The lantern swings from your hand (see LANTERN_SWING), and settles slowly. (A long frame is taken in steps, so a stall
+    // can't fling it about.)
     const turn = this.lastYaw === null || dt <= 0 ? 0 : Math.atan2(Math.sin(yaw - this.lastYaw), Math.cos(yaw - this.lastYaw)) / dt;
     this.lastYaw = yaw;
-    const leanTo = THREE.MathUtils.clamp(turn * 0.18, -0.4, 0.4) + (moving ? Math.sin(bob) * 0.06 * sway : 0);
-    this.lean += (leanTo - this.lean) * Math.min(1, dt * 10);
+    const s = this.pendulum, S = LANTERN_SWING;
+    const toZ = THREE.MathUtils.clamp(turn * S.turn, -S.most, S.most) + (moving ? Math.sin(bob) * S.stride * sway : 0);
+    const toX = moving ? (sprint ? S.run : S.walk) : 0;
+    for (let left = Math.min(dt, 0.1); left > 0; left -= 0.02) {
+      const h = Math.min(left, 0.02);
+      s.vz += (-(s.z - toZ) * S.pull - s.vz * S.damp) * h;
+      s.vx += (-(s.x - toX) * S.pull - s.vx * S.damp) * h;
+      s.z += s.vz * h;
+      s.x += s.vx * h;
+    }
+    this.lantern.rotation.set(-s.x, 0, s.z);
+    // Behind glass, its flame burns steadier than a torch's, upright however the lantern hangs (see Flame), leaning a
+    // little as it swings.
+    const flick = 0.9 + Math.sin(time * 17) * 0.04 + Math.sin(time * 5.3) * 0.05;
+    this.lean += (THREE.MathUtils.clamp(-s.vz * 0.15, -0.3, 0.3) - this.lean) * Math.min(1, dt * 10);
     this.flame.update(time, flick, this.lean);
-    if (this.embers) this.embers.color.setScalar(0.8 + (flick - 0.85) * 1.6);
-    this.halo.material.opacity = 0.45 + (flick - 0.85) * 1.5;
-    // The torch lights your weapon from where it is: up beside it, or low at your belt.
-    this.torchLight.position.set(-0.4, -0.15 - down * 0.6, -0.7);
-    this.torchLight.intensity = 2.2 * flick * lightLevel * torchLight;
+    if (this.glass) this.glass.color.setScalar(0.62 + (flick - 0.9) * 1.6);
+    this.halo.material.opacity = 0.4 + (flick - 0.9) * 1.5;
+    // It lights your weapon from where its flame is: up beside it, or low at your belt.
+    this.flame.getWorldPosition(this.light.position);
+    this.light.intensity = 2.2 * flick * lightLevel * carriedLight;
     this.ambient.intensity = 0.25 + lightLevel * 0.45;
   }
 

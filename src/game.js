@@ -49,8 +49,8 @@ export class Game {
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.05, 80);
     this.camera.rotation.order = 'YXZ';
     this.scene.add(this.camera);
-    this.torch = new THREE.PointLight(0xffb060, 26, 28, 1.7);
-    this.scene.add(this.torch);
+    this.lantern = new THREE.PointLight(0xffb060, 26, 28, 1.7); // the lantern you carry (see updateCamera)
+    this.scene.add(this.lantern);
     this.ambient = new THREE.AmbientLight(0xffffff, 5);
     this.scene.add(this.ambient);
 
@@ -141,14 +141,14 @@ export class Game {
     this.beginRun(seed || Math.random().toString(36).slice(2, 8).toUpperCase(), name || 'Adventurer');
     const p = this.player;
     const sword = makeItem('weapon', 'shortsword', { identified: true, curseKnown: true, hitsToId: 0 });
-    const torch = makeItem('offhand', 'torch');
+    const lantern = makeItem('offhand', 'lantern');
     const armor = makeItem('armor', 'leather', { identified: true, curseKnown: true, hitsToId: 0 });
     p.addItem(sword);
-    p.addItem(torch);
+    p.addItem(lantern);
     p.addItem(armor);
     p.addItem(makeItem('food', 'ration'));
     p.equip.weapon = sword;
-    p.equip.offhand = torch;
+    p.equip.offhand = lantern;
     p.equip.armor = armor;
     this.viewmodel.setWeapon(WEAPONS.shortsword);
 
@@ -537,7 +537,7 @@ export class Game {
     const p = this.player;
     this.viewmodel.update(dt, {
       moving: p.moving, bob: p.bob, charge: p.charge, time: this.time, yaw: p.yaw, sprint: p.moving && p.mode === 'sprint',
-      lightLevel: p.status.blind > 0 ? 0.1 : 1, torchLight: p.torchLight(),
+      lightLevel: p.status.blind > 0 ? 0.1 : 1, carriedLight: p.carriedLight(),
       offhand: p.equip.offhand?.type ?? null, twoHanded: p.twoHanded, held: this.heldItem(),
     });
     this.interaction = this.findInteraction();
@@ -563,14 +563,15 @@ export class Game {
     }
     cam.rotation.set(pitch, yaw, roll);
 
-    // The torch you carry is the main light: held up, slightly left of and ahead of your eyes; stowed while you grip
-    // your weapon in both hands, lower down at your belt, and dimmer (see Player.torchLight).
+    // The lantern you carry is the main light: held up, slightly left of and ahead of your eyes, and swaying as it
+    // swings from your hand (see ViewModel.pendulum); stowed while you grip your weapon in both hands, lower down at your
+    // belt, and dimmer (see Player.carriedLight). Its flame burns behind glass, so it flickers only a little.
     const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
-    const held = p.twoHanded ? 0 : 1;
-    this.torch.position.set(p.x + fx * 0.35 * held + fz * 0.25, eye - 0.1 - 0.6 * (1 - held), p.z + fz * 0.35 * held - fx * 0.25);
-    const flick = 0.9 + Math.sin(this.time * 21) * 0.04 + Math.sin(this.time * 7.7) * 0.06;
+    const held = p.twoHanded ? 0 : 1, sway = this.viewmodel.pendulum.z * 0.3 * held;
+    this.lantern.position.set(p.x + fx * 0.35 * held + fz * (0.25 - sway), eye - 0.1 - 0.6 * (1 - held), p.z + fz * 0.35 * held - fx * (0.25 - sway));
+    const flick = 0.95 + Math.sin(this.time * 17) * 0.02 + Math.sin(this.time * 5.3) * 0.03;
     const blind = p.status.blind > 0;
-    this.torch.intensity = (blind ? 4 : 26) * flick * p.torchLight();
+    this.lantern.intensity = (blind ? 4 : 26) * flick * p.carriedLight();
     this.scene.fog.far = blind ? 4 : this.level.theme.fogFar;
     this.ambient.intensity = blind ? 0.8 : 5;
   }

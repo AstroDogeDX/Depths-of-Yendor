@@ -161,24 +161,24 @@ export const ICONS = {
   ] },
 
   // --- Off hand
-  'offhand:torch': { map: [
+  'offhand:lantern': { map: [
     '................',
-    '............c...',
-    '...........cbc..',
-    '..........cbabc.',
-    '..........baabd.',
-    '.........IJbd...',
-    '........EG......',
-    '.......EG.......',
-    '......EG........',
-    '.....EG.........',
-    '....EG..........',
-    '...EG...........',
-    '..EG............',
-    '.FG.............',
+    '......CCCC......',
+    '.....C....C.....',
+    '.....C.LM.C.....',
+    '.....KLLLMN.....',
+    '....KLLLLMMN....',
+    '...KLLLLLMMMN...',
+    '....DiiiiiiD....',
+    '....DihhhhiD....',
+    '....DhhgbhhD....',
+    '....DhgbaghD....',
+    '....DhgcbghD....',
+    '....DhhMNhhD....',
+    '...KLLLLLMMMN...',
+    '....MMMMNNNN....',
     '................',
-    '................',
-  ] },
+  ], colors: { g: '#ffd27a', h: '#d8883a', i: '#8c4c1c' } },
 
   // --- Armour: one tunic's shape, in leather, mail or plate.
   'armor:leather': { map: [

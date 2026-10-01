@@ -47,8 +47,8 @@ export class Player {
     this.inventory = [];
     this.containers = []; // the pack expansions you have (see bags), by type
     this.equip = { weapon: null, offhand: null, armor: null, rings: [null, null], artefacts: [null, null] };
-    // Your weapon gripped in both hands (F), with whatever's in your off hand stowed: it can't be used, and a torch
-    // lights less (see torchLight). Only ever with a weapon in hand.
+    // Your weapon gripped in both hands (F), with whatever's in your off hand stowed: it can't be used, and a lantern
+    // lights less (see carriedLight). Only ever with a weapon in hand.
     this.twoHanded = false;
     this.hotbar = new Array(HOTBAR_SIZE).fill(null);
     this.keys = {}; // depth -> iron keys held for that floor (for its locked doors)
@@ -148,10 +148,10 @@ export class Player {
   }
 
   /**
-   * How brightly the torch you carry lights your way, as a share of its full light: what's in your off hand gives
+   * How brightly the lantern you carry lights your way, as a share of its full light: what's in your off hand gives
    * its `light` held up, its `stowedLight` stowed while you grip your weapon in both hands (see OFFHANDS). 0 without.
    */
-  torchLight() {
+  carriedLight() {
     const o = this.equip.offhand;
     return o ? (this.twoHanded ? OFFHANDS[o.type].stowedLight : OFFHANDS[o.type].light) ?? 0 : 0;
   }

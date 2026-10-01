@@ -78,7 +78,7 @@ function lyingWeapon(item) {
 }
 
 // An off-hand thing (items/defs.js OFFHANDS) has the one model, in your hand (see ViewModel) or on the floor: the
-// torch is assets/models/torch.bbmodel. On the floor it lies on its side, like a weapon.
+// lantern is assets/models/hand_lantern.bbmodel. On the floor it lies on its side, like a weapon, unless it `stands`.
 const HELD_FILES = import.meta.glob('../../assets/models/*.bbmodel', { import: 'default', eager: true });
 
 function lyingOffhand(item) {
@@ -89,8 +89,10 @@ function lyingOffhand(item) {
     itemCache.set(key, src ? buildBBModel(src, MODEL_PX) : box(0.05, 0.4, 0.05, lam(0x8a5a2a), 0, 0.2));
   }
   const m = itemCache.get(key).clone();
-  m.rotation.z = Math.PI / 2.2;
-  m.position.x = -new THREE.Box3().setFromObject(m).getCenter(new THREE.Vector3()).x;
+  if (!OFFHANDS[item.type].stands) m.rotation.z = Math.PI / 2.2;
+  // Centred on the item's spot, about which floor items turn (standing, its middle too, where they bob).
+  const mid = new THREE.Box3().setFromObject(m).getCenter(new THREE.Vector3());
+  m.position.set(-mid.x, OFFHANDS[item.type].stands ? -mid.y : 0, OFFHANDS[item.type].stands ? -mid.z : 0);
   return m;
 }
 

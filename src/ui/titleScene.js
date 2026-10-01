@@ -25,9 +25,9 @@ export class TitleScene {
     this.scene.fog = new THREE.Fog(0x000000, 2, 20);
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.05, 80);
     this.camera.rotation.order = 'YXZ';
-    this.torch = new THREE.PointLight(0xffb060, 24, 26, 1.7);
+    this.lantern = new THREE.PointLight(0xffb060, 24, 26, 1.7);
     this.ambient = new THREE.AmbientLight(0xffffff, 5);
-    this.scene.add(this.camera, this.torch, this.ambient);
+    this.scene.add(this.camera, this.lantern, this.ambient);
     this.themeIndex = -1;
     this.token = 0; // bumped by stop(), so a walk still waiting for its props doesn't start after all
     this.built = null;
@@ -122,10 +122,10 @@ export class TitleScene {
     const bob = Math.sin(this.dist * 3.4) * 0.025;
     this.camera.position.set(pos.x, pos.y + bob, pos.z);
     this.camera.rotation.set(this.pitch, this.yaw, Math.sin(this.t * 0.4) * 0.012);
-    // The torch you carry, a little ahead and to the left.
+    // The lantern you carry, a little ahead and to the left, its flame steady behind glass (as in Game.updateCamera).
     const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw);
-    this.torch.position.set(pos.x + fx * 0.35 + fz * 0.25, pos.y - 0.1, pos.z + fz * 0.35 - fx * 0.25);
-    this.torch.intensity = 24 * (0.9 + Math.sin(this.t * 21) * 0.04 + Math.sin(this.t * 7.7) * 0.06);
+    this.lantern.position.set(pos.x + fx * 0.35 + fz * 0.25, pos.y - 0.1, pos.z + fz * 0.35 - fx * 0.25);
+    this.lantern.intensity = 24 * (0.95 + Math.sin(this.t * 17) * 0.02 + Math.sin(this.t * 5.3) * 0.03);
 
     const left = this.length - this.dist;
     this.fade = Math.max(1 - this.t / FADE_IN, left < this.descent ? 1 - left / this.descent : 0);

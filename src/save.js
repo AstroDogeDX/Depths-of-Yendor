@@ -50,6 +50,7 @@ export function readSave() {
  * - A wand takes a few zaps to know now (item.zapsToId, see zapWand).
  * - The torch was always in your off hand: now it's a thing you carry, in the off-hand slot (Player.equip.offhand),
  *   so a save from before gets one there.
+ * - The torch you carried is a lantern now.
  * - Before format 2, the scroll of enchanting was what's now the scroll of upgrade, and an item's enchantment could be
  *   negative: now it's a + of 0 or more, a curse is a strength (item.curse), and a cursed weapon or armour has a Curse
  *   of ___ (see items/enchant.js). A cursed ring's old minus becomes a + that works against you, as before.
@@ -61,6 +62,7 @@ function upgrade(save) {
   const fix = (it) => {
     if (!it) return;
     if (it.kind === 'wand' && it.type === 'slow') it.type = 'frost';
+    if (it.kind === 'offhand' && it.type === 'torch') it.type = 'lantern';
     if (it.kind === 'wand' && 'charges' in it && it.zapsToId === undefined) it.zapsToId = WAND_ZAPS_TO_ID; // not a hotbar binding
     if (!old) return;
     if (it.kind === 'scroll' && it.type === 'enchant') it.type = 'upgrade';
@@ -89,9 +91,9 @@ function upgrade(save) {
   const pl = save.player;
   if (!('offhand' in pl.equip)) {
     // (As makeItem makes it, with the next uid the save has: it always fits, like the Amulet.)
-    const torch = { uid: save.nextUid++, kind: 'offhand', type: 'torch', qty: 1, plus: 0, curse: 0, identified: true, curseKnown: false };
-    pl.inventory.push(torch);
-    pl.equip.offhand = torch.uid;
+    const lantern = { uid: save.nextUid++, kind: 'offhand', type: 'lantern', qty: 1, plus: 0, curse: 0, identified: true, curseKnown: false };
+    pl.inventory.push(lantern);
+    pl.equip.offhand = lantern.uid;
   }
   const bar = pl.hotbar;
   for (const b of bar.splice(HOTBAR_SIZE).filter(Boolean)) {

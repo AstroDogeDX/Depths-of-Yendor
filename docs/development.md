@@ -22,7 +22,7 @@ For testing by hand, press **`** (the key left of 1) during a run to open the de
 
 - **Travel:** jump straight to any of the 25 floors, arriving at its entrance as if you'd walked down (boss floors are marked red, shop floors gold). **New layout** builds the floor you're on again from a new seed, for a quick look at another layout. **Reveal map** maps the whole floor and shows its hidden traps, and **To the stairs down** puts you at its exit.
 - **You:** god mode (nothing can hurt you), health and maximum health, strength, levelling up, gold, **Restore** (full health and stamina, fed, every status cleared) and **Kill every monster**.
-- **Items:** make any weapon, off-hand thing (the torch), armour, potion, scroll, wand, ring, artefact or food, or the Amulet, or an iron or gold key for this floor, with the +N (a charge more each, for a wand), quantity, curse (none, weakened or full), enchantment and identification you choose. It goes in your pack, or on the floor in front of you when the pack is full. **Identify everything** teaches you every potion, scroll, wand and ring, and identifies what you carry.
+- **Items:** make any weapon, off-hand thing (the lantern), armour, potion, scroll, wand, ring, artefact or food, or the Amulet, or an iron or gold key for this floor, with the +N (a charge more each, for a wand), quantity, curse (none, weakened or full), enchantment and identification you choose. It goes in your pack, or on the floor in front of you when the pack is full. **Identify everything** teaches you every potion, scroll, wand and ring, and identifies what you carry.
 - **Monsters:** spawn any monster a few steps in front of you, awake or asleep. The mimic comes awake, as a monster: to meet one passing for a chest, use *Chests*.
 - **Traps:** lay a trap of any kind on the floor in front of you, found and armed, to step on.
 - **Chests:** set a chest, a locked chest or a mimic (passing for a chest) down in front of you, facing you, holding what one on this floor might.
@@ -36,7 +36,7 @@ src/
   config.js            world scale, themes and floors, boss/shop/shrine floors, the danger curve, tuning constants
   build.js             which build this is (stamped in by vite.config.js), for the title screen and saves
   game.js              run lifecycle, level transitions, rendering, interaction, traps, endings
-  player.js            movement, attack meter, stats, grip, torchlight, statuses, hunger/regen, inventory
+  player.js            movement, attack meter, stats, grip, the light you carry, statuses, hunger/regen, inventory
   combat.js            player melee resolution
   damage.js            damage types (physical, magic and the elements) and the resistances to them
   status.js            statuses for the player and monsters alike: what they do, what wards them off, how they meet
@@ -81,7 +81,7 @@ src/
   ui/logo.js           the pixel-art title logo, drawn from hand-made glyphs, with its moving glint
   ui/titleScene.js     the walk through a floor of each theme behind the title screen
   ui/devTools.js       the dev tools panel (the ` key): travel, stats, items and monsters for testing
-assets/models/         Blockbench models: monsters/, npcs/, weapons/, items/, props/, the hand torch and the wall sconce
+assets/models/         Blockbench models: monsters/, npcs/, weapons/, items/, props/, the hand lantern and the wall sconce
 tools/modelgen/        builds those models from code (npm run models)
 public/                copied into the build as it is: the favicon, and the picture a shared link shows
 docs/                  these docs

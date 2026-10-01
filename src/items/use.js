@@ -687,7 +687,7 @@ export function unequipItem(game, item, silent = false) {
 }
 
 /**
- * F: grips your weapon in both hands, stowing what's in your off hand (see OFFHANDS: it can't be used, and a torch
+ * F: grips your weapon in both hands, stowing what's in your off hand (see OFFHANDS: it can't be used, and a lantern
  * lights less), or takes it back into one. Changing grip empties your attack meter, as changing equipment does.
  */
 export function toggleGrip(game) {
