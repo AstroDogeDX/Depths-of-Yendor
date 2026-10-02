@@ -19,41 +19,63 @@ import lanternModel from '../../assets/models/hand_lantern.bbmodel';
 // Because buildWeaponMesh puts the edge on -z and the tip on +y, decreasing `arc` swings the tip forward
 // and down with the edge in front. Rolling the plane makes the cut diagonal without twisting the edge.
 // Keep `roll` constant across the cutting keyframes so the cut is a pure arc. `twist` is optional (0).
+//
+// A swing is slow and deliberate, as in King's Field: every set of keys below winds up until SWING_AT.cut (the last
+// stretch of it a held moment), cuts or lunges from there, and lands its blow at SWING_AT.hit, the cut at its fastest;
+// then it follows through, carried on past where it struck, and comes back to guard over the rest of the swing (from
+// its last key but one). A cut winds up high over your shoulder and follows through far down and across; a thrust
+// draws back and lunges with less of either. How long a swing takes is the player's (see SWING_TIME in player.js).
+export const SWING_AT = { cut: 0.38, hit: 0.5 };
 const SLASH = [
-  { t: 0.0, p: [0.36, -0.42, -0.9], yaw: 0.25, roll: 0.2, arc: -0.35 },  // guard: edge toward the enemy
-  { t: 0.24, p: [0.46, -0.24, -0.86], yaw: 0.25, roll: -0.6, arc: 0.4 }, // raised over the right shoulder
-  { t: 0.52, p: [-0.16, -0.5, -0.95], yaw: 0.25, roll: -0.6, arc: -2.3 }, // cut down and across to the left
+  { t: 0.0, p: [0.36, -0.42, -0.9], yaw: 0.25, roll: 0.2, arc: -0.35 },     // guard: edge toward the enemy
+  { t: 0.3, p: [0.54, -0.1, -0.82], yaw: 0.25, roll: -0.6, arc: 0.5 },     // wound up high over the right shoulder
+  { t: 0.38, p: [0.56, -0.08, -0.81], yaw: 0.25, roll: -0.6, arc: 0.56 },   // held there a moment
+  { t: 0.62, p: [-0.3, -0.45, -0.92], yaw: 0.25, roll: -0.6, arc: -2.6 },   // cut down and across, through to the left
+  { t: 0.72, p: [-0.33, -0.48, -0.9], yaw: 0.25, roll: -0.6, arc: -2.68 },  // the follow-through spends itself
   { t: 1.0, p: [0.36, -0.42, -0.9], yaw: 0.25, roll: 0.2, arc: -0.35 },
 ];
 const THRUST = [
   { t: 0.0, p: [0.3, -0.42, -0.88], yaw: 0.12, roll: 0, arc: -1.3 },
-  { t: 0.25, p: [0.32, -0.38, -0.66], yaw: 0.12, roll: 0, arc: -1.38 },  // draw back
-  { t: 0.5, p: [0.12, -0.3, -1.35], yaw: 0.12, roll: 0, arc: -1.52 },   // lunge
+  { t: 0.3, p: [0.35, -0.37, -0.6], yaw: 0.12, roll: 0, arc: -1.24 },     // drawn back
+  { t: 0.38, p: [0.36, -0.365, -0.58], yaw: 0.12, roll: 0, arc: -1.23 },  // held there a moment
+  { t: 0.56, p: [0.1, -0.3, -1.42], yaw: 0.12, roll: 0, arc: -1.54 },     // lunge
+  { t: 0.68, p: [0.09, -0.305, -1.44], yaw: 0.12, roll: 0, arc: -1.55 },  // held out
   { t: 1.0, p: [0.3, -0.42, -0.88], yaw: 0.12, roll: 0, arc: -1.3 },
 ];
 // The same, gripped in both hands. Until there are hands to show it, the pose says so. A blade or haft is held from
 // the off-hand side, as if the left hand held it and the right guided it: it rises diagonally across the body, its
 // flat toward you, and is raised higher and brought down further. A thrusting weapon comes in nearer the middle,
-// gripped more surely, and points straight at the crosshair (at a spot 2.5 m ahead, all through the thrust), its
-// flat turned toward you: a spear braced low from the right hip, and a dagger held out before you in both hands,
-// jabbed forward with both arms (see KEYS_2H).
+// gripped more surely, and points straight at the crosshair (at a spot 2.5 m ahead, all through the thrust: see
+// aimed), its flat turned toward you: a spear braced low from the right hip, and a dagger held out before you in both
+// hands, jabbed forward with both arms (see KEYS_2H).
 const SLASH_2H = [
-  { t: 0.0, p: [-0.14, -0.4, -0.78], yaw: 0.85, roll: -0.82, arc: 0.1 },  // guard: across the body
-  { t: 0.24, p: [0.44, -0.14, -0.8], yaw: 0.4, roll: -0.75, arc: 0.75 },   // high over the right shoulder
-  { t: 0.52, p: [-0.24, -0.56, -0.95], yaw: 0.4, roll: -0.75, arc: -2.5 }, // down and across to the left
+  { t: 0.0, p: [-0.14, -0.4, -0.78], yaw: 0.85, roll: -0.82, arc: 0.1 },    // guard: across the body
+  { t: 0.3, p: [0.5, -0.04, -0.78], yaw: 0.4, roll: -0.75, arc: 0.85 },    // wound up high and back over the right shoulder
+  { t: 0.38, p: [0.52, -0.02, -0.77], yaw: 0.4, roll: -0.75, arc: 0.9 },    // held there a moment
+  { t: 0.62, p: [-0.32, -0.48, -0.95], yaw: 0.4, roll: -0.75, arc: -2.75 }, // down and across, through to the left
+  { t: 0.72, p: [-0.35, -0.5, -0.93], yaw: 0.4, roll: -0.75, arc: -2.82 },  // the follow-through spends itself
   { t: 1.0, p: [-0.14, -0.4, -0.78], yaw: 0.85, roll: -0.82, arc: 0.1 },
 ];
+/** A key with the weapon at `p` pointing at the spot 2.5 m ahead, under the crosshair: its yaw and arc. */
+function aimed(t, p, twist) {
+  const d = new THREE.Vector3(-p[0], -p[1], -2.5 - p[2]).normalize(), arc = -Math.acos(d.y);
+  return { t, p, yaw: Math.asin(d.x / Math.sin(arc)), roll: 0, arc, twist };
+}
 const THRUST_2H = [
-  { t: 0.0, p: [0.16, -0.43, -0.7], yaw: 0.089, roll: 0, arc: -1.337, twist: 1.2 }, // guard: braced at the hip
-  { t: 0.25, p: [0.18, -0.41, -0.5], yaw: 0.09, roll: 0, arc: -1.369, twist: 1.2 }, // draw back
-  { t: 0.5, p: [0.06, -0.36, -1.3], yaw: 0.05, roll: 0, arc: -1.28, twist: 1.2 },   // drive it home
-  { t: 1.0, p: [0.16, -0.43, -0.7], yaw: 0.089, roll: 0, arc: -1.337, twist: 1.2 },
+  aimed(0.0, [0.16, -0.43, -0.7], 1.2),     // guard: braced at the hip
+  aimed(0.3, [0.19, -0.41, -0.44], 1.2),    // drawn back
+  aimed(0.38, [0.19, -0.405, -0.43], 1.2),  // held there a moment
+  aimed(0.56, [0.06, -0.36, -1.36], 1.2),   // driven home
+  aimed(0.68, [0.055, -0.358, -1.38], 1.2), // held there
+  aimed(1.0, [0.16, -0.43, -0.7], 1.2),
 ];
 const JAB_2H = [
-  { t: 0.0, p: [0.06, -0.28, -0.62], yaw: 0.032, roll: 0, arc: -1.423, twist: 1.2 },  // guard: held out before you
-  { t: 0.25, p: [0.07, -0.29, -0.48], yaw: 0.035, roll: 0, arc: -1.428, twist: 1.2 }, // draw back
-  { t: 0.5, p: [0.02, -0.24, -1.02], yaw: 0.014, roll: 0, arc: -1.41, twist: 1.2 },   // jab with both arms
-  { t: 1.0, p: [0.06, -0.28, -0.62], yaw: 0.032, roll: 0, arc: -1.423, twist: 1.2 },
+  aimed(0.0, [0.06, -0.28, -0.62], 1.2),    // guard: held out before you
+  aimed(0.3, [0.07, -0.29, -0.44], 1.2),    // drawn back
+  aimed(0.38, [0.07, -0.288, -0.43], 1.2),  // held there a moment
+  aimed(0.56, [0.02, -0.24, -1.06], 1.2),   // jabbed with both arms
+  aimed(0.68, [0.02, -0.239, -1.08], 1.2),  // held there
+  aimed(1.0, [0.06, -0.28, -0.62], 1.2),
 ];
 // Weapons (by model) with a two-handed pose of their own; the rest slash or thrust by their damage type.
 const KEYS_2H = { dagger: JAB_2H };
@@ -388,16 +410,20 @@ export class ViewModel {
     } else this.handDown = Math.max(0, this.handDown - step * 2);
     this.handAway += ((archery && (nock > 0 || draw > 0) ? 1 : 0) - this.handAway) * Math.min(1, dt * 14);
     const at = (t) => blend(sample(this.keys, t), sample(this.keys2, t), this.grip);
-    let pose = at(0);
+    let pose = at(0), sag = 1;
     if (this.swingT >= 0) {
       this.swingT += dt / this.swingDur;
       if (this.swingT >= 1) this.swingT = -1;
-      else pose = at(this.swingT);
-    } else {
-      // Weapon sags while the attack meter refills, King's Field style.
-      pose.p[1] -= (1 - charge) * 0.14;
-      pose.arc += (1 - charge) * 0.3;
+      else {
+        pose = at(this.swingT);
+        // (Coming back to guard, it sags into where the meter has it, so it doesn't jump there once the swing's done.)
+        const back = this.keys.at(-2).t;
+        sag = smooth(Math.max(0, (this.swingT - back) / (1 - back)));
+      }
     }
+    // Weapon sags while the attack meter refills, King's Field style.
+    pose.p[1] -= (1 - charge) * 0.14 * sag;
+    pose.arc += (1 - charge) * 0.3 * sag;
     if (this.dipT >= 0) {
       this.dipT += dt / 0.35;
       if (this.dipT >= 1) this.dipT = -1;

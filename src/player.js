@@ -14,6 +14,7 @@ import { damageType, damageMult } from './damage.js';
 import { STATUSES, blankStatus, restoreStatus, saveStatus, afflict, tickStatuses, wade } from './status.js';
 import { rand } from './rng.js';
 import { round2 } from './save.js';
+import { SWING_AT } from './fx/viewmodel.js';
 
 // What a save keeps of you as it is (see snapshot): the rest is either rebuilt or not worth keeping.
 const SAVED = [
@@ -39,6 +40,12 @@ export function packOrder(a, b) {
 }
 
 const FISTS = { name: 'fists', dmgType: 'bash', dmg: [1, 3], recharge: 0.6, reach: 1.4, str: 0, model: null };
+
+// How long a swing takes (seconds): a `share` of the weapon's recovery time, from `min` to `max`. A cut (a slash or a
+// bash) winds up wider and follows through further than a thrust (a stab), so it takes longer: a short sword's 0.6 s, a
+// war hammer's 1.1 s; a dagger's 0.4 s, a spear's 0.63 s. Its blow lands half way through (see SWING_AT in
+// fx/viewmodel.js), and you can't swing again until it's done.
+const SWING_TIME = { cut: { share: 0.7, min: 0.6, max: 1.1 }, thrust: { share: 0.6, min: 0.4, max: 0.75 } };
 
 export class Player {
   constructor() {
@@ -80,7 +87,7 @@ export class Player {
     this.wading = false; // standing in a pool (see wade in status.js)
     this.sink = 0; // 0..1, eases the camera down the step into a pool
     this.noise = 0; // metres of walking distance at which monsters can hear you this frame
-    this.swingT = -1; this.swingDur = 0.3; this.swingHit = false; this.swingPower = 1;
+    this.swingT = -1; this.swingDur = 0.3; this.swingCut = false; this.swingHit = false; this.swingPower = 1;
     this.swingWith = null; // a swing's stats, if not your weapon's: a jab with an arrow (see bow.js)
     this.status = blankStatus(true); // seconds left of each status (see status.js)
     this.isPlayer = true;
@@ -457,7 +464,12 @@ export class Player {
     if (!archery) this.nock = this.draw = 0;
     if (this.swingT >= 0) {
       this.swingT += dt;
-      if (!this.swingHit && this.swingT >= this.swingDur * 0.45) {
+      // (Its whoosh as the cut or lunge starts, out of the wind-up.)
+      if (!this.swingCut && this.swingT >= this.swingDur * SWING_AT.cut) {
+        this.swingCut = true;
+        game.audio.swing();
+      }
+      if (!this.swingHit && this.swingT >= this.swingDur * SWING_AT.hit) {
         this.swingHit = true;
         playerStrike(game, this.swingPower, this.swingWith ?? this.weaponStats(), !!this.swingWith);
       }
@@ -475,10 +487,10 @@ export class Player {
         this.swingWith = archery ? w : null;
         this.charge = 0;
         this.swingT = 0;
-        this.swingHit = false;
-        this.swingDur = Math.max(0.24, Math.min(0.45, w.recharge * 0.35));
+        this.swingCut = this.swingHit = false;
+        const time = SWING_TIME[w.dmgType === 'stab' ? 'thrust' : 'cut'];
+        this.swingDur = Math.max(time.min, Math.min(time.max, w.recharge * time.share));
         game.viewmodel.swing(this.swingDur);
-        game.audio.swing();
       }
     }
 
