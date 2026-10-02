@@ -115,7 +115,7 @@ body.lowhp #hurt { animation: pulse 1.2s infinite; }
 /* A potion's key held down: click to throw, right-click to drink (see Game.holdPotion). */
 #hotbar .slot.held { border-color: #fff4d8; box-shadow: 0 0 10px rgba(255, 220, 150, 0.6), inset 0 0 6px #000; transform: translateY(-4px); }
 #hotbar .slot {
-  position: relative; width: 54px; height: 54px; overflow: hidden;
+  position: relative; width: 64px; height: 64px; overflow: hidden;
   background: rgba(0, 0, 0, 0.6); border: 1px solid var(--gold-dim); box-shadow: inset 0 0 6px #000;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
@@ -214,7 +214,7 @@ button.alt { background: linear-gradient(#5a5040, #3a3228); color: var(--ink); }
 /* Fixed-size pack: nothing inside may change the panel's size, so rows and buttons never move under the cursor. */
 .inv { width: min(1120px, 96vw); height: min(620px, calc(100vh - 124px)); display: flex; flex-direction: column; }
 /* The pack sits clear of the hotbar below it, which is live while it's open (see #hotbar). */
-#inventory { padding-bottom: 84px; box-sizing: border-box; }
+#inventory { padding-bottom: 94px; box-sizing: border-box; }
 .inv-head { flex: none; display: flex; align-items: baseline; gap: 16px; }
 .inv-head h2 { margin: 0; }
 #inv-count { font-family: var(--mono); font-size: 13px; opacity: 0.8; }
@@ -236,10 +236,8 @@ button.alt { background: linear-gradient(#5a5040, #3a3228); color: var(--ink); }
   position: absolute; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center;
   background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(216, 184, 112, 0.4); cursor: pointer; user-select: none;
 }
-.ds.ring { width: 40px; height: 40px; }
 .ds:hover { border-color: var(--gold-dim); }
 .ds .dg { font-family: var(--mono); font-weight: bold; font-size: 24px; }
-.ds.ring .dg { font-size: 18px; }
 .ds .de { position: absolute; right: 3px; top: 1px; font-size: 10px; font-family: var(--mono); color: var(--gold); }
 .ds .de.bad { color: #ff7a60; }
 .ds .dl { font-size: 9px; text-transform: uppercase; opacity: 0.45; }
@@ -299,7 +297,7 @@ button.alt { background: linear-gradient(#5a5040, #3a3228); color: var(--ink); }
 .tile .bl { bottom: 4px; left: 5px; }
 .tile .br { bottom: 4px; right: 5px; font-weight: bold; font-size: 12px; }
 .tile .mark { bottom: 3px; right: 3px; image-rendering: pixelated; pointer-events: none; }
-/* Item icons (icons.js): pixel art drawn small and shown scaled up, with crisp pixels. */
+/* Item icons (icons.js): rendered small and shown scaled up, with crisp pixels. */
 .icon { display: block; image-rendering: pixelated; pointer-events: none; }
 /* The pack's tooltip (UI.showTip): the name of what you point at, and a note under it. */
 #tip {

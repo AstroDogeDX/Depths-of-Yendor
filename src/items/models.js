@@ -123,8 +123,19 @@ function lyingArrows(item) {
   return g;
 }
 
-function itemModel(item, color) {
-  const name = itemModelName(item);
+/**
+ * Model for an item's icon (see ui/icons.js): as it's held or stands rather than lying on the floor, a weapon or an
+ * arrow point up, an off-hand thing in your hand's frame, and a scroll open (scroll_open.bbmodel), its rune to be
+ * painted on.
+ */
+export function iconItemModel(item, color) {
+  if (item.kind === 'weapon') return buildWeaponMesh(WEAPONS[item.type].model);
+  if (OFFHAND_DEFS[item.kind]) return heldModel(OFFHAND_DEFS[item.kind][item.type].model);
+  if (item.kind === 'arrow') return heldModel(ARROWS[item.type].model);
+  return itemModel(item, color, item.kind === 'scroll' ? 'scroll_open' : itemModelName(item));
+}
+
+function itemModel(item, color, name = itemModelName(item)) {
   if (!itemCache.has(name)) {
     const src = ITEM_FILES[`../../assets/models/items/${name}.bbmodel`];
     if (!src) console.warn(`No item model assets/models/items/${name}.bbmodel`);

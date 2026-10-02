@@ -126,10 +126,11 @@ export const artefacts = {
   }, { glow: ['iris'] }),
 
   horn: defineModel('horn', MATS, (m) => {
-    // The Horn of Thunder: an ivory horn curling round a centre, bound in gold, one band glowing with runes.
-    const center = [1.5, -1.5], R = 8.5;
+    // The Horn of Thunder: an ivory horn curling round a centre, bound in gold, one band glowing with runes. It curls
+    // round below the centre, its bell and mouthpiece up at either side, as a drinking horn rests.
+    const center = [1.5, 1.5], R = 8.5;
     const at = (f) => {
-      const a = ((200 - f * 190) * Math.PI) / 180;
+      const a = ((160 + f * 190) * Math.PI) / 180;
       return [[center[0] + R * Math.cos(a), center[1] + R * Math.sin(a)], 4.0 * Math.pow(1 - f, 0.85) + 0.6];
     };
     const samples = Array.from({ length: 11 }, (_, i) => at(i / 10));

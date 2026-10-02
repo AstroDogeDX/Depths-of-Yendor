@@ -54,9 +54,9 @@ const DOLL_SLOTS = [
   { key: 'armor', label: 'Armor', x: 94, y: 88 },
   { key: 'weapon', label: 'Weapon', x: 14, y: 150 },
   { key: 'offhand', label: 'Off hand', x: 174, y: 150 },
-  { key: 'arrows', label: 'Arrows', x: 180, y: 94, small: true },
-  { key: 'ring0', label: 'Ring', x: 20, y: 228, small: true },
-  { key: 'ring1', label: 'Ring', x: 180, y: 228, small: true },
+  { key: 'arrows', label: 'Arrows', x: 174, y: 88 },
+  { key: 'ring0', label: 'Ring', x: 14, y: 222 },
+  { key: 'ring1', label: 'Ring', x: 174, y: 222 },
 ];
 const equippedIn = (p, key) => {
   if (key === 'weapon') return p.equip.weapon;
@@ -69,8 +69,8 @@ const equippedIn = (p, key) => {
 const glyphColor = (k, it) => (it.kind === 'potion' ? hex(k.color(it)) : KIND_COLOR[it.kind]);
 /** Whether what's in your off hand is slung on your back (a shield, a bow) while you grip your weapon in both, or stowed. */
 const slung = (it) => it.kind === 'shield' || it.kind === 'bow';
-/** An item's icon (see icons.js), `scale` times its size, or its glyph if it has none yet. */
-const itemIcon = (k, it, scale) => iconHTML(it, k, { scale, fallback: `<span style="color:${glyphColor(k, it)}">${KIND_GLYPH[it.kind]}</span>` });
+/** An item's icon (see icons.js), or its glyph until there is one. */
+const itemIcon = (k, it) => iconHTML(it, k, { fallback: `<span style="color:${glyphColor(k, it)}">${KIND_GLYPH[it.kind]}</span>` });
 /** What the pack's tooltip says over `el` (see UI.showTip): a thing's name, and a note under it; none, without a name. */
 function setTip(el, name, note = '') {
   if (!name) {
@@ -204,7 +204,7 @@ export class UI {
     this.dollEls = {};
     for (const d of DOLL_SLOTS) {
       const el = document.createElement('div');
-      el.className = 'ds' + (d.small ? ' ring' : '');
+      el.className = 'ds';
       el.style.left = `${d.x}px`;
       el.style.top = `${d.y}px`;
       $('inv-doll').appendChild(el);
@@ -722,7 +722,7 @@ export class UI {
       }
       const t = tileInfo(it, k);
       tile.className = `tile ${t.tint}${!this.selectMode || this.selectMode.filter(it) ? '' : ' dim'}`;
-      tile.innerHTML = `<span class="tg">${itemIcon(k, it, 3)}</span>` +
+      tile.innerHTML = `<span class="tg">${itemIcon(k, it)}</span>` +
         `<span class="c tl">${t.level}</span><span class="c tr">${t.count}</span><span class="c bl"></span>` +
         (t.mark ? `<img class="c br mark" src="${markIcon(t.mark.name)}" width="18" height="18" alt="" draggable="false" />` : '');
       setTip(tile, k.name(it));
@@ -856,7 +856,7 @@ export class UI {
         const grip = d.key === 'weapon' && p.twoHanded ? '<span class="dh">2H</span>'
           : d.key === 'weapon' && archer(p) ? '<span class="dh">lowered</span>'
           : d.key === 'offhand' && p.twoHanded ? `<span class="dh">${slung(it) ? 'on back' : 'stowed'}</span>` : '';
-        el.innerHTML = `<span class="dg">${itemIcon(k, it, d.small ? 2 : 3)}</span>${plus}${grip}`;
+        el.innerHTML = `<span class="dg">${itemIcon(k, it)}</span>${plus}${grip}`;
         setTip(el, k.name(it), d.key === 'weapon' && p.twoHanded ? 'In both hands'
           : d.key === 'weapon' && archer(p) ? 'Lowered, for your bow'
           : d.key === 'offhand' && p.twoHanded ? (slung(it) ? 'On your back' : 'Stowed') : d.key === 'arrows' ? 'In your quiver' : '');
@@ -1078,7 +1078,7 @@ export class UI {
         const act = it ? (unattuned ? 'attune' : slotAction(g, it)) : '';
         const mark = tileInfo(probe, k).mark; // (what it does, as in the pack, if you know)
         // Cooldown shade sits over the glyph but under the text, so a recharging power reads as dimmed.
-        html = `<span class="glyph">${itemIcon(k, probe, 2)}</span>` +
+        html = `<span class="glyph">${itemIcon(k, probe)}</span>` +
           (mark ? `<img class="mark" src="${markIcon(mark.name)}" width="18" height="18" alt="" draggable="false" />` : '') +
           (cd > 0 ? `<span class="cd" style="height:${Math.round(cd * 100)}%"></span>` : '') +
           html + `<span class="qty">${qty}</span><span class="act ${act}">${act}</span>${rc}`;

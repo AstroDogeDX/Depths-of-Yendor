@@ -129,6 +129,22 @@ const MATS = {
     }
     return ramp(ITEM_PAL.parchment, 0.62 + 0.14 * patches(p, 205, 0.4), c.ax, c.ay);
   },
+  // An open scroll's sheet, facing +z: plain paper, browned toward its sides and a little foxed, to take a rune.
+  sheet(c) {
+    const { p } = c;
+    let v = 0.74 + 0.12 * patches(p, 211, 0.4) - clamp01((Math.abs(p.x) - 4) / 2) * 0.24;
+    if (rand(c.ax, c.ay, 212) > 0.975) v -= 0.18; // foxing
+    return ramp(ITEM_PAL.parchment, v, c.ax, c.ay);
+  },
+  // An open scroll's rolls, along x at height `info.y`: their ends show a spiral of paper edges.
+  roll(c) {
+    const { p, n, info } = c;
+    if (Math.abs(n.x) > 0.9) {
+      const dy = p.y - info.y, spiral = fract(Math.hypot(dy, p.z) / 0.7 - Math.atan2(p.z, dy) / (2 * Math.PI));
+      return ramp(ITEM_PAL.parchment, spiral < 0.3 ? 0.25 : 0.7, c.ax, c.ay);
+    }
+    return ramp(ITEM_PAL.parchment, 0.56 + 0.12 * patches(p, 213, 0.4) - clamp01((Math.abs(p.x) - 5.5) / 1.5) * 0.2, c.ax, c.ay);
+  },
   // Rough hide for a pouch, creased where it's gathered in at the neck (`info.neck`).
   hide(c) {
     const { p, info } = c;
@@ -209,6 +225,16 @@ export const items = {
     m.mesh('roll', lathe([[-9, 2.6], [9, 2.6]]), { mat: 'parchment', ...lay });
     m.mesh('ribbon', lathe([[-1.2, 2.85], [1.2, 2.85]]), { mat: 'ribbon', ...lay });
     m.mesh('seal', lathe([[2.4, 1.5], [3.3, 1.7], [3.6, 1.2], [3.7, 0]]), { mat: 'wax' });
+  }),
+
+  scroll_open: defineModel('scroll_open', MATS, (m) => {
+    // An open scroll, for a scroll's icon (see ui/icons.js) rather than the floor: a plain sheet facing +z between two
+    // rolls, for the icon to paint the scroll's rune on, centred on the empty group `rune`.
+    m.cube('sheet', [-6, -6.6, -0.25], [6, 6.6, 0.25], { mat: 'sheet' });
+    for (const y of [7, -7]) {
+      m.mesh(y > 0 ? 'roll_top' : 'roll_bottom', lathe([[-7, 1.4], [7, 1.4]]), { mat: 'roll', info: { y }, origin: [0, y, 0], rotation: [0, 0, 90] });
+    }
+    m.group('rune', () => {}, { origin: [0, 0, 0.25] });
   }),
 
   wand: defineModel('wand', MATS, (m) => {

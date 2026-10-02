@@ -27,7 +27,7 @@ For testing by hand, press **`** (the key left of 1) during a run to open the de
 - **Traps:** lay a trap of any kind on the floor in front of you, found and armed, to step on.
 - **Chests:** set a chest, a locked chest or a mimic (passing for a chest) down in front of you, facing you, holding what one on this floor might.
 - **Statuses:** give yourself, or the monster you're facing, any status for 15 s, as it would happen in play (immunities and how statuses meet included).
-- **Icons:** **Show every icon** lays out every item icon three times its size, each tinted one in every colour it comes in, the scroll with every rune, and the marks (see [Item icons](icons.md)).
+- **Icons:** **Show every icon** lays out every item icon as big as the game shows them, each tinted one in every colour it comes in, the scroll with every rune, and the marks (see [Item icons](icons.md)).
 
 ## Code map
 
@@ -77,8 +77,8 @@ src/
   items/bbmodel.js     loads Blockbench .bbmodel projects (cubes, meshes, groups, textures) into three.js
   fx/                  viewmodel (hands), pixel-art flames, projectiles, particles, drips, ripples round waders, haze over channels (the rifts' miasma, the lava's embers), glow sprites
   ui/ui.js             HUD, minimap, message log, floating text, pack (and its tooltip), dialogs, title and end screens
-  ui/iconArt.js        the item icons' pixel art, the scrolls' runes and the pack's marks
-  ui/icons.js          paints the icons: their outlines, the tinted ones in each item's colour, the scrolls' runes
+  ui/iconArt.js        the hand-drawn pixel art: the scrolls' runes and the pack's marks
+  ui/icons.js          renders the item icons from their models (their poses, the tinted ones, the scrolls' runes), paints the marks
   ui/tiles.js          what a pack tile shows in its corners and tint, and which mark each thing gets
   ui/logo.js           the pixel-art title logo, drawn from hand-made glyphs, with its moving glint
   ui/titleScene.js     the walk through a floor of each theme behind the title screen

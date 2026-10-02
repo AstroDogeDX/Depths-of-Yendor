@@ -1,6 +1,9 @@
 import { Game } from './game.js';
 import { UI } from './ui/ui.js';
+import { prepareIcons } from './ui/icons.js';
 
+// The item icons are rendered from the models, once their textures have loaded: long before a run starts.
+prepareIcons();
 const ui = new UI();
 const game = new Game(document.getElementById('view'), ui);
 

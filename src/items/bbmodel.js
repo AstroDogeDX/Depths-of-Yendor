@@ -18,8 +18,17 @@ const CUBE_FACES = {
 
 const DEG = Math.PI / 180;
 
+// Textures decode from their data URLs a moment after a model is built: until then, alphaTest cuts out every texel.
+const loading = new Set();
+
+/** Resolves once the textures of every model built so far have loaded (or failed to). */
+export const texturesLoaded = () => Promise.all(loading);
+
 function loadTexture(tex) {
-  const t = new THREE.TextureLoader().load(tex.source);
+  let done;
+  const p = new Promise((resolve) => (done = () => { loading.delete(p); resolve(); }));
+  loading.add(p);
+  const t = new THREE.TextureLoader().load(tex.source, done, undefined, done);
   t.colorSpace = THREE.SRGBColorSpace;
   t.magFilter = THREE.NearestFilter;
   t.minFilter = THREE.NearestMipmapLinearFilter;

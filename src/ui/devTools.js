@@ -2,7 +2,6 @@ import { THEMES, FLOORS_PER_THEME, TILE, HUNGER_MAX, isBossDepth, isShopDepth } 
 import {
   WEAPONS, ARMORS, SHIELDS, SHIELD_HITS_TO_ID, BOWS, BOW_HITS_TO_ID, ARROWS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS,
   CONTAINERS, WAND_ZAPS_TO_ID,
-  POTION_COLORS, WAND_MATERIALS, RING_GEMS,
 } from '../items/defs.js';
 import { makeItem, stackable, chestLoot } from '../items/generate.js';
 import { MONSTERS } from '../monsters/defs.js';
@@ -14,8 +13,8 @@ import { DAMAGE_TYPES, damageType, describeResist } from '../damage.js';
 import { STATUSES, afflict, cure } from '../status.js';
 import { ENCHANTMENTS, CURSES } from '../items/enchant.js';
 import { rand } from '../rng.js';
-import { ICONS, RUNES, MARK_ICONS } from './iconArt.js';
-import { iconHTML, markIcon } from './icons.js';
+import { MARK_ICONS } from './iconArt.js';
+import { iconHTML, markIcon, everyIcon } from './icons.js';
 import './devTools.css';
 
 // Dev tools, for testing by hand: jump to any floor, give yourself items, change your stats, give you or a monster a
@@ -106,7 +105,7 @@ export class DevTools {
             <div class="dev-grid dev-items"></div>
             <div class="dev-row"><button class="alt" data-act="identify" title="Learn every potion, scroll, wand and ring, and identify all you carry">Identify everything</button></div>
             <h3>Icons</h3>
-            <div class="dev-row"><button class="alt" data-act="icons" title="Every item icon (ui/iconArt.js), three times its size: each tinted one in every colour it comes in, the scroll with every rune, and the marks">Show every icon</button></div>
+            <div class="dev-row"><button class="alt" data-act="icons" title="Every item icon (ui/icons.js), as big as the game shows them: each tinted one in every colour it comes in, the scroll with every rune, and the marks">Show every icon</button></div>
             <div class="dev-icons" hidden></div>
           </div>
         </div>
@@ -196,24 +195,16 @@ export class DevTools {
   }
 
   /**
-   * Shows every item icon (ui/iconArt.js) three times its size, or hides them again: each tinted icon in every colour
-   * it comes in, the scroll with every rune on it, and the marks.
+   * Shows every item icon (ui/icons.js) at the size the game shows them, or hides them again: each tinted one in every
+   * colour it comes in, the scroll with every rune on it, and the marks.
    */
   iconSheet() {
     const box = this.$('.dev-icons');
     box.hidden = !box.hidden;
     if (box.hidden || box.childElementCount) return;
-    const looks = { potion: POTION_COLORS, wand: WAND_MATERIALS, ring: RING_GEMS, key: [{ name: 'iron', type: 'iron' }, { name: 'gold', type: 'gold' }] };
-    const knowledge = { color: (it) => it.color ?? this.game.knowledge.color(it), rune: (it) => it.rune };
     const cell = (label, html) => `<figure title="${label}">${html}<figcaption>${label}</figcaption></figure>`;
-    const cells = [];
-    for (const key of Object.keys(ICONS)) {
-      const [kind, type = 'any'] = key.split(':');
-      const icon = (look) => iconHTML({ kind, type, ...look }, knowledge);
-      if (looks[kind]) cells.push(...looks[kind].map((look) => cell(`${kind}: ${look.name}`, icon(look))));
-      else if (kind === 'scroll') cells.push(...RUNES.map((_, rune) => cell(`scroll: rune ${rune}`, icon({ rune }))));
-      else cells.push(cell(key, icon({})));
-    }
+    const cells = everyIcon().map(({ label, item, color, rune }) =>
+      cell(label, iconHTML(item, { color: () => color, rune: () => rune }, { fallback: '<span>?</span>' })));
     cells.push(...Object.keys(MARK_ICONS).map((name) => cell(`mark: ${name}`, `<img class="icon" src="${markIcon(name)}" width="27" height="27" alt="" />`)));
     box.innerHTML = cells.join('');
   }
