@@ -7,6 +7,8 @@
 import * as THREE from 'three';
 import { defineModel, loft, revolve, tube, latheRing, noise3, rand, fract, ramp } from './lib.mjs';
 import { MAT, PAL, P, patches, bevel } from './materials.mjs';
+import { HALF, VAULT as TOP, prism, bothFaces } from './doorkit.mjs';
+import { PIT, SKY, roundShaft, wedge, polar, deep } from './stairkit.mjs';
 
 const DW = {
   stone: P('#1f1614', '#2e211d', '#3f2e28', '#523b33', '#664a3f', '#7c5b4d'),
@@ -86,6 +88,65 @@ const MATS = {
     let v = 0.45 + 0.18 * (rand(k, 2012) - 0.5) + 0.1 * patches(p, 2013, 0.3);
     if (fract(p.z * 0.09 + noise3(p.x, 0, p.z * 0.1, 2014)) < 0.1) v -= 0.12;
     return ramp(DW.wood, v, c.ax, c.ay);
+  },
+  // --- The door (door_dwarven)
+  // The leaf's faces: a bronze border a gold line within it, then dark planks set with gold-headed studs, crossed
+  // by two bronze bands. Laid out by where a point is on the leaf (see DWARF_LEAF), so the border runs clean round
+  // its chamfered top.
+  dwarfDoor(c) {
+    const { p, n } = c;
+    if (Math.abs(n.z) < 0.5) return MATS.bronze(c);
+    const ax = Math.abs(p.x), d = Math.min(52 - ax, p.y - 1.5, 147 - p.y, (185.6 - ax - p.y) / Math.SQRT2);
+    if (d < 5) return MATS.bronze(c);
+    if (d < 6.2) return gold(c);
+    const band = [38, 116].find((y) => p.y > y && p.y < y + 6);
+    const stud = (y0) => Math.abs(fract((p.x + 100) / 10) - 0.5) < 0.14 && Math.abs(p.y - y0) < 1.2;
+    if (band !== undefined) return stud(band + 3) ? ramp(PAL.gold, 0.78, c.ax, c.ay) : MATS.bronze(c);
+    // Studs in a staggered grid, every other plank, a row every 26 px, clear of the medallion.
+    const row = Math.floor((p.y + 13) / 26), col = Math.floor((p.x + 100) / 10);
+    if ((col + row) % 2 === 0 && Math.hypot(p.x, p.y - 84) > 17 && Math.abs(fract((p.x + 100) / 10) - 0.5) < 0.14 && Math.abs(fract((p.y + 13) / 26) - 0.5) < 0.05) {
+      return ramp(PAL.gold, 0.7, c.ax, c.ay);
+    }
+    if (fract((p.x + 100) / 10) < 0.07) return ramp(DW.wood, 0.05, c.ax, c.ay);
+    return wood(c);
+  },
+  // The doorway's jambs: porphyry, a gold line along the edge of the opening.
+  dwarfJamb(c) {
+    if (Math.abs(c.n.z) > 0.5 && Math.abs(Math.abs(c.p.x) - 54.2) < 0.9) return gold(c);
+    return MATS.porphyry(c);
+  },
+  // The lintel: porphyry, the walls' gold knotwork run along its faces between two gold rules.
+  dwarfLintel(c) {
+    const { p, n } = c;
+    if (Math.abs(n.z) > 0.5) {
+      if (p.y > 156 && p.y < 164) return knots(c, p.x + 64, p.y - 156);
+      if ((p.y > 153.5 && p.y < 155) || (p.y > 165 && p.y < 166.5)) return gold(c);
+    }
+    return MATS.porphyry(c);
+  },
+  // The kingdom's crest over the door: a lozenge of gold, a hammer struck into it.
+  crest(c) {
+    const { p } = c, y = p.y - 163;
+    if ((Math.abs(p.x) < 5.5 && y > 2 && y < 5.5) || (Math.abs(p.x) < 1.1 && y > -7 && y < 3)) return ramp(PAL.gold, 0.25, c.ax, c.ay);
+    return gold(c);
+  },
+  // A medallion on the leaf: gold, a ring cut round its rim, a hammer at its heart.
+  medallion(c) {
+    const { p } = c, x = p.x, y = p.y - 84, r = Math.hypot(x, y);
+    if (Math.abs(r - 9.5) < 0.7 || (Math.abs(x) < 4.5 && y > 1.5 && y < 4.5) || (Math.abs(x) < 1 && y > -6 && y < 2.5)) return ramp(PAL.gold, 0.28, c.ax, c.ay);
+    return gold(c);
+  },
+  // A bar across a locked door: bronze, banded in gold every 24 px.
+  lockBar: (c) => (Math.abs(fract((c.p.x + 12) / 24) - 0.5) < 0.1 ? gold(c) : MATS.bronze(c)),
+  // A lock box: bronze, edged in gold, a keyhole in a gold escutcheon at (`info.kx`, `info.ky`).
+  lockBox(c) {
+    const { p, n, info } = c;
+    if (Math.abs(n.z) > 0.5) {
+      const r = Math.hypot(p.x - info.kx, p.y - info.ky);
+      if (r < 1.3 || (Math.abs(p.x - info.kx) < 0.6 && p.y < info.ky && p.y > info.ky - 4)) return ramp(DW.void, 0.1, c.ax, c.ay);
+      if (r < 4 || c.edge < 1.5) return gold(c);
+    }
+    return MATS.bronze(c);
   },
   // A banner of the kingdom: red cloth, a gold border, the royal sigil (a hammer in a lozenge under a crown) and
   // chevrons down to a hem gone to rags; moth-eaten here and there.
@@ -327,7 +388,93 @@ function riftLip(name, seed) {
 
 // ---------------------------------------------------------------- props
 
+// --- The stairs (stairs_down_dwarven, stairs_up_dwarven): spiral stairs of red stone and gold round a column, fading
+// into the dark away from the room.
+const SPIRAL = { R: 56, COL: 8, STEP: Math.PI / 6 }; // the holes' radius (STAIRS in levelBuilder.js: 0.875 m), the column's; a step's turn
+/** Porphyry laid in courses round a round shaft, the walls' gold knotwork in a band `info.band` px up (8 high). */
+MATS.shaftPorphyry = deep((c) => {
+  const { p, info } = c, u = (Math.atan2(p.x, p.z) + Math.PI) * SPIRAL.R;
+  if (p.y >= info.band && p.y < info.band + 8) return knots(c, u, p.y - info.band);
+  if (Math.abs(p.y - info.band + 1) < 1 || Math.abs(p.y - info.band - 9) < 1) return gold(c);
+  const row = Math.floor((p.y + 400) / 12), off = row % 2 ? 12 : 0;
+  if (fract((p.y + 400) / 12) < 0.08 || fract((u + off) / 24) < 0.04) return ramp(DW.porphyry, 0.1, c.ax, c.ay);
+  return ramp(DW.porphyry, 0.5 + 0.2 * (rand(Math.floor((u + off) / 24), row, 2300) - 0.5) + 0.08 * patches(p, 2301, 0.3) + flecks(c), c.ax, c.ay);
+}, 20, 150);
+/** A spiral step: red stone, a gold edge along its nose (`info.a0`, the angle its nose is at). */
+MATS.spiralStep = deep((c) => {
+  const { p, info } = c;
+  if (info.step === 'nose') return gold(c);
+  if (info.step === 'top' && Math.abs(p.x * Math.cos(info.a0) - p.z * Math.sin(info.a0)) < 2.2) return gold(c);
+  return ramp(DW.porphyry, (info.step === 'top' ? 0.56 : 0.36) + 0.1 * patches(p, 2302, 0.3) + flecks(c), c.ax, c.ay);
+}, 20, 150);
+/** The stairs' column: porphyry, banded in gold every 40 px. */
+MATS.spiralColumn = deep((c) => (fract((c.p.y + 400) / 40) < 0.07 ? gold(c) : MATS.porphyry(c)), 20, 150);
+MATS.deepBronze = deep((c) => MATS.bronze(c), 20, 150);
+
+/**
+ * Spiral steps round the stairs' column, a step to every STEP of a turn from the nose of the first at the front (+z),
+ * each `rise` further on (up, or with a negative rise, down), from `from` for `count` steps. `faces` names the faces a
+ * step shows (see wedge). Returns each step's angle and the height of its top.
+ */
+function spiral(m, from, rise, count, faces) {
+  const out = [];
+  for (let k = 0; k < count; k++) {
+    const a0 = k * SPIRAL.STEP, y = from + rise * (k + 1);
+    // (Each made facing +z and turned into place, which packs its faces' textures tighter than at any old angle.)
+    const span = SPIRAL.STEP * 1.08;
+    m.mesh(`step_${k + 1}`, wedge(-span / 2, span / 2, SPIRAL.COL, SPIRAL.R - 1.5, y, 7, 2).filter((f) => faces.includes(f.step)),
+      { mat: 'spiralStep', info: { a0 }, rotation: [0, ((a0 + span / 2) * 180) / Math.PI, 0] });
+    out.push({ a: a0, y });
+  }
+  return out;
+}
+
 export const dwarven = {
+  stairs_down_dwarven: defineModel('stairs_down_dwarven', MATS, (m) => {
+    // Spiral stairs down through a round hole in the floor (see stairkit.mjs), round a column of red stone banded in gold
+    // that rises through the middle to a gold finial; red steps edged in gold, down a shaft of porphyry with the walls'
+    // knotwork run round its top. A bronze rail on posts guards the hole but for the way in at the front, and another
+    // follows the steps down the wall.
+    const { R, COL } = SPIRAL, RISE = 15;
+    m.mesh('shaft', roundShaft(R, -PIT, 0), { mat: 'shaftPorphyry', info: { band: -12 } });
+    m.mesh('rim', revolve([[R + 5, 0], [R + 5, 1.5], [R, 1.5], [R, -2]], { sides: 16, phase: 0 }), { mat: 'gold' });
+    m.mesh('column', revolve([[COL, -PIT], [COL, 30], [COL + 2.5, 32], [COL + 2.5, 35], [COL - 1, 36], [0, 36]], { sides: 8 }), { mat: 'spiralColumn' });
+    m.mesh('finial', revolve([[0, 36], [4.5, 38], [5.5, 42], [4, 46], [1.5, 49], [0, 50]], { sides: 8 }), { mat: 'gold' });
+    const steps = spiral(m, 0, -RISE, 13, ['top', 'nose', 'end', 'back']);
+    // The rail round the hole: posts every twelfth of a turn but at the front, a rail along their tops.
+    const posts = [];
+    for (let k = 2; k <= 10; k++) posts.push(k * (Math.PI / 6));
+    posts.forEach((a, i) => {
+      const [x, , z] = polar(a, R + 2.5, 0);
+      m.cube(`post_${i + 1}`, [x - 1.8, 0, z - 1.8], [x + 1.8, 32, z + 1.8], { mat: 'bronze' });
+      m.cube(`post_cap_${i + 1}`, [x - 2.6, 32, z - 2.6], [x + 2.6, 35, z + 2.6], { mat: 'gold' });
+    });
+    const arc = [];
+    for (let a = posts[0]; a <= posts[posts.length - 1] + 1e-6; a += Math.PI / 24) arc.push(polar(a, R + 2.5, 36.5));
+    m.mesh('rail', tube(arc, { half: 1.4, sides: 6, side: [0, 1, 0] }), { mat: 'bronze' });
+    // The rail down the wall, over the outer ends of the steps.
+    m.mesh('wall_rail', tube(steps.map(({ a, y }) => polar(a + SPIRAL.STEP / 2, R - 4, y + 30)), { half: 1.2, sides: 6 }), { mat: 'deepBronze' });
+  }, { density: 0.9 }),
+
+  stairs_up_dwarven: defineModel('stairs_up_dwarven', MATS, (m) => {
+    // Spiral stairs up through a round hole in the vault (see stairkit.mjs), round a column of red stone banded in gold,
+    // on a base ringed in gold; red steps edged in gold, a bronze rail on balusters up their outer ends, and on up a shaft
+    // of porphyry with the walls' knotwork run round its foot. A ring of gold rims the hole.
+    const { R, COL } = SPIRAL, RISE = 16, N = Math.floor((SKY - 8) / RISE);
+    m.mesh('shaft', roundShaft(R, TOP, SKY), { mat: 'shaftPorphyry', info: { band: TOP + 4 } });
+    m.mesh('rim', revolve([[R, TOP + 3], [R, TOP - 1.5], [R + 5, TOP - 1.5], [R + 5, TOP]], { sides: 16, phase: 0 }), { mat: 'gold' });
+    m.mesh('base', revolve([[COL + 7, 0], [COL + 7, 6], [COL + 5, 8], [COL, 9]], { sides: 8 }), { mat: 'porphyry' });
+    m.mesh('base_band', revolve([[COL + 7.4, 2], [COL + 7.4, 4]], { sides: 8 }), { mat: 'gold' });
+    m.mesh('column', revolve([[COL, 9], [COL, SKY]], { sides: 8 }), { mat: 'spiralColumn' });
+    const steps = spiral(m, 0, RISE, N, ['top', 'bottom', 'nose', 'end', 'back']);
+    // Balusters on the steps' outer ends, and the rail along their tops.
+    steps.forEach(({ a, y }, i) => {
+      const [x, , z] = polar(a + SPIRAL.STEP / 2, R - 5, 0);
+      m.cube(`baluster_${i + 1}`, [x - 1.3, y, z - 1.3], [x + 1.3, y + 32, z + 1.3], { mat: y > TOP ? 'deepBronze' : 'bronze' });
+    });
+    m.mesh('rail', tube(steps.map(({ a, y }) => polar(a + SPIRAL.STEP / 2, R - 5, y + 33)), { half: 1.3, sides: 6 }), { mat: 'deepBronze' });
+  }, { density: 0.7 }),
+
   rift_bridge: defineModel('rift_bridge', MATS, (m) => {
     // A way over a rift, thrown together from whatever was to hand: two beams (one a gilded beam from some
     // hall's ceiling), planks of odd lengths, half a door, all lashed with rope, and a pole lashed to two posts
@@ -660,4 +807,52 @@ export const dwarven = {
     m.cube('wick', [-0.6, -19.5, Z - 0.6], [0.6, -18, Z + 0.6], { mat: 'wick' });
     m.group('flame', undefined, { origin: [0, -18.5, Z] });
   }, { density: 2, glow: ['ruby'] }),
+
+  door_dwarven: defineModel('door_dwarven', MATS, (m) => {
+    // A dwarven doorway (see doorkit.mjs for how doors go together): the opening square with its top corners cut
+    // away, in jambs of porphyry lined in gold on bronze plinths and capitals, under a lintel carrying the walls'
+    // gold knotwork and the kingdom's crest. The door: dark planks in a bronze border, studded with gold, banded in
+    // bronze, a gold medallion at its heart, hung on bronze straps, a bronze ring to pull. Locked, it's shut like a
+    // vault: two gold-banded bronze bars across it, running into the jambs, and between them an ornate lock box,
+    // its bolt shot into the jamb, on both sides.
+    const OW = 53, SHOULDER = 134, OH = 148; // the opening; where its corners are cut away, and its top
+    const zs = (s, a, b) => (s > 0 ? [a, b] : [-b, -a]); // a to b out from the middle, on the side s faces
+    m.group('frame', () => {
+      for (const s of [-1, 1]) {
+        const side = s < 0 ? 'left' : 'right', [x0, x1] = s < 0 ? [-HALF, -OW] : [OW, HALF];
+        m.cube(`jamb_${side}`, [x0, 0, -20], [x1, SHOULDER, 20], { mat: 'dwarfJamb' });
+        m.mesh(`shoulder_${side}`, prism(s < 0 ? [[-HALF, SHOULDER], [-OW, SHOULDER], [-39, OH], [-HALF, OH]] : [[OW, SHOULDER], [HALF, SHOULDER], [HALF, OH], [39, OH]], -20, 20), { mat: 'porphyry' });
+        m.cube(`plinth_${side}`, [s < 0 ? -HALF - 1 : OW - 1, 0, -22], [s < 0 ? -OW + 1 : HALF + 1, 10, 22], { mat: 'bronze' });
+        m.cube(`capital_${side}`, [s < 0 ? -HALF - 1 : OW - 1, SHOULDER - 10, -22], [s < 0 ? -OW + 1 : HALF + 1, SHOULDER, 22], { mat: 'bronze' });
+      }
+      m.cube('lintel', [-HALF, OH, -20], [HALF, TOP, 20], { mat: 'dwarfLintel' });
+      bothFaces((s) => m.mesh(`crest_${s > 0 ? 'front' : 'back'}`, prism([[0, 152], [11, 163], [0, 174], [-11, 163]], ...zs(s, 20, 23.5)), { mat: 'crest' }));
+      m.cube('sill', [-OW, 0, -20], [OW, 1.5, 20], { mat: 'bronze' });
+    });
+    m.group('leaf', () => {
+      m.cube('door', [-OW + 1, 1.5, -4], [OW - 1, SHOULDER - 0.4, 4], { mat: 'dwarfDoor' });
+      m.mesh('door_top', prism([[-OW + 1, SHOULDER - 0.4], [OW - 1, SHOULDER - 0.4], [38.6, OH - 1], [-38.6, OH - 1]], -4, 4), { mat: 'dwarfDoor' });
+      bothFaces((s) => {
+        const side = s > 0 ? 'front' : 'back';
+        m.mesh(`medallion_${side}`, revolve([[0, 0], [13, 0], [13, 1.2], [11, 2.2], [0, 2.2]], { sides: 12 }), { mat: 'medallion', origin: [0, 84, s * 4], rotation: [s * 90, 0, 0] });
+        for (const y of [20, 110]) {
+          m.mesh(`hinge_strap_${y < 60 ? 'low' : 'high'}_${side}`, prism([[-OW + 1, y], [-22, y], [-17, y + 3.5], [-22, y + 7], [-OW + 1, y + 7]], ...zs(s, 4, 5.4)), { mat: 'bronze' });
+        }
+        const [r0, r1] = zs(s, 4, 6.4);
+        m.cube(`ring_boss_${side}`, [35, 68, r0], [41, 74, r1], { mat: 'bronze' });
+        const ringPts = Array.from({ length: 10 }, (_, i) => [38 + Math.cos((i / 10) * Math.PI * 2) * 6, 63 + Math.sin((i / 10) * Math.PI * 2) * 6, s * 7]);
+        m.mesh(`ring_${side}`, tube(ringPts, { half: 1.1, closed: true, side: [0, 0, 1] }), { mat: 'bronze' });
+      });
+    }, { origin: [-OW, 0, 0] });
+    m.group('lock', () => {
+      bothFaces((s) => {
+        const side = s > 0 ? 'front' : 'back', [l0, l1] = zs(s, 4, 11), [b0, b1] = zs(s, 5, 8.5), [k0, k1] = zs(s, 11, 12.2);
+        const [r0, r1] = zs(s, 5.4, 9);
+        for (const y of [44, 98]) m.cube(`bar_${y < 70 ? 'low' : 'high'}_${side}`, [-60, y, r0], [60, y + 7, r1], { mat: 'lockBar' });
+        m.cube(`lock_box_${side}`, [22, 57, l0], [46, 85, l1], { mat: 'lockBox', info: { kx: 34, ky: 71 } });
+        m.cube(`bolt_${side}`, [46, 68, b0], [62, 74, b1], { mat: 'bronze' });
+        for (const [x, y] of [[23.2, 58.2], [44.8, 58.2], [23.2, 83.8], [44.8, 83.8]]) m.cube(`knob_${x < 34 ? 'l' : 'r'}${y < 70 ? 'b' : 't'}_${side}`, [x - 1.2, y - 1.2, k0], [x + 1.2, y + 1.2, k1], { mat: 'gold' });
+      });
+    });
+  }, { density: 1 }),
 };

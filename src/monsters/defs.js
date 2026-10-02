@@ -1,5 +1,6 @@
 // Monster catalog. Speeds in m/s, ranges in metres, times in seconds.
-// depth: [first floor it appears, last floor it appears]. freq: spawn weight.
+// depth: [first floor it appears, last floor it appears]. freq: spawn weight (0: it never spawns by itself).
+// grow: [health, damage] it gains for each step of `danger` (config.js) past its first floor; [0.08, 0.05] if not given.
 // dmgType: the kind of damage its melee blows deal (slash, stab or bash; generic if not given). resist: multipliers
 // on the damage each type does to it, physical or magical, e.g. { slash: 0.5, fire: 0 }. See damage.js. A ranged
 // attack's shots deal its own dmgType (arrows stab, bolts are magic, the imp's fire is fire).
@@ -70,6 +71,13 @@ export const MONSTERS = {
     dmgType: 'bash', resist: { slash: 0.5, stab: 0.5, bash: 1.5, fire: 0.5, lightning: 0.5, poison: 0, magic: 1.25 },
     // stone fists; edges and points glance off it, stone shrugs off fire and lightning, but magic unravels its rune
     xp: 22, depth: [20, 25], freq: 3, dodge: 0, def: 6, sleepChance: 0.8, traits: ['bloodless'],
+  },
+  // A chest that isn't one: until something wakes it, it's a chest on the floor like any other (see Level.addChest).
+  // Only chests become mimics, from its first floor on, and it grows faster than most, so a deep one is still a threat.
+  mimic: {
+    name: 'mimic', hp: 18, dmg: [3, 7], speed: 2.5, radius: 0.42, reach: 1.5, windup: 0.5, cooldown: 1.2,
+    dmgType: 'stab', resist: { stab: 0.75, fire: 1.5 }, // bites; a point sticks in its wooden hide, and it burns like kindling
+    xp: 8, depth: [3, 25], freq: 0, dodge: 0, def: 2, sleepChance: 0, grow: [0.25, 0.12],
   },
   warden: {
     name: 'Warden of Yendor', hp: 230, dmg: [10, 22], speed: 2.9, radius: 0.6, reach: 2.4, windup: 0.75, cooldown: 1.3,

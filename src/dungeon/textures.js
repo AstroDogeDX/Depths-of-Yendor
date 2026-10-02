@@ -5,6 +5,7 @@ import { catacombTextures } from './catacombTextures.js';
 import { caveTextures } from './caveTextures.js';
 import { dwarvenTextures } from './dwarvenTextures.js';
 import { underworldTextures } from './underworldTextures.js';
+import { poolTextures } from './poolTextures.js';
 
 const S = 64;
 const cache = new Map();
@@ -154,48 +155,22 @@ function ceilingTexture(theme) {
 // `pitFloor`, or the `abyss` glowing far down a chasm), the passages' own walls and floor (`tunnelWall`,
 // `tunnelFloor`, used outside the rooms), decorations' (`puddles`, `cobweb`), and a `...Glow` for any of them
 // (`wallGlow`, `channelGlow`...): what shines there by itself. `wallFullHeight` makes a wall texture span the
-// wall's height once instead of repeating up it.
+// wall's height once instead of repeating up it. The walls, floors and ceilings (the passages' too, and their glows)
+// are lists of variants, which the level builder scatters among the tiles (see variants in texturePaint.js); any other
+// texture may be one too. A theme with `pools` gets its pools' water (`pool`, and `poolGlow` if it shines) from its
+// colours, whatever its style (see poolTextures.js).
 const STYLES = { sewers: sewerTextures, catacombs: catacombTextures, caves: caveTextures, dwarven: dwarvenTextures, underworld: underworldTextures };
 
 export function getTextures(theme) {
   if (!cache.has(theme.name)) {
     const style = STYLES[theme.style];
-    cache.set(theme.name, style ? style(theme, toTexture) : {
+    const tex = style ? style(theme, toTexture) : {
       wall: wallTexture(theme),
       floor: floorTexture(theme),
       ceiling: ceilingTexture(theme),
-    });
+    };
+    cache.set(theme.name, theme.pools ? { ...tex, ...poolTextures(theme, toTexture) } : tex);
   }
   return cache.get(theme.name);
 }
 
-/** Vertical planks with iron bands; locked doors are darker, with more (and rustier) iron. */
-function doorTexture(locked) {
-  const rng = new RNG(`door:${locked}`);
-  const c = canvas();
-  const ctx = c.getContext('2d');
-  const woods = locked ? ['#3a2616', '#33200f', '#2c1b0c'] : ['#6a4526', '#5c3b1f', '#71492a'];
-  for (let b = 0; b < 4; b++) {
-    ctx.fillStyle = rng.pick(woods);
-    ctx.fillRect(b * 16, 0, 16, S);
-    for (let k = 0; k < 14; k++) { // grain
-      ctx.fillStyle = `rgba(0,0,0,${0.08 + rng.next() * 0.12})`;
-      ctx.fillRect(b * 16 + rng.int(1, 14), rng.int(0, S), 1, rng.int(6, 20));
-    }
-    ctx.fillStyle = '#1a0f08';
-    ctx.fillRect(b * 16, 0, 1, S);
-  }
-  const bands = locked ? [8, 30, 52] : [12, 48];
-  for (const y of bands) {
-    ctx.fillStyle = locked ? '#3a3230' : '#2e2e30';
-    ctx.fillRect(0, y, S, 5);
-    ctx.fillStyle = locked ? '#8a6a50' : '#707078';
-    for (let x = 3; x < S; x += 10) ctx.fillRect(x, y + 1, 2, 2);
-  }
-  return toTexture(c);
-}
-
-const doorTex = {};
-export function getDoorTexture(locked) {
-  return (doorTex[locked] ??= doorTexture(locked));
-}

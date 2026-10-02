@@ -1,5 +1,5 @@
 import { rand } from './rng.js';
-import { danger } from './config.js';
+import { danger, WADE_WET } from './config.js';
 
 // Status effects: things that afflict the player or a monster for a while, each a number of seconds left in
 // `who.status` (0 when it isn't in effect). Both go through the same afflict() and tickStatuses(), so immunities,
@@ -11,6 +11,7 @@ import { danger } from './config.js';
 //   harm             a hostile one: bosses take it for BOSS_STATUS as long
 //   stack: 'add'     a new dose adds its time (haste). Otherwise a new dose tops it up to the longer of the two.
 //   permanent        it never wears off (it's 1 while in effect), only ends when something ends it
+//   hold(who)        while this is true it doesn't wear down (Wet, while wading)
 //   dot              hurts every second: { type (a damage type, see damage.js, or none), source (what killed you),
 //                    player(game), monster(game, m) (how much) }
 //   resist           the damage type whose immunity wards it off (fire for burning: nothing burns a fire imp)
@@ -24,7 +25,8 @@ import { danger } from './config.js';
 // Being Hunted isn't one of these: it's carrying the Amulet (see Game.hunted).
 //
 // `who` is the player or a monster, with: status, isPlayer, boss, resistMult(type), hasTrait(trait),
-// statusNote(game, key, event) (says what happened: 'start', 'end', 'immune', 'doused', 'thawed').
+// statusNote(game, key, event) (says what happened: 'start', 'end', 'immune', 'doused', 'thawed'), and `wading`
+// (standing in a pool: see wade).
 
 export const BOSS_STATUS = 0.5;
 const FROZEN_THAW_CHILL = 4; // seconds of Chilled a thaw leaves behind
@@ -43,7 +45,7 @@ export const STATUSES = {
   frozen: {
     label: 'Frozen', color: '#c8ecff', tint: 0x4a7aa8, harm: true, resist: 'ice', mark: 'FROZEN',
     start: ['You are frozen solid!', 'danger'], end: 'You thaw out.',
-    onEnd: (game, who) => afflict(game, who, 'chilled', FROZEN_THAW_CHILL, { show: false }),
+    onEnd: (game, who) => afflict(game, who, 'chilled', FROZEN_THAW_CHILL, { show: false, thaw: true }),
   },
   burning: {
     label: 'Burning', color: '#ff7a3a', tint: 0x802000, harm: true, resist: 'fire',
@@ -120,7 +122,7 @@ export const STATUSES = {
     start: ['You are slick with oil.', 'warn'], end: 'The oil on you has worn off.',
   },
   wet: {
-    label: 'Wet', color: '#70b0ff', mark: 'WET',
+    label: 'Wet', color: '#70b0ff', mark: 'WET', hold: (who) => !!who.wading,
     start: ['You are soaked through.', 'info'], end: 'You have dried off.',
   },
   hasted: { label: 'Hasted', color: '#a8e890', stack: 'add', monster: false, end: 'You feel yourself slow down.' },
@@ -166,10 +168,12 @@ export function immuneTo(who, key) {
  *   it alight, and chilling something burning douses it instead of chilling it.
  * - Cold on something wet (or `fluid`, like an ooze) freezes it solid, as does wetting something chilled.
  * - Oil makes fire worse: set alight, it burns twice as long (and fire hurts it more; see damageTakenMult).
- * `show`: say so when it's immune (leave it off when a hit that has just done so brought the status).
+ * `show`: say so when it's immune (leave it off when a hit that has just done so brought the status). `thaw`: the
+ * chill a thaw leaves, which never freezes anything again (else an ooze, or anything standing in water, would thaw
+ * straight back into ice, for ever).
  * Returns whether it took.
  */
-export function afflict(game, who, key, secs, { show = true } = {}) {
+export function afflict(game, who, key, secs, { show = true, thaw = false } = {}) {
   const def = STATUSES[key], s = who.status;
   if (!def) {
     console.warn(`afflict: no status called '${key}'`); // (ALIASES are only for old saves)
@@ -203,7 +207,7 @@ export function afflict(game, who, key, secs, { show = true } = {}) {
         douse(game, who);
         return false;
       }
-      if (s.wet > 0 || who.hasTrait('fluid')) return afflict(game, who, 'frozen', secs * 0.75, { show });
+      if (!thaw && (s.wet > 0 || who.hasTrait('fluid'))) return afflict(game, who, 'frozen', secs * 0.75, { show });
       break;
     case 'frozen':
       s.burning = 0;
@@ -226,6 +230,20 @@ export function afflict(game, who, key, secs, { show = true } = {}) {
     who.statusNote(game, key, 'start');
   }
   return true;
+}
+
+/**
+ * Keeps `who` (the player or a monster on foot) in step with the water it stands in (see Level.inPool): stepping into
+ * a pool soaks it, which puts out fire, or freezes it solid if it's chilled; and it stays soaked while it wades, Wet
+ * only starting to wear off once it's out (WADE_WET seconds; see `hold`). Something the cold has dried (frozen, then
+ * still chilled from the thaw) is soaked again once the chill has worn off, not before, or it would freeze again.
+ * Returns whether it has just stepped in.
+ */
+export function wade(game, who, inWater) {
+  const entered = inWater && !who.wading, s = who.status;
+  who.wading = inWater;
+  if (entered || (inWater && !(s.wet > 0) && !(s.chilled > 0) && !(s.frozen > 0))) afflict(game, who, 'wet', WADE_WET, { show: false });
+  return entered;
 }
 
 /** Takes a status away early, as if it had worn off (though a cured freeze leaves no chill behind). */
@@ -290,7 +308,7 @@ export function tickStatuses(game, who, dt, { damage = true } = {}) {
   const s = who.status;
   let hurting = false;
   for (const key in s) {
-    if (!(s[key] > 0) || STATUSES[key].permanent) continue;
+    if (!(s[key] > 0) || STATUSES[key].permanent || STATUSES[key].hold?.(who)) continue;
     s[key] = Math.max(0, s[key] - dt);
     if (s[key] === 0) {
       STATUSES[key].onEnd?.(game, who);

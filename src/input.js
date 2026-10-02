@@ -1,9 +1,11 @@
+import { HOTBAR_SIZE } from './config.js';
+
 // Keys the game uses. In fullscreen, Keyboard Lock (Chrome, Edge) claims these, so browser shortcuts made with
 // them (a slip onto Ctrl+W closing the tab) don't fire mid-run. That includes Escape: a tap reaches the game, which
-// pauses, and the browser leaves fullscreen only when it's held (and says so itself).
+// pauses, and the browser leaves fullscreen only when it's held (and says so itself). The digits are the hotbar's.
 export const GAME_KEYS = [
   'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE', 'KeyR', 'KeyT', 'KeyF', 'KeyC', 'KeyN', 'KeyI', 'KeyM', 'KeyP',
-  'Tab', 'Space', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Escape',
+  'Tab', 'Space', ...Array.from({ length: HOTBAR_SIZE }, (_, i) => `Digit${i + 1}`), 'Escape',
 ];
 
 // Mouse look reads pointer lock's movementX/Y, which browsers sometimes get badly wrong for a single event: Chrome
@@ -30,6 +32,7 @@ export class Input {
     this.settleUntil = 0; // ignore mouse motion until then (see LOCK_SETTLE)
     this.spikes = 0; // how many spikes have been dropped, for checking from the console
     this.mouseDown = false;
+    this.rightDown = false; // right-click held: a shield raised (see shield.js)
     this.locked = false;
     this.onLockChange = null;
 
@@ -42,7 +45,7 @@ export class Input {
       this.keys.add(e.code);
     });
     window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => { this.keys.clear(); this.mouseDown = false; });
+    window.addEventListener('blur', () => { this.keys.clear(); this.mouseDown = false; this.rightDown = false; });
     document.addEventListener('mousemove', (e) => {
       if (!this.locked) return;
       const now = performance.now();
@@ -58,13 +61,16 @@ export class Input {
     canvas.addEventListener('mousedown', (e) => {
       if (!this.locked) return;
       if (e.button === 0) { this.mouseDown = true; this.pressed.add('Mouse0'); }
-      if (e.button === 2) this.pressed.add('Mouse2');
+      if (e.button === 2) { this.rightDown = true; this.pressed.add('Mouse2'); }
     });
-    window.addEventListener('mouseup', (e) => { if (e.button === 0) this.mouseDown = false; });
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 0) this.mouseDown = false;
+      if (e.button === 2) this.rightDown = false;
+    });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === canvas;
-      if (!this.locked) this.mouseDown = false;
+      if (!this.locked) this.mouseDown = this.rightDown = false;
       if (this.locked) {
         this.settleUntil = performance.now() + LOCK_SETTLE;
         this.motion.length = 0;
@@ -92,6 +98,7 @@ export class Input {
   get attack() { return this.mouseDown || this.keys.has('Space'); }
   get attackPressed() { return this.pressed.has('Mouse0') || this.pressed.has('Space'); }
   get sprint() { return this.keys.has('ShiftLeft') || this.keys.has('ShiftRight'); }
+  get guard() { return this.rightDown; }
 
   lock() {
     try {

@@ -1,6 +1,9 @@
 import { THEMES, FLOORS_PER_THEME, TILE, HUNGER_MAX, isBossDepth, isShopDepth } from '../config.js';
-import { WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS, WAND_ZAPS_TO_ID } from '../items/defs.js';
-import { makeItem, stackable } from '../items/generate.js';
+import {
+  WEAPONS, ARMORS, SHIELDS, SHIELD_HITS_TO_ID, BOWS, BOW_HITS_TO_ID, ARROWS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS,
+  CONTAINERS, WAND_ZAPS_TO_ID,
+} from '../items/defs.js';
+import { makeItem, stackable, chestLoot } from '../items/generate.js';
 import { MONSTERS } from '../monsters/defs.js';
 import { generateLevel } from '../dungeon/generator.js';
 import { disposeGroup } from '../dungeon/levelBuilder.js';
@@ -10,20 +13,24 @@ import { DAMAGE_TYPES, damageType, describeResist } from '../damage.js';
 import { STATUSES, afflict, cure } from '../status.js';
 import { ENCHANTMENTS, CURSES } from '../items/enchant.js';
 import { rand } from '../rng.js';
+import { MARK_ICONS } from './iconArt.js';
+import { iconHTML, markIcon, everyIcon } from './icons.js';
 import './devTools.css';
 
 // Dev tools, for testing by hand: jump to any floor, give yourself items, change your stats, give you or a monster a
-// status, spawn monsters, lay traps.
+// status, spawn monsters, lay traps; and every item icon at once, to look over the art.
 // The ` key opens and closes the panel during a run. main.js only loads this in development, or in a build
 // opened with ?dev in the address, so players never download it.
 
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, as stairs' `dir`
 const KINDS = [
-  ['weapon', 'Weapons', WEAPONS], ['offhand', 'Off hand', OFFHANDS], ['armor', 'Armour', ARMORS], ['potion', 'Potions', POTIONS],
+  ['weapon', 'Weapons', WEAPONS], ['offhand', 'Off hand', OFFHANDS], ['shield', 'Shields', SHIELDS], ['bow', 'Bows', BOWS],
+  ['arrow', 'Arrows', ARROWS], ['armor', 'Armour', ARMORS], ['potion', 'Potions', POTIONS],
   ['scroll', 'Scrolls', SCROLLS], ['wand', 'Wands', WANDS], ['ring', 'Rings', RINGS], ['artefact', 'Artefacts', ARTEFACTS],
-  ['food', 'Food', FOOD],
-  ['special', 'Other', { amulet: { name: 'Amulet of Yendor' }, key: { name: 'iron key (this floor)' } }],
+  ['food', 'Food', FOOD], ['container', 'Pack expansions', CONTAINERS],
+  ['special', 'Other', { amulet: { name: 'Amulet of Yendor' }, key: { name: 'iron key (this floor)' }, goldkey: { name: 'gold key (this floor)' } }],
 ];
+const CHESTS = { chest: 'Chest', locked: 'Locked chest', mimic: 'Mimic (passing for a chest)' };
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
 const SHOTS = { arrow: 'Arrows', bolt: 'Bolts', fire: 'Fireballs' }; // monsters' ranged attacks, by kind
 
@@ -79,6 +86,9 @@ export class DevTools {
             <h3>Traps</h3>
             <div class="dev-opts"><span>Lay one on the floor in front of you, armed and in plain sight</span></div>
             <div class="dev-grid dev-traps"></div>
+            <h3>Chests</h3>
+            <div class="dev-opts"><span>Set one down in front of you, facing you, with what this floor's would hold</span></div>
+            <div class="dev-grid dev-chests"></div>
           </div>
           <div>
             <h3>Items</h3>
@@ -94,6 +104,9 @@ export class DevTools {
             </div>
             <div class="dev-grid dev-items"></div>
             <div class="dev-row"><button class="alt" data-act="identify" title="Learn every potion, scroll, wand and ring, and identify all you carry">Identify everything</button></div>
+            <h3>Icons</h3>
+            <div class="dev-row"><button class="alt" data-act="icons" title="Every item icon (ui/icons.js), as big as the game shows them: each tinted one in every colour it comes in, the scroll with every rune, and the marks">Show every icon</button></div>
+            <div class="dev-icons" hidden></div>
           </div>
         </div>
       </div>`;
@@ -123,6 +136,8 @@ export class DevTools {
       .map(([key, def]) => `<button class="alt" data-status="${key}">${def.label}</button>`).join('');
     this.$('.dev-traps').innerHTML = ['spike', 'poison', 'teleport', 'alarm']
       .map((type) => `<button class="alt" data-trap="${type}">${cap(type)}</button>`).join('');
+    this.$('.dev-chests').innerHTML = Object.entries(CHESTS)
+      .map(([kind, label]) => `<button class="alt" data-chest="${kind}">${label}</button>`).join('');
     this.$('.dev-tabs').innerHTML = KINDS.map(([kind, label]) => `<button class="alt" data-kind="${kind}">${label}</button>`).join('');
     this.renderItems();
 
@@ -138,6 +153,7 @@ export class DevTools {
       else if (d.type) this.give(d.type);
       else if (d.monster) this.spawn(d.monster);
       else if (d.trap) this.layTrap(d.trap);
+      else if (d.chest) this.setChest(d.chest);
       else if (d.status) this.giveStatus(d.status);
       else if (d.stat) this.stat(d.stat);
       else if (d.act) this.act(d.act);
@@ -178,6 +194,21 @@ export class DevTools {
       `<span>${label}</span><b>${value}</b><div>${btns.map(([k, t]) => `<button class="alt" data-stat="${k}">${t}</button>`).join('')}</div>`).join('');
   }
 
+  /**
+   * Shows every item icon (ui/icons.js) at the size the game shows them, or hides them again: each tinted one in every
+   * colour it comes in, the scroll with every rune on it, and the marks.
+   */
+  iconSheet() {
+    const box = this.$('.dev-icons');
+    box.hidden = !box.hidden;
+    if (box.hidden || box.childElementCount) return;
+    const cell = (label, html) => `<figure title="${label}">${html}<figcaption>${label}</figcaption></figure>`;
+    const cells = everyIcon().map(({ label, item, color, rune }) =>
+      cell(label, iconHTML(item, { color: () => color, rune: () => rune }, { fallback: '<span>?</span>' })));
+    cells.push(...Object.keys(MARK_ICONS).map((name) => cell(`mark: ${name}`, `<img class="icon" src="${markIcon(name)}" width="27" height="27" alt="" />`)));
+    box.innerHTML = cells.join('');
+  }
+
   renderItems() {
     for (const b of this.el.querySelectorAll('[data-kind]')) b.classList.toggle('alt', b.dataset.kind !== this.kind);
     const defs = KINDS.find(([k]) => k === this.kind)[2];
@@ -198,7 +229,7 @@ export class DevTools {
   newLayout() {
     const g = this.game, depth = g.level.depth, old = g.level;
     this.layouts++;
-    g.levels.set(depth, new Level(g, generateLevel(`${g.seed}~${this.layouts}`, depth, { artefact: g.artefactFor(depth) })));
+    g.levels.set(depth, new Level(g, generateLevel(`${g.seed}~${this.layouts}`, depth, g.floorOpts(depth))));
     g.closeMenu();
     g.ui.fadeTransition();
     g.arrive(depth, 'down');
@@ -242,6 +273,7 @@ export class DevTools {
     switch (key) {
       case 'close': g.closeMenu(); break;
       case 'layout': this.newLayout(); break;
+      case 'icons': this.iconSheet(); break;
       case 'reveal':
         g.level.revealAll();
         for (const t of g.level.traps) g.level.revealTrap(t);
@@ -282,6 +314,8 @@ export class DevTools {
     switch (kind) {
       case 'weapon': item = makeItem('weapon', type, { hitsToId: 20 }); break;
       case 'armor': item = makeItem('armor', type, { hitsToId: 14 }); break;
+      case 'shield': item = makeItem('shield', type, { hitsToId: SHIELD_HITS_TO_ID }); break;
+      case 'bow': item = makeItem('bow', type, { hitsToId: BOW_HITS_TO_ID }); break;
       case 'ring': item = makeItem('ring', type, { wornTime: 0 }); break;
       case 'wand': {
         const max = WANDS[type].charges[1] + plus; // for a wand, each + is a charge more
@@ -289,14 +323,14 @@ export class DevTools {
         break;
       }
       case 'special':
-        item = type === 'amulet' ? g.makeAmulet() : makeItem('key', 'iron', { depth: g.level.depth });
+        item = type === 'amulet' ? g.makeAmulet() : makeItem('key', type === 'goldkey' ? 'gold' : 'iron', { depth: g.level.depth });
         if (type === 'amulet') g.amuletTaken = true;
         break;
       default: item = makeItem(kind, type);
     }
-    // Its +, its curse (a weapon's or armour's comes with a Curse of ___), and an enchantment, if it can take the one asked
-    // for: a weapon or armour, free of curses (see items/enchant.js).
-    if (['weapon', 'armor', 'ring', 'wand'].includes(kind)) {
+    // Its +, its curse (a weapon's, armour's, shield's or bow's comes with a Curse of ___), and an enchantment, if it can take the
+    // one asked for: a weapon, armour, shield or bow, free of curses (see items/enchant.js).
+    if (['weapon', 'armor', 'shield', 'bow', 'ring', 'wand'].includes(kind)) {
       item.plus = plus;
       item.curse = curse;
       if (curse && CURSES[kind]) item.bane = rand.pick(Object.keys(CURSES[kind]));
@@ -327,6 +361,15 @@ export class DevTools {
     lvl.traps.push(trap);
     lvl.revealTrap(trap);
     this.note(`Laid a ${type} trap in front of you. Close the panel and step on it to set it off.`);
+  }
+
+  /** Sets a chest of `kind` down on the floor in front of you, facing you, holding what one on this floor might. */
+  setChest(kind) {
+    const g = this.game, p = g.player, lvl = g.level;
+    const x = p.x - Math.sin(p.yaw) * 1.3, z = p.z - Math.cos(p.yaw) * 1.3;
+    if (lvl.isSolid(lvl.toTile(x), lvl.toTile(z)) || !lvl.clearPath(p.x, p.z, x, z)) return this.note('There\'s no room in front of you: face some open floor.');
+    lvl.addChest({ x, z, yaw: Math.atan2(p.x - x, p.z - z), kind, items: chestLoot(rand, lvl.depth, kind) }).seen = true;
+    this.note(`Set down ${kind === 'locked' ? 'a locked chest (its gold key is under Items, Other)' : kind === 'mimic' ? 'a mimic, passing for a chest' : 'a chest'}. Close the panel to meet it.`);
   }
 
   /**

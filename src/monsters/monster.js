@@ -1,19 +1,19 @@
 import { MONSTERS } from './defs.js';
 import { buildMonsterModel } from './models.js';
 import { rand } from '../rng.js';
-import { PLAYER_RADIUS, EYE_H, TILE, danger } from '../config.js';
+import { PLAYER_RADIUS, TILE, POOL, WADE_SPEED, danger } from '../config.js';
 import { spawnProjectile } from '../fx/projectiles.js';
 import { burst } from '../fx/particles.js';
 import { round2 } from '../save.js';
 import { DAMAGE_TYPES, damageType, damageMult, isPhysical } from '../damage.js';
 import {
   STATUSES, blankStatus, restoreStatus, saveStatus, afflict as applyStatus, tickStatuses, damageTakenMult, hitStatuses,
-  breakCharm,
+  breakCharm, wade,
 } from '../status.js';
 
 const BLOOD = {
   rat: 0x901010, bat: 0x901010, slime: 0x40c040, goblin: 0x902010, archer: 0x902010, skeleton: 0xe0d8c0,
-  orc: 0x801010, wraith: 0x6040a0, imp: 0xff6010, troll: 0x406020, golem: 0x909090, warden: 0xffc040,
+  orc: 0x801010, wraith: 0x6040a0, imp: 0xff6010, troll: 0x406020, golem: 0x909090, mimic: 0x7a1830, warden: 0xffc040,
 };
 
 const STRIKE_TIME = 0.3;
@@ -36,9 +36,10 @@ export class Monster {
     // Tougher the more dangerous the floor is than the first one it appears on (see `danger` in config.js).
     this.danger = danger(depth);
     const over = def.boss ? 0 : Math.max(0, this.danger - danger(def.depth[0]));
-    this.maxHp = Math.round(def.hp * (1 + over * 0.08));
+    const [hpGrow, dmgGrow] = def.grow ?? [0.08, 0.05];
+    this.maxHp = Math.round(def.hp * (1 + over * hpGrow));
     this.hp = this.maxHp;
-    this.dmgMult = 1 + over * 0.05;
+    this.dmgMult = 1 + over * dmgGrow;
     this.x = x;
     this.z = z;
     this.radius = def.radius;
@@ -53,7 +54,11 @@ export class Monster {
     this.mesh = model.root;
     this.mesh.rotation.order = 'YXZ';
     this.height = model.height;
-    this.baseY = def.flying ?? 0;
+    this.baseY = def.flying ?? 0; // how high it stands: flying, or down in a pool (see updateWading)
+    // Wading, it sinks to a pool's bed, or if it's too small for that, swims with its back out of the water.
+    this.wadeDepth = Math.min(POOL.bed, POOL.surface + this.height * 0.6);
+    this.sink = 0;
+    this.wading = false;
     this.mesh.position.set(x, this.baseY, z);
 
     this.attack = { phase: 'none', t: 0, ranged: false };
@@ -83,6 +88,8 @@ export class Monster {
     this.idleT = 0;
     this.zzzT = rand.range(1, 3);
     this.summoned = false;
+    this.loot = null; // what it drops when it dies, if not the usual chance of something (a mimic's: what its chest held)
+    this.revealT = null; // seconds since it gave itself away, for the first moments after (a mimic waking)
   }
 
   /** What a save keeps of it (see Level.snapshot). Only statuses in effect are kept. */
@@ -92,7 +99,7 @@ export class Monster {
       type: this.type, x: round2(this.x), z: round2(this.z), yaw: round2(this.yaw), hp: round2(this.hp), maxHp: this.maxHp,
       danger: this.danger, dmgMult: this.dmgMult, state: this.state, seen: this.seen || undefined, status,
       boss: this.boss || undefined, guardian: this.guardian || undefined, summoned: this.summoned || undefined,
-      weakBase: this.weakBase ?? undefined,
+      weakBase: this.weakBase ?? undefined, loot: this.loot ?? undefined,
     };
   }
 
@@ -108,6 +115,7 @@ export class Monster {
     this.state = s.state;
     this.seen = !!s.seen;
     this.summoned = !!s.summoned;
+    this.loot = s.loot ?? null;
     this.mesh.rotation.y = this.yaw;
     return this;
   }
@@ -170,9 +178,9 @@ export class Monster {
     this.t += dt;
     if (this.dead) {
       this.deathT += dt;
-      const k = Math.min(1, this.deathT / 0.45);
+      const k = Math.min(1, this.deathT / 0.45), ground = level.groundY(this.x, this.z);
       this.mesh.rotation.x = -k * Math.PI / 2;
-      this.mesh.position.y = this.baseY * (1 - k) - Math.max(0, this.deathT - 0.7) * 0.8;
+      this.mesh.position.y = ground + (this.baseY - ground) * (1 - k) - Math.max(0, this.deathT - 0.7) * 0.8;
       return;
     }
 
@@ -203,6 +211,7 @@ export class Monster {
     }
 
     const speedMult = this.status.chilled > 0 ? 0.5 : 1;
+    const moveMult = speedMult * (this.wading ? WADE_SPEED : 1); // (wading slows its steps, not its blows)
     let moving = false;
     if (this.held()) {
       this.attack.phase = 'none';
@@ -210,10 +219,12 @@ export class Monster {
       this.updateAttack(dt * speedMult, game, level);
     } else {
       this.cooldown -= dt * speedMult;
-      moving = this.think(dt, game, level, dist, dx, dz, speedMult);
+      moving = this.think(dt, game, level, dist, dx, dz, moveMult);
     }
 
-    if (moving) this.walk += dt * this.def.speed * speedMult * 3;
+    if (moving) this.walk += dt * this.def.speed * moveMult * 3;
+    if (this.revealT !== null && (this.revealT += dt) > 1) this.revealT = null;
+    if (!this.flies) this.updateWading(dt, game, level, moving);
     this.mesh.position.set(this.x, this.baseY, this.z);
     this.mesh.rotation.y = this.yaw;
     const a = this.attack;
@@ -222,6 +233,7 @@ export class Monster {
       walk: this.walk,
       windup: a.phase === 'windup' ? Math.min(1, a.t / this.def.windup) : -1,
       strike: a.phase === 'strike' ? Math.min(1, a.t / STRIKE_TIME) : -1,
+      reveal: this.revealT ?? -1,
     });
     this.updateTint(dt);
 
@@ -232,6 +244,17 @@ export class Monster {
         if (dist < 10 && level.isVisibleWorld(this.x, this.z)) game.popup(this.headPos(), 'z', 'zzz');
       }
     }
+  }
+
+  /**
+   * In a pool (see dungeon/pools.js) it wades, stirring the water as it goes: slower (see update), soaked (see wade in
+   * status.js), and a step down.
+   */
+  updateWading(dt, game, level, moving) {
+    const inWater = level.inPool(this.x, this.z);
+    level.stir(this, dt, { radius: this.radius, moving, entered: wade(game, this, inWater) });
+    this.sink += ((inWater ? this.wadeDepth : 0) - this.sink) * Math.min(1, dt * 10);
+    this.baseY = -this.sink;
   }
 
   tickStatus(dt, game, level) {
@@ -496,7 +519,7 @@ export class Monster {
     if (!this.wander || (this.wander.t -= dt) <= 0) {
       const room = rand.pick(level.wanderRooms);
       const tx = rand.int(room.x, room.x + room.w - 1), ty = rand.int(room.y, room.y + room.h - 1);
-      if (!level.isFloorTile(tx, ty)) return false;
+      if (!level.isFloorTile(tx, ty) && !level.inPool(level.center(tx), level.center(ty))) return false;
       this.wander = { tx, ty, field: level.fieldTo(tx, ty, this.flies), t: 25 };
     }
     if (level.toTile(this.x) === this.wander.tx && level.toTile(this.z) === this.wander.ty) {
@@ -522,7 +545,7 @@ export class Monster {
     dz /= d;
     // Monsters open unlocked doors in their way; locked ones are already walls to their pathfinding.
     const door = level.doorAhead(this.x, this.z, dx, dz, this.radius);
-    if (door) level.openDoor(door);
+    if (door) level.openDoor(door, this);
     let jitter = 0;
     if (this.def.erratic) jitter += Math.sin(this.t * 3.1) * 0.9;
     if (this.status.confused > 0) jitter += Math.sin(this.t * 2.3) * 2.4;
@@ -620,7 +643,7 @@ export class Monster {
         game.hurtPlayer(this.rollDamage(), { source: this.name, monster: this, type: damageType(this.def) });
         if (this.def.poisonHit && rand.chance(this.def.poisonHit)) p.addStatus('poisoned', 6, game);
       } else {
-        game.popup({ x: p.x - Math.sin(p.yaw) * 0.8, y: EYE_H, z: p.z - Math.cos(p.yaw) * 0.8 }, 'dodge', 'miss');
+        game.popup({ x: p.x - Math.sin(p.yaw) * 0.8, y: p.eyeHeight(), z: p.z - Math.cos(p.yaw) * 0.8 }, 'dodge', 'miss');
         game.audio.whiff();
       }
     } else {
@@ -633,7 +656,7 @@ export class Monster {
     const r = this.def.ranged;
     const p = game.player;
     const ox = this.x + Math.sin(this.yaw) * 0.4, oy = this.baseY + this.height * 0.75, oz = this.z + Math.cos(this.yaw) * 0.4;
-    const aimY = target === p ? EYE_H - 0.35 : target.baseY + target.height * 0.55;
+    const aimY = target === p ? p.eyeHeight() - 0.35 : target.baseY + target.height * 0.55;
     const tx = target.x - ox, ty = aimY - oy, tz = target.z - oz;
     const len = Math.hypot(tx, ty, tz) || 1;
     const n = r.volley || 1;

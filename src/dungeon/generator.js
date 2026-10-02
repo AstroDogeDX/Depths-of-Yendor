@@ -1,20 +1,28 @@
 import { RNG } from '../rng.js';
-import { MAX_DEPTH, themeForDepth, isShopDepth, danger } from '../config.js';
-import { spawnTable } from '../monsters/defs.js';
-import { randomItem, makeItem } from '../items/generate.js';
+import { TILE, MAX_DEPTH, THEMES, themeForDepth, isShopDepth, danger } from '../config.js';
+import { MONSTERS, spawnTable } from '../monsters/defs.js';
+import { randomItem, makeItem, chestLoot, goldPile } from '../items/generate.js';
 import { T } from './tiles.js';
 import { ROOM_TYPES } from './rooms.js';
 import { digChannels } from './channels.js';
-import { decorate } from './decor.js';
+import { digPools, growPool, dryMask } from './pools.js';
+import { decorate, faceKey } from './decor.js';
 
 export { T };
 
-const W = 52;
-const H = 52;
+// The map, in tiles: the Sewers' 52 across, and a little more for each theme down, room for its extra side rooms
+// (see planRooms). The loop of rooms keeps the Sewers' size in the middle of it, so the room goes to the wings.
+const MAP = 52;
+const MAP_GROWTH = 5;
 const GAP = 3;  // min tiles between room interiors: each room's wall plus one corridor lane
 const EDGE = 3; // min distance from a room interior to the map border
 const SIDES = { N: [0, -1], S: [0, 1], W: [-1, 0], E: [1, 0] };
+const FACING = { N: 0, S: Math.PI, W: Math.PI / 2, E: -Math.PI / 2 }; // turns a prop against the wall on that side to face into the room
 const STEPS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, as stairs' `dir`
+const FIXTURES = new Set([T.STAIRS_UP, T.STAIRS_DOWN, T.PEDESTAL]);
+const CHEST_BACK = 0.25; // tiles a chest stands back from the middle of its tile, toward the wall behind it
+const SPRAWL = 0.6; // the chance of each extra side room a theme may add (see planRooms)
+const SIGN_OFF = 0.64; // tiles from the middle of a shop's door to each of the blue flames beside it (see shopSigns)
 
 /**
  * Pixel Dungeon-style layout, built graph-first:
@@ -27,17 +35,21 @@ const STEPS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, as stairs' `dir`
  *     them. Rooms are sealed boxes corridors can never cut through, so a room can only be entered
  *     through its own doorways. That is what makes a lock mean something, and why locked doors
  *     can only ever sit on a branch, never the loop.
- *  4. Furnish each room by type, then populate.
+ *  4. Furnish each room by type, then populate: chests, monsters, the odd thing lying loose, traps.
  *
  * opts.artefact       artefact type for this floor's shrine, if any
+ * opts.wares          what its shop has on its plinths, if it has a shop: { container, artefact } (see shopStock)
  * opts.extraBranches  extra branch specs, e.g. [{ type: 'standard', locked: true }]
  *
- * A branch spec may name its parent room's type, e.g. { type: 'shop', parent: 'entrance' }.
+ * A branch spec may name its parent room's type, e.g. { type: 'shop', parent: 'entrance' }, or with `offBranch` hang
+ * off another branch where there is one. A `locked` branch is behind a locked door, and nothing hangs off it.
  */
 export function generateLevel(seed, depth, opts = {}) {
   const rng = new RNG(`${seed}:depth:${depth}`);
   for (let attempt = 0; attempt < 100; attempt++) {
-    const level = attemptLevel(rng, depth, opts);
+    // Pools and the passages' dressing draw on streams of their own, so how they're laid never moves anything else on
+    // the floor (the traps a save keeps track of, say).
+    const level = attemptLevel(rng, depth, opts, (name) => new RNG(`${seed}:depth:${depth}:${name}:${attempt}`));
     if (level) return level;
   }
   throw new Error(`Level generation failed for seed ${seed}, depth ${depth}`);
@@ -51,16 +63,26 @@ function planRooms(rng, depth, opts) {
   // Boss floors (isBossDepth) are built like the rest for now; the last one holds the Amulet's vault.
   loop[Math.floor(n / 2)] = depth >= MAX_DEPTH ? 'vault' : 'exit';
   const branches = [];
-  // The shop goes first, so the room beside the entrance is still free for it.
-  if (isShopDepth(depth)) branches.push({ type: 'shop', required: true, parent: 'entrance' });
+  // The shop goes first, so the room beside the entrance is still free for it. It opens straight off the entrance
+  // room, through a door in a wall they share, so you can see it (and get to it) the moment you arrive.
+  if (isShopDepth(depth)) branches.push({ type: 'shop', required: true, parent: 'entrance', beside: true });
   if (opts.artefact) branches.push({ type: 'shrine', required: true });
   for (const b of opts.extraBranches ?? []) branches.push({ required: true, ...b });
+  // Locked side rooms, from the second floor on: often one, and deeper down now and then a second. Each is a dead
+  // end (nothing ever hangs off a locked room), so its iron key can always be put somewhere you can reach without one.
+  const locked = depth < 2 ? 0 : (rng.chance(0.3 + d * 0.04) ? 1 : 0) + (d >= 6 && rng.chance(0.3) ? 1 : 0);
+  for (let i = 0; i < locked; i++) branches.push({ type: 'standard', locked: true });
   const optional = rng.int(1, 3) + (d >= 6 ? 1 : 0);
   for (let i = 0; i < optional; i++) branches.push({ type: 'standard' });
+  // Each theme after the first sprawls further: a chance of one more side room for each theme down, hung off another
+  // side room where there is one, so the deeper floors grow wings of rooms off the loop.
+  const sprawl = THEMES.indexOf(themeForDepth(depth));
+  for (let i = 0; i < sprawl; i++) if (rng.chance(SPRAWL)) branches.push({ type: 'standard', offBranch: true });
   return { loop, branches };
 }
 
-function attemptLevel(rng, depth, opts) {
+function attemptLevel(rng, depth, opts, stream) {
+  const W = MAP + MAP_GROWTH * THEMES.indexOf(themeForDepth(depth)), H = W;
   const grid = new Uint8Array(W * H); // all WALL
   const foot = new Int16Array(W * H).fill(-1); // owning room id for interior + wall-ring tiles
   const corr = new Uint8Array(W * H); // 1 = loop corridor, 2 = branch corridor
@@ -69,9 +91,10 @@ function attemptLevel(rng, depth, opts) {
   const edges = [];
   const idx = (x, y) => y * W + x;
 
-  const fits = (x, y, w, h) => {
+  /** Whether a room fits at (x, y), w × h, clear of the rest by GAP (but for `beside`, which it may share a wall with). */
+  const fits = (x, y, w, h, beside = null) => {
     if (x < EDGE || y < EDGE || x + w > W - EDGE || y + h > H - EDGE) return false;
-    if (!rooms.every((o) => x + w + GAP <= o.x || o.x + o.w + GAP <= x || y + h + GAP <= o.y || o.y + o.h + GAP <= y)) return false;
+    if (!rooms.every((o) => o === beside || x + w + GAP <= o.x || o.x + o.w + GAP <= x || y + h + GAP <= o.y || o.y + o.h + GAP <= y)) return false;
     // Branch rooms arrive after corridors exist: a room dropped on a corridor would let it cut through the walls.
     for (let yy = y - 1; yy <= y + h; yy++) for (let xx = x - 1; xx <= x + w; xx++) if (corr[idx(xx, yy)]) return false;
     return true;
@@ -195,11 +218,47 @@ function attemptLevel(rng, depth, opts) {
     return true;
   };
 
+  /**
+   * Puts a room of `type` right beside `parent`, sharing a wall with it, and joins them by one doorway in that wall: no
+   * corridor between. The rooms share at least three tiles of wall, and the doorway goes in the middle of that stretch,
+   * so there's wall either side of it (see shopSigns). The doorway is in both rooms' `doorways`, each with the side of
+   * the room it's on, and once in the floor's. Returns the room, or null if there's no room for it beside the parent.
+   */
+  const placeBeside = (type, parent) => {
+    const def = ROOM_TYPES[type], flip = { N: 'S', S: 'N', E: 'W', W: 'E' };
+    for (let tries = 0; tries < 12; tries++) {
+      const { w, h } = def.size(rng, depth);
+      for (const side of rng.shuffle(['N', 'S', 'E', 'W'])) {
+        const horiz = side === 'E' || side === 'W', len = horiz ? h : w, plen = horiz ? parent.h : parent.w;
+        const off = rng.int(3 - len, plen - 3); // where it starts along the shared wall, from where the parent does
+        const x = side === 'E' ? parent.x + parent.w + 1 : side === 'W' ? parent.x - 1 - w : parent.x + off;
+        const y = side === 'S' ? parent.y + parent.h + 1 : side === 'N' ? parent.y - 1 - h : parent.y + off;
+        if (!fits(x, y, w, h, parent)) continue;
+        const a = Math.max(horiz ? parent.y : parent.x, horiz ? y : x), b = Math.min(horiz ? parent.y + parent.h : parent.x + parent.w, horiz ? y + h : x + w) - 1;
+        const at = rng.int(a + 1, b - 1), wall = { E: parent.x + parent.w, W: parent.x - 1, S: parent.y + parent.h, N: parent.y - 1 }[side];
+        const [dx, dy] = horiz ? [wall, at] : [at, wall];
+        if (parent.doorways.some((d) => Math.abs(d.x - dx) + Math.abs(d.y - dy) < 3)) continue;
+        const r = makeRoom(type, x, y, w, h, { onLoop: false, locked: false, parent: parent.id });
+        rooms.push(r);
+        claim(r, r.id);
+        grid[idx(dx, dy)] = r.doorStyle === 'door' ? T.DOOR : T.FLOOR;
+        const dw = { x: dx, y: dy, side: flip[side], room: r.id, style: r.doorStyle, locked: false, kind: 'branch' };
+        r.doorways.push(dw);
+        parent.doorways.push({ ...dw, side, room: parent.id });
+        doorways.push(dw);
+        edges.push({ a: parent.id, b: r.id, kind: 'branch', locked: false });
+        r.beside = { parent: parent.id, door: dw, side };
+        return r;
+      }
+    }
+    return null;
+  };
+
   // --- 1 & 2: plan and lay out the loop ---
 
   const plan = planRooms(rng, depth, opts);
   const n = plan.loop.length;
-  const rx = W * rng.range(0.25, 0.3), ry = H * rng.range(0.25, 0.3);
+  const rx = MAP * rng.range(0.25, 0.3), ry = MAP * rng.range(0.25, 0.3);
   const a0 = rng.range(0, Math.PI * 2);
   const turn = rng.chance(0.5) ? 1 : -1;
   for (let i = 0; i < n; i++) {
@@ -221,17 +280,21 @@ function attemptLevel(rng, depth, opts) {
 
   for (const spec of plan.branches) {
     const def = ROOM_TYPES[spec.type];
+    if (spec.beside) {
+      if (!placeBeside(spec.type, rooms.find((r) => r.type === spec.parent)) && spec.required) return null;
+      continue;
+    }
     let placed = false;
     for (let tries = 0; tries < 40 && !placed; tries++) {
       const parents = rooms.filter((r) => ROOM_TYPES[r.type].branchable && !r.locked && (!spec.parent || r.type === spec.parent));
-      const loopParents = parents.filter((r) => r.onLoop);
-      const parent = rng.pick(rng.chance(0.7) && loopParents.length ? loopParents : parents);
+      const loopParents = parents.filter((r) => r.onLoop), sideParents = spec.offBranch ? parents.filter((r) => !r.onLoop) : [];
+      const parent = sideParents.length ? rng.pick(sideParents) : rng.pick(rng.chance(0.7) && loopParents.length ? loopParents : parents);
       const { w, h } = def.size(rng, depth);
       const a = rng.range(0, Math.PI * 2);
       const dist = (Math.max(parent.w, parent.h) + Math.max(w, h)) / 2 + rng.int(GAP + 1, GAP + 5);
       const x = Math.round(parent.cx + Math.cos(a) * dist - w / 2), y = Math.round(parent.cy + Math.sin(a) * dist - h / 2);
       if (!fits(x, y, w, h)) continue;
-      const r = makeRoom(spec.type, x, y, w, h, { onLoop: false, locked: !!spec.locked, parent: parent.id });
+      const r = makeRoom(spec.type, x, y, w, h, { onLoop: false, locked: !!spec.locked, sprawl: !!spec.offBranch, parent: parent.id });
       rooms.push(r);
       claim(r, r.id);
       if (connect(parent, r, 'branch', spec.locked)) placed = true;
@@ -253,7 +316,7 @@ function attemptLevel(rng, depth, opts) {
   for (const r of rooms) for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) inRoom[idx(x, y)] = r.id;
 
   const ctx = {
-    rng, depth, artefact: opts.artefact,
+    rng, depth, artefact: opts.artefact, wares: opts.wares ?? {},
     up: null, down: null, amulet: null, shrine: null, shop: null, monsters: [],
     get: (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? T.WALL : grid[idx(x, y)]),
     set: (x, y, v) => { if (x > 0 && y > 0 && x < W - 1 && y < H - 1) grid[idx(x, y)] = v; },
@@ -277,19 +340,40 @@ function attemptLevel(rng, depth, opts) {
       ctx.set(room.cx, room.cy, T.PEDESTAL);
       return { x: room.cx, y: room.cy };
     },
+    /**
+     * Grows a pool of up to `size` tiles in `room` from tile `at` (see growPool in pools.js), keeping clear of its
+     * doorways and of anything placed so far. Returns the tiles it flooded.
+     */
+    growPool(room, at, size) {
+      const tiles = growPool(rng, grid, W, room, at, size, dryMask(grid, W, rooms));
+      if (tiles.length) ctx.pools.push({ room: room.id, tiles });
+      return tiles;
+    },
+    pools: [],
     addMonster(m) { ctx.monsters.push(m); },
   };
   for (const r of rooms) ROOM_TYPES[r.type].furnish(ctx, r);
+  // A shop opening off the entrance room has a blue flame either side of its door on that side too, as it has inside,
+  // so it's seen the moment you arrive.
+  const shopBeside = rooms.find((r) => r.type === 'shop' && r.beside);
+  const signs = ctx.shop && shopBeside ? shopSigns(shopBeside.beside) : null;
+  if (signs) ctx.shop.sconces.push(...signs.spots);
 
-  // --- 5: theme features: water channels, then decorations ---
+  // --- 5: theme features: water channels, pools, then decorations ---
 
   const theme = themeForDepth(depth);
   const [sx, sy] = STEPS[ctx.up.dir];
   const channels = theme.channels ? digChannels({ rng, grid, w: W, rooms, start: idx(ctx.up.x + sx, ctx.up.y + sy), count: theme.channels.count }) : [];
+  const pools = [...ctx.pools];
+  if (theme.pools) {
+    const where = rooms.filter((r) => ROOM_TYPES[r.type].pools && !r.locked);
+    pools.push(...digPools({ rng: stream('pools'), grid, w: W, rooms: where, count: theme.pools.count, flood: theme.pools.flood }));
+  }
   const occupied = new Set([idx(ctx.up.x, ctx.up.y)]);
   if (ctx.down) occupied.add(idx(ctx.down.x, ctx.down.y));
   for (const m of ctx.monsters) occupied.add(idx(m.x, m.y));
-  const decor = decorate({ style: theme.style, rng, grid, w: W, rooms, channels, occupied });
+  const decor = decorate({ style: theme.style, rng, tunnelRng: stream('tunnels'), grid, w: W, rooms, channels, occupied });
+  for (const f of signs?.faces ?? []) decor.wallUsed.add(f);
 
   // --- 6: populate ---
 
@@ -306,18 +390,85 @@ function attemptLevel(rng, depth, opts) {
   };
   const monsterRooms = rooms.filter((r) => ROOM_TYPES[r.type].monsters && !r.locked);
   const itemRooms = rooms.filter((r) => ROOM_TYPES[r.type].items && !r.locked);
+  const d = danger(depth);
+  const items = [];
+
+  // Chests: most of what there is to find is in them. Each stands against a wall of a room the population pass may
+  // fill, facing into it, on a tile of its own clear of doorways, stairs and pedestals and of anything hung on the
+  // wall behind it; they spread across the rooms before any room gets two. From the mimic's first floor on, some are
+  // mimics (never in the room you arrive in). Now and then there's a locked chest too, likeliest in a side room, whose
+  // gold key is in one of the others (never a mimic) or lying loose.
+  const chests = [];
+  const chestSpot = (room) => {
+    const faces = [];
+    for (let x = room.x; x < room.x + room.w; x++) faces.push([x, room.y, 'N'], [x, room.y + room.h - 1, 'S']);
+    for (let y = room.y; y < room.y + room.h; y++) faces.push([room.x, y, 'W'], [room.x + room.w - 1, y, 'E']);
+    for (const [x, y, side] of rng.shuffle(faces)) {
+      const [nx, ny] = SIDES[side];
+      if (ctx.get(x, y) !== T.FLOOR || occupied.has(idx(x, y)) || ctx.get(x + nx, y + ny) !== T.WALL) continue;
+      if (decor.wallUsed.has(faceKey(x, y, side)) || room.doorways.some((dw) => Math.max(Math.abs(dw.x - x), Math.abs(dw.y - y)) <= 1)) continue;
+      if ([-1, 0, 1].some((dy) => [-1, 0, 1].some((dx) => FIXTURES.has(ctx.get(x + dx, y + dy))))) continue;
+      occupied.add(idx(x, y));
+      const along = rng.range(-0.2, 0.2);
+      return {
+        x, y, // its tile; where it stands in it, in tiles:
+        px: x + 0.5 + nx * CHEST_BACK + (ny ? along : 0), py: y + 0.5 + ny * CHEST_BACK + (nx ? along : 0),
+        yaw: FACING[side] + rng.range(-0.12, 0.12),
+      };
+    }
+    return null;
+  };
+  const chestRooms = rng.shuffle([...itemRooms]);
+  const mimicChance = depth < MONSTERS.mimic.depth[0] ? 0 : Math.min(0.2, 0.05 + d * 0.015);
+  const chestCount = rng.int(2, 4) + (d > 5 ? 1 : 0);
+  for (let i = 0; i < chestCount && chestRooms.length; i++) {
+    const room = chestRooms[i % chestRooms.length], at = chestSpot(room);
+    if (!at) continue;
+    const kind = room.type !== 'entrance' && rng.chance(mimicChance) ? 'mimic' : 'chest';
+    chests.push({ ...at, kind, items: chestLoot(rng, depth, kind) });
+  }
+  // Behind each locked door, a stash worth its key: a chest or two (never a mimic), and a heap of gold.
+  const lockedRooms = rooms.filter((r) => r.locked);
+  for (const room of lockedRooms) {
+    for (let i = rng.int(1, 2); i > 0; i--) {
+      const at = chestSpot(room);
+      if (at) chests.push({ ...at, kind: 'chest', items: chestLoot(rng, depth, 'chest') });
+    }
+    const t = freeTileIn(room);
+    if (t) items.push({ item: goldPile(rng, depth, 1.5), ...t });
+  }
+  if (itemRooms.length && rng.chance(0.3 + d * 0.02)) {
+    // Likeliest in a side room, and half the time, where there is one, behind a locked door too.
+    const side = itemRooms.filter((r) => !r.onLoop);
+    const room = lockedRooms.length && rng.chance(0.5) ? rng.pick(lockedRooms) : rng.pick(side.length ? side : itemRooms);
+    const at = chestSpot(room);
+    if (at) {
+      const key = makeItem('key', 'gold', { depth });
+      const holders = chests.filter((c) => c.kind === 'chest');
+      let hidden = holders.length > 0 && rng.chance(0.5);
+      if (hidden) rng.pick(holders).items.push(key);
+      for (let k = 0; k < 10 && !hidden; k++) {
+        const t = freeTileIn(rng.pick(itemRooms));
+        if (t) {
+          items.push({ item: key, ...t });
+          hidden = true;
+        }
+      }
+      if (hidden) chests.push({ ...at, kind: 'locked', items: chestLoot(rng, depth, 'locked') });
+    }
+  }
 
   const monsters = ctx.monsters;
   const table = spawnTable(depth);
-  const d = danger(depth);
-  const monsterCount = 4 + Math.floor(d * 1.3) + rng.int(0, 2);
+  // (A floor that sprawls has more to fill: a monster more for each of its extra side rooms.)
+  const monsterCount = 4 + Math.floor(d * 1.3) + rng.int(0, 2) + rooms.filter((r) => r.sprawl).length;
   for (let i = 0; i < monsterCount && monsterRooms.length; i++) {
     const t = freeTileIn(rng.pick(monsterRooms), 7);
     if (t) monsters.push({ type: rng.weighted(table), x: t.x, y: t.y });
   }
 
-  const items = [];
-  const itemCount = rng.int(4, 6) + (d > 5 ? 1 : 0);
+  // A few things still lie loose, and food and gold.
+  const itemCount = rng.int(0, 2);
   for (let i = 0; i < itemCount; i++) {
     const t = freeTileIn(rng.pick(itemRooms));
     if (t) items.push({ item: randomItem(rng, depth), ...t });
@@ -326,16 +477,16 @@ function attemptLevel(rng, depth, opts) {
     const t = freeTileIn(rng.pick(itemRooms));
     if (t) items.push({ item: makeItem('food', 'ration'), ...t });
   }
-  const goldCount = rng.int(2, 4);
+  const goldCount = rng.int(1, 3);
   for (let i = 0; i < goldCount; i++) {
     const t = freeTileIn(rng.pick(itemRooms));
-    if (t) items.push({ item: makeItem('gold', 'gold', { qty: rng.int(8, 20) + Math.round(d * rng.int(3, 8)) }), ...t });
+    if (t) items.push({ item: goldPile(rng, depth), ...t });
   }
-  // Every locked room's key lies somewhere on the loop, which is always reachable without keys.
-  const loopRooms = rooms.filter((r) => r.onLoop && r.type !== 'vault');
-  for (const r of rooms.filter((q) => q.locked)) {
+  // Every locked door's iron key lies loose in a room you can reach without one: any room but the locked ones, since
+  // nothing ever hangs off a locked room (see planRooms), so no other room is behind a lock.
+  for (let i = 0; i < lockedRooms.length; i++) {
     let t = null;
-    for (let k = 0; k < 10 && !t; k++) t = freeTileIn(rng.pick(loopRooms));
+    for (let k = 0; k < 20 && !t; k++) t = freeTileIn(rng.pick(itemRooms));
     if (!t) return null;
     items.push({ item: makeItem('key', 'iron', { depth }), ...t });
   }
@@ -360,9 +511,26 @@ function attemptLevel(rng, depth, opts) {
     depth, w: W, h: H, grid, rooms, edges, doorways,
     doors: doorways.filter((d) => d.style === 'door'),
     up: ctx.up, down: ctx.down, amulet: ctx.amulet, shrine: ctx.shrine, shop: ctx.shop,
-    channels, decor: decor.props, wallUsed: decor.wallUsed,
-    monsters, items, traps, theme,
+    channels, pools, decor: decor.props, wallUsed: decor.wallUsed,
+    monsters, items, chests, traps, theme,
   };
+}
+
+/**
+ * The two blue-flamed sconces either side of the door of a shop beside the entrance room (see placeBeside), on the
+ * entrance's side of the wall. `side` is the side of the entrance the shop is on. Returns their spots, as the shop's own
+ * are ({ x, z in metres, 0.1 m out from the wall, ry facing away from it }), and the wall faces they take (faceKey), so
+ * nothing else is hung there.
+ */
+function shopSigns({ door, side }) {
+  const [nx, ny] = SIDES[side], ax = Math.abs(ny), ay = Math.abs(nx); // toward the shop, and along the wall
+  const spots = [], faces = [];
+  for (const s of [-1, 1]) {
+    const fx = door.x + 0.5 - nx * 0.5 + ax * s * SIGN_OFF, fz = door.y + 0.5 - ny * 0.5 + ay * s * SIGN_OFF;
+    spots.push({ x: fx * TILE - nx * 0.1, z: fz * TILE - ny * 0.1, ry: FACING[side] });
+    faces.push(faceKey(door.x - nx + ax * s, door.y - ny + ay * s, side));
+  }
+  return { spots, faces };
 }
 
 /** Minimal binary min-heap of (key, priority). */

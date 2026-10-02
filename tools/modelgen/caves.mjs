@@ -5,6 +5,8 @@
 // (179 px).
 import { defineModel, loft, revolve, tube, noise3, rand, fract, ramp } from './lib.mjs';
 import { MAT, PAL, P, patches, bevel } from './materials.mjs';
+import { HALF, VAULT as TOP, bothFaces } from './doorkit.mjs';
+import { PIT, SKY, roughWall, deep, wobble } from './stairkit.mjs';
 
 const CAVE_PAL = {
   rock: P('#1e1a15', '#2c261f', '#3b332a', '#4b4136', '#5c5042', '#6e604f'),
@@ -14,6 +16,8 @@ const CAVE_PAL = {
   cloth: P('#140e08', '#22180e', '#322416', '#433220'),
   copper: P('#3a1a0c', '#5e2c14', '#86421e', '#a85a2a', '#c8783c'),
   crystal: P('#0c3a4a', '#146a80', '#22a0b8', '#50d0e8', '#a8f4ff'),
+  paleWood: P('#2e2a22', '#453f33', '#5d5645', '#766e59', '#8f866e', '#a89e84'), // weathered grey pine
+  darkWood: P('#170f09', '#22160d', '#2e1e12', '#3a2717', '#47301d', '#553a23'), // dark and reddish
 };
 const VAULT = 179;
 
@@ -60,6 +64,28 @@ const MATS = {
     if (fract(p.y / 6) < 0.12) v = 0.15;
     return ramp(CAVE_PAL.oldWood, v, c.ax, c.ay);
   },
+  // --- The door (door_caves): boards of whatever length and width the miners had to hand.
+  // One board (`info.k`): its own wood, weathered its own way, its grain up it (or along `info.along`). Nail heads
+  // at `info.nails` (x), `info.ny` high, on its faces.
+  board(c) {
+    const { p, info } = c;
+    const pal = [CAVE_PAL.oldWood, CAVE_PAL.paleWood, CAVE_PAL.darkWood][info.k % 3];
+    if (info.nails && Math.abs(c.n.z) > 0.5 && info.nails.some((x) => Math.hypot(p.x - x, p.y - info.ny) < 1.2)) return ramp(PAL.iron, 0.55, c.ax, c.ay);
+    const a = p[info.along ?? 'y'];
+    let v = 0.42 + 0.22 * (rand(info.k, 1070) - 0.5) + 0.12 * patches(p, 1071 + info.k, 0.3) + bevel(c, 0.14);
+    if (fract(a * 0.11 + noise3(p.x * 0.3, p.y * 0.04, info.k, 1072) * 0.9) < 0.13) v -= 0.14;
+    if (rand(info.k, Math.floor(a / 11), 1073) > 0.9 && fract(a / 11) < 0.35) v -= 0.18;
+    return ramp(pal, v, c.ax, c.ay);
+  },
+  strapLeather: (c) => ramp(PAL.leather, 0.42 + 0.14 * patches(c.p, 1074, 0.5) + bevel(c, 0.2), c.ax, c.ay),
+  // A padlock's body: rusty iron, a keyhole on its face at (`info.kx`, `info.ky`).
+  padlock(c) {
+    const { p, n, info } = c;
+    if (Math.abs(n.z) > 0.5 && (Math.hypot(p.x - info.kx, p.y - info.ky) < 1.2 || (Math.abs(p.x - info.kx) < 0.5 && p.y < info.ky && p.y > info.ky - 3))) {
+      return ramp(CAVE_PAL.cloth, 0.05, c.ax, c.ay);
+    }
+    return MAT.rustyIron(c);
+  },
   // A wooden bucket: staves, hooped in iron.
   bucket(c) {
     if ([2, 10].some((y) => Math.abs(c.p.y - y) < 1)) return MAT.rustyIron(c);
@@ -71,7 +97,114 @@ const MATS = {
 /** A lump of rock (`r` across) on the end of an axis `h` long, as revolve() makes it; `k` roughens it. */
 const lump = (r, h, k = 0) => revolve([[0, 0], [r, 0], [r * (0.85 + k), h * 0.45], [r * (0.45 - k * 0.5), h * 0.85], [0, h]], { sides: 6 });
 
+// The stairs' (stairs_down_caves, stairs_up_caves) rock, timber and rope, fading into the dark away from the room.
+MATS.shaftRock = deep((c) => MATS.rock(c), 16, 140);
+MATS.shaftTimber = deep((c) => MATS.timber(c), 16, 150);
+MATS.shaftRope = deep((c) => MATS.rope(c), 16, 150);
+
+const HOLE = 40; // half the width of the stairs' holes (STAIRS in src/dungeon/levelBuilder.js: 0.625 m)
+
+/**
+ * A mine shaft's rock walls round the stairs' hole, from y0 to y1, rough but for the edge at the room (`flat`), with a
+ * post of timber in each corner (which hides where the walls meet) and a set of timbers round it every so often.
+ */
+function mineShaft(m, y0, y1, flat, sets) {
+  const H = HOLE, walls = [
+    [[[-H, y0, -H], [H, y0, -H], [H, y1, -H], [-H, y1, -H]], [0, 0, 1]],
+    [[[H, y0, H], [-H, y0, H], [-H, y1, H], [H, y1, H]], [0, 0, -1]],
+    [[[H, y0, -H], [H, y0, H], [H, y1, H], [H, y1, -H]], [-1, 0, 0]],
+    [[[-H, y0, H], [-H, y0, -H], [-H, y1, -H], [-H, y1, H]], [1, 0, 0]],
+  ];
+  walls.forEach(([corners, out], k) => m.mesh(`rock_${k + 1}`, roughWall(corners, out, { cell: 22, amt: 6, flat, seed: 1180 + k }), { mat: 'shaftRock' }));
+  for (const [x, z] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    // (Only its two faces into the shaft show.)
+    m.cube(`post_${x < 0 ? 'w' : 'e'}${z < 0 ? 'n' : 's'}`, [x * H - 5, y0, z * H - 5], [x * H + 5, y1, z * H + 5], { mat: 'shaftTimber', faces: [x < 0 ? 'east' : 'west', z < 0 ? 'south' : 'north'] });
+  }
+  sets.forEach((y, i) => {
+    m.cube(`set_${i + 1}_n`, [-H, y - 4, -H], [H, y + 4, -H + 5], { mat: 'shaftTimber', info: { along: 'x' } });
+    m.cube(`set_${i + 1}_s`, [-H, y - 4, H - 5], [H, y + 4, H], { mat: 'shaftTimber', info: { along: 'x' } });
+    m.cube(`set_${i + 1}_w`, [-H, y - 4, -H + 5], [-H + 5, y + 4, H - 5], { mat: 'shaftTimber', info: { along: 'z' } });
+    m.cube(`set_${i + 1}_e`, [H - 5, y - 4, -H + 5], [H, y + 4, H - 5], { mat: 'shaftTimber', info: { along: 'z' } });
+  });
+}
+
+/**
+ * A rope ladder hanging at z from y1 down to y0: two ropes (`hw` either side of x 0), swaying a little out of true, with
+ * wooden rungs lashed between them every so often. `pts` bends each rope: extra points [x off, y, z off] it goes by.
+ */
+function ropeLadder(m, z, y0, y1, { hw = 12, every = 15, seed = 0 } = {}) {
+  const sway = (y) => wobble(1.5, Math.floor(y / 40), seed, 1190);
+  for (const s of [-1, 1]) {
+    const pts = [];
+    for (let y = y1; y > y0; y -= 20) pts.push([s * hw + sway(y) * 0.5, y, z + sway(y + 7)]);
+    pts.push([s * hw, y0, z]);
+    m.mesh(`rope_${s < 0 ? 'left' : 'right'}`, tube(pts, { half: 1, sides: 6 }), { mat: 'shaftRope' });
+  }
+  for (let y = y1 - 10, i = 1; y > y0 + 4; y -= every, i++) {
+    const tilt = wobble(4, i, seed, 1191);
+    m.cube(`rung_${i}`, [-hw - 2, y - 1.3, z - 1.6], [hw + 2, y + 1.3, z + 1.6], { mat: 'shaftTimber', info: { along: 'x' }, origin: [0, y, z], rotation: [0, 0, tilt] });
+  }
+}
+
 export const caves = {
+  stairs_down_caves: defineModel('stairs_down_caves', MATS, (m) => {
+    // A rough square hole cut down through the rock (see stairkit.mjs), shored with timber: a collar of beams laid round
+    // its mouth, posts down its corners and sets of timbers round it on the way down. A rope ladder is tied off round
+    // the collar's back beam and hangs down the far wall into the dark, and a lantern hangs from a post by it.
+    const H = HOLE, W = 11;
+    mineShaft(m, -PIT, 0, 0, [-58, -128, -190]);
+    // The collar: the front and back beams run the width, the side ones between.
+    m.cube('collar_back', [-H - W, 0, -H - W], [H + W, 9, -H], { mat: 'timber', info: { along: 'x' } });
+    m.cube('collar_front', [-H - W, 0, H], [H + W, 9, H + W], { mat: 'timber', info: { along: 'x' } });
+    m.cube('collar_left', [-H - W, 0, -H], [-H, 8, H], { mat: 'timber', info: { along: 'z' } });
+    m.cube('collar_right', [H, 0, -H], [H + W, 8, H], { mat: 'timber', info: { along: 'z' } });
+    // The rope ladder, tied round the back beam and hanging down the far wall.
+    for (const s of [-1, 1]) {
+      m.mesh(`tie_${s < 0 ? 'left' : 'right'}`, tube([[s * 12, -6, -H + 4], [s * 12, 10.5, -H + 1], [s * 12, 10.5, -H - W - 1], [s * 12, 2, -H - W - 1.5]], { half: 1.2, sides: 6 }), { mat: 'rope' });
+    }
+    ropeLadder(m, -H + 4, -PIT + 8, -6, { seed: 1 });
+    // A lantern on a hook, from a post lashed at the back left corner of the collar.
+    m.cube('lantern_post', [-H - W + 1, 0, -H - W + 1], [-H - 2, 62, -H - 2], { mat: 'timber' });
+    m.mesh('lantern_arm', tube([[-H - 6, 58, -H - 6], [-H + 8, 60, -H - 6]], { half: 1.2 }), { mat: 'rustyIron' });
+    const L = [-H + 8, 46, -H - 6];
+    m.cube('lantern_top', [L[0] - 4, L[1] + 9, L[2] - 4], [L[0] + 4, L[1] + 11, L[2] + 4], { mat: 'rustyIron' });
+    m.cube('lantern_base', [L[0] - 4, L[1], L[2] - 4], [L[0] + 4, L[1] + 2, L[2] + 4], { mat: 'rustyIron' });
+    for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) m.cube(`lantern_bar_${dx}${dz}`, [L[0] + dx * 4 - 0.6 - (dx > 0 ? 0.6 : 0), L[1] + 2, L[2] + dz * 4 - 0.6 - (dz > 0 ? 0.6 : 0)], [L[0] + dx * 4 + 0.6 - (dx > 0 ? 0.6 : 0), L[1] + 9, L[2] + dz * 4 + 0.6 - (dz > 0 ? 0.6 : 0)], { mat: 'rustyIron' });
+    m.mesh('lantern_hook', tube([[L[0], L[1] + 11, L[2]], [L[0], 60, L[2]]], { half: 0.6 }), { mat: 'rustyIron' });
+    m.group('candle_1', undefined, { origin: [L[0], L[1] + 4.5, L[2]] });
+  }, { density: 1 }),
+
+  stairs_up_caves: defineModel('stairs_up_caves', MATS, (m) => {
+    // A rope ladder up into a rough square hole in the vault (see stairkit.mjs), shored with timber like the ways down:
+    // a frame of beams round its mouth under the vault, on posts at the back, and a mine shaft on up. The ladder hangs
+    // from a beam across the shaft, its foot pegged to the floor, and a coil of spare rope lies by it.
+    const H = HOLE, W = 11;
+    mineShaft(m, TOP, SKY, TOP, [TOP + 62, TOP + 132]);
+    m.cube('frame_back', [-H - W, TOP - 9, -H - W], [H + W, TOP, -H], { mat: 'timber', info: { along: 'x' } });
+    m.cube('frame_front', [-H - W, TOP - 9, H], [H + W, TOP, H + W], { mat: 'timber', info: { along: 'x' } });
+    m.cube('frame_left', [-H - W, TOP - 8, -H], [-H, TOP, H], { mat: 'timber', info: { along: 'z' } });
+    m.cube('frame_right', [H, TOP - 8, -H], [H + W, TOP, H], { mat: 'timber', info: { along: 'z' } });
+    for (const s of [-1, 1]) {
+      const side = s < 0 ? 'left' : 'right';
+      m.cube(`prop_${side}`, [s * (H + 5.5) - 5, 0, -H - 10], [s * (H + 5.5) + 5, TOP - 9, -H], { mat: 'timber' });
+      m.mesh(`brace_${side}`, tube([[s * (H + 5.5), TOP - 42, -H - 5], [s * (H + 5.5) * 0.35, TOP - 10, -H - 5]], { half: 2.4 }), { mat: 'timber' });
+    }
+    // The beam the ladder hangs from, up the shaft, and the ladder, its last rungs lying on the floor.
+    const Z = -H + 8, HANG = TOP + 150;
+    m.cube('ladder_beam', [-H, HANG - 4, Z - 5], [H, HANG + 4, Z + 5], { mat: 'shaftTimber', info: { along: 'x' } });
+    for (const s of [-1, 1]) m.mesh(`tie_${s < 0 ? 'left' : 'right'}`, tube([[s * 12, HANG - 6, Z], [s * 12, HANG + 5, Z - 6], [s * 12, HANG + 5, Z + 6], [s * 12, HANG - 6, Z + 1]], { half: 1.2, sides: 6 }), { mat: 'shaftRope' });
+    ropeLadder(m, Z, 1, HANG - 6, { seed: 2 });
+    for (const s of [-1, 1]) {
+      m.mesh(`foot_${s < 0 ? 'left' : 'right'}`, tube([[s * 12, 1, Z], [s * 12.5, 1.2, Z + 10], [s * 13, 1.2, Z + 18]], { half: 1, sides: 6 }), { mat: 'rope' });
+      m.mesh(`peg_${s < 0 ? 'left' : 'right'}`, tube([[s * 13, 0, Z + 18], [s * 13.5, 6, Z + 19]], { half: 1.3, sides: 6 }), { mat: 'wood' });
+    }
+    // A coil of spare rope on the floor at the front left.
+    for (let k = 0; k < 3; k++) {
+      const r = 9 - k * 1.2, y = 1.2 + k * 2, cx = -38, cz = 36;
+      m.mesh(`coil_${k + 1}`, tube(Array.from({ length: 10 }, (_, i) => [cx + Math.cos((i / 10) * Math.PI * 2) * r, y, cz + Math.sin((i / 10) * Math.PI * 2) * r]), { half: 1.2, closed: true, sides: 6, side: [0, 1, 0] }), { mat: 'rope' });
+    }
+  }, { density: 0.8 }),
+
   rope_bridge: defineModel('rope_bridge', MATS, (m) => {
     // Planks lashed to ropes across a chasm (2 m, along z), sagging in the middle, a few gone, with a hand rope
     // either side strung from posts on the banks.
@@ -222,6 +355,61 @@ export const caves = {
     // Boulders fallen from the roof and heaped against the wall.
     [[0, 0, -6, 20, 22], [22, 0, 4, 13, 14], [-20, 0, 6, 14, 12], [8, 18, -4, 11, 10], [-8, 0, 20, 8, 7]].forEach(([x, y, z, r, h], i) => {
       m.mesh(`boulder_${i + 1}`, lump(r, h, (rand(i, 1140) - 0.5) * 0.25), { mat: 'rock', origin: [x, y, z], rotation: [rand(i, 1141) * 20, rand(i, 1142) * 180, rand(i, 1143) * 20] });
+    });
+  }, { density: 1 }),
+
+  door_caves: defineModel('door_caves', MATS, (m) => {
+    // A door knocked together from whatever boards were to hand (see doorkit.mjs for how doors go together):
+    // no two the same wood, width or length, a couple askew, held by crooked battens and a brace on one side and
+    // patched on the other, hung on leather straps, with a rope loop to pull it by. Its frame is mine timbers,
+    // leaning a little, braced in the corners under a sagging lintel, bare rock above. Locked, a rough beam lies
+    // across it in crude iron hooks on the posts, padlocked to one, on both sides.
+    const zs = (s, a, b) => (s > 0 ? [a, b] : [-b, -a]); // a to b out from the middle, on the side s faces
+    m.group('frame', () => {
+      m.cube('post_left', [-HALF, 0, -13], [-52, 153, 13], { mat: 'timber', origin: [-58, 0, 0], rotation: [0, 0, 1.2] });
+      m.cube('post_right', [52, 0, -12], [HALF - 1, 150, 12], { mat: 'timber', origin: [57.5, 0, 0], rotation: [0, 0, -0.8] });
+      m.cube('lintel', [-HALF - 4, 149, -14], [HALF + 2, 162, 14], { mat: 'timber', info: { along: 'x' }, origin: [0, 155, 0], rotation: [0, 0, 1.5] });
+      m.mesh('brace_left', tube([[-51, 124, 0], [-34, 150, 0]], { half: 3.2, side: [0, 0, 1] }), { mat: 'timber' });
+      m.mesh('brace_right', tube([[51, 121, 0], [36, 150, 0]], { half: 3.2, side: [0, 0, 1] }), { mat: 'timber' });
+      m.cube('rock', [-HALF, 159, -16], [HALF, TOP, 16], { mat: 'rock' });
+      m.cube('sill', [-52, 0, -10], [52, 3, 10], { mat: 'timber', info: { along: 'x' } });
+    });
+    m.group('leaf', () => {
+      // Six boards, their widths, tops, bottoms, thicknesses and set (forward or back) all different.
+      const W = [15, 19, 12, 17, 21, 14], tops = [146, 141, 148, 143, 147, 139], bots = [2, 4, 1.5, 3, 2, 5];
+      const thick = [5, 4, 5.5, 6, 4.5, 5], set = [0, 0.6, -0.4, 0.3, -0.6, 0.4], tilt = [0, 0, 0, 0.8, 0, -0.6];
+      let x = -51;
+      const mids = [];
+      W.forEach((w, k) => {
+        const t = thick[k] / 2 + set[k];
+        m.cube(`board_${k + 1}`, [x, bots[k], set[k] - thick[k] / 2], [x + w, tops[k], t], { mat: 'board', info: { k }, origin: [x + w / 2, 0, 0], rotation: [0, 0, tilt[k]] });
+        mids.push(x + w / 2);
+        x += w + 1;
+      });
+      // On the front, two battens and a brace, crooked; on the back, a board nailed over a split.
+      [[20, 1], [112, -1.2]].forEach(([y, turn], i) => m.cube(`batten_${i + 1}`, [-49, y, 2.6], [50, y + 8, 6.4],
+        { mat: 'board', info: { k: 10 + i, along: 'x', nails: mids, ny: y + 4 }, origin: [0, y + 4, 0], rotation: [0, 0, turn] }));
+      m.mesh('brace', tube([[-43, 28, 4.5], [43, 112, 4.5]], { half: 3.4, side: [0, 0, 1] }), { mat: 'board', info: { k: 13 } });
+      m.cube('patch', [-24, 58, -6.4], [8, 67, -3], { mat: 'board', info: { k: 14, along: 'x', nails: [-20, 4], ny: 62.5 }, origin: [-8, 62, -4.5], rotation: [0, 0, 11] });
+      // Leather hinges, each round a rolled knuckle on the hinge line.
+      for (const y of [24, 116]) {
+        bothFaces((s) => {
+          const [z0, z1] = zs(s, 2.8, 4.2);
+          m.cube(`hinge_${y < 60 ? 'low' : 'high'}_${s > 0 ? 'front' : 'back'}`, [-51, y, z0], [-37, y + 9, z1], { mat: 'strapLeather' });
+        });
+        m.mesh(`knuckle_${y < 60 ? 'low' : 'high'}`, revolve([[0, 0], [3.4, 0], [3.4, 9], [0, 9]], { sides: 6 }), { mat: 'strapLeather', origin: [-51, y, 0] });
+      }
+      m.mesh('handle_rope', tube([[36, 86, 3.4], [35, 78, 7], [39, 72, 8.5], [43, 78, 7], [42, 86, 3.4]], { half: 1.1, side: [0, 0, 1] }), { mat: 'rope' });
+      m.cube('handle_knob', [37, 76, -7], [43, 82, -2.8], { mat: 'board', info: { k: 15 } });
+    }, { origin: [-51, 0, 0] });
+    m.group('lock', () => {
+      bothFaces((s) => {
+        const side = s > 0 ? 'front' : 'back', [w0, w1] = zs(s, 9.5, 15.5), [k0, k1] = zs(s, 8.5, 17), [b0, b1] = zs(s, 16, 20.5);
+        m.cube(`beam_${side}`, [-61, 62, w0], [61, 71, w1], { mat: 'board', info: { k: 16, along: 'x' }, origin: [0, 66.5, s * 12.5], rotation: [0, 0, -1.4] });
+        for (const x of [-62, 53]) m.cube(`hook_${x < 0 ? 'left' : 'right'}_${side}`, [x, 58, k0], [x + 9, 76, k1], { mat: 'rustyIron' });
+        m.cube(`padlock_${side}`, [52, 44, b0], [61, 55, b1], { mat: 'padlock', info: { kx: 56.5, ky: 50 } });
+        m.mesh(`shackle_${side}`, tube([[54, 54, s * 18.2], [54, 61, s * 18.2], [56.5, 63.5, s * 18.2], [59, 61, s * 18.2], [59, 54, s * 18.2]], { half: 0.9, side: [0, 0, 1] }), { mat: 'rustyIron' });
+      });
     });
   }, { density: 1 }),
 };

@@ -55,14 +55,17 @@
         <div id="status-line"></div>
       </div>
       <div id="gear"></div>
-      <div id="hotbar"></div>
       <div id="popups"></div>
     </div>
+    <!-- Outside the HUD, so it can come up over the pack screen, where it's live (see UI.updateHotbar). -->
+    <div id="hotbar" hidden></div>
+    <!-- The pack's tooltip, over everything (see UI.showTip). -->
+    <div id="tip" hidden></div>
 
     <div id="pause" class="overlay" hidden>
       <div class="panel small">
         <h2>Paused</h2>
-        <p>Click anywhere to take up your torch again.</p>
+        <p>Click anywhere to take up your lantern again.</p>
         <label class="check" id="pause-fs"><input type="checkbox" id="fs-pause" /> Fullscreen</label>
         <div class="pause-actions"><button id="quit-btn" class="alt">Save and quit to title</button></div>
         <p class="pause-note">Your run saves on every floor you reach, and when you close the page.</p>
@@ -100,18 +103,17 @@
             </div>
             <div id="inv-stats"></div>
           </div>
-          <ul id="inv-list"></ul>
+          <div id="inv-pack">
+            <div id="inv-tabs"></div>
+            <div id="inv-list"></div>
+          </div>
           <div id="inv-detail">
             <h3 id="inv-name"></h3>
             <p id="inv-desc"></p>
             <div id="inv-actions"></div>
           </div>
         </div>
-        <div id="inv-hot">
-          <div class="inv-hot-head"><span>Hotbar</span><span id="inv-hot-note"></span></div>
-          <div id="inv-hot-slots"></div>
-        </div>
-        <div class="hint">Click or ↑↓ to select · double-click or Enter to use · T throw · D drop · I / Esc close</div>
+        <div class="hint">Click or arrows select · drag to the doll or the hotbar, or press 1–4 · right-click a hotbar slot to empty it · Q tab · Enter use · T throw · D drop · I close</div>
       </div>
     </div>
 
@@ -133,24 +135,31 @@
     <div id="title" class="screen">
       <div class="title-shade"></div>
       <div id="title-fade"></div>
-      <div class="title-inner">
+      <!-- The logo up in one corner and the menu down the other side, with the walk through the dungeon between. -->
+      <header class="title-head">
         <h1 class="sr-only">Depths of Yendor</h1>
         <canvas id="logo" aria-hidden="true"></canvas>
         <p class="sub" id="title-sub"></p>
+      </header>
+      <nav class="title-menu" aria-label="Menu">
         <div id="continue" hidden>
-          <button id="continue-btn">Continue</button>
+          <button id="continue-btn" class="menu-btn primary">Continue</button>
           <p id="continue-info"></p>
+          <div class="menu-rule" aria-hidden="true"></div>
         </div>
-        <div class="form">
-          <label>Name <input id="name-in" maxlength="16" value="Adventurer" autocomplete="off" /></label>
-          <button id="start-btn">Descend</button>
-        </div>
-        <div class="title-options">
-          <label class="seed">Seed <input id="seed-in" maxlength="12" placeholder="random" autocomplete="off" /></label>
-          <label class="check" title="Recommended: in Chrome and Edge, Esc then pauses without leaving fullscreen (hold it to leave)"><input type="checkbox" id="fs-in" /> Fullscreen</label>
-          <button id="howto-btn" class="link">How to play</button>
-        </div>
-      </div>
+        <label class="menu-field"><span>Name</span><input id="name-in" maxlength="16" value="Adventurer" autocomplete="off" /></label>
+        <label class="menu-field"><span>Seed</span><input id="seed-in" maxlength="12" placeholder="random" autocomplete="off" /></label>
+        <button id="start-btn" class="menu-btn">Descend</button>
+        <div class="menu-rule" aria-hidden="true"></div>
+        <button id="howto-btn" class="menu-btn">How to play</button>
+        <label class="menu-btn toggle" title="Recommended: in Chrome and Edge, Esc then pauses without leaving fullscreen (hold it to leave)">
+          <input type="checkbox" id="fs-in" /> Fullscreen <span class="state"></span>
+        </label>
+        <a class="menu-btn" href="https://github.com/AstroDogeDX/Depths-of-Yendor" target="_blank" rel="noopener" title="The game's source, on GitHub (opens in a new tab)">
+          GitHub
+          <svg class="menu-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z" /></svg>
+        </a>
+      </nav>
       <div id="title-caption"></div>
       <div id="title-build"></div>
     </div>
@@ -168,13 +177,13 @@
           <section>
             <h3>Fighting</h3>
             <p><b>Click</b> or <b>Space</b> attack. Your swing meter refills between blows, and a partial swing hits softer.</p>
-            <p><b>F</b> grip your weapon in both hands, or one. In both, it needs less strength, so a heavy weapon is easier to wield and a light one hits harder, but your torch is stowed.</p>
-            <p><b>Right-click</b> use what's in your off hand · <b>Q</b> drink known healing · <b>R</b> / <b>T</b> artefact powers</p>
+            <p><b>F</b> grip your weapon in both hands, or one. In both, it needs less strength, so a heavy weapon is easier to wield and a light one hits harder, but your lantern hangs at your belt.</p>
+            <p><b>Right-click</b> hold to raise a shield: it takes some of each blow from in front, at the cost of your stamina, and a click shoves with it · or, with a bow, hold to nock an arrow, then hold click to draw and let go to shoot · <b>Q</b> drink known healing · <b>R</b> / <b>T</b> artefact powers</p>
           </section>
           <section>
             <h3>Everything else</h3>
             <p><b>E</b> pick up, open, buy, use stairs · <b>I</b> pack · <b>M</b> map</p>
-            <p><b>1–6</b> hotbar: potions, scrolls, food, wands (assign from your pack) · <b>P</b> pixel size · <b>Esc</b> pause, or save and quit</p>
+            <p><b>1–4</b> hotbar (put things there from your pack): scrolls and food are used at once · potions and wands: hold the key, then click to throw or zap, right-click to drink or zap yourself · a weapon, lantern, shield or bow there swaps into your hand · <b>P</b> pixel size · <b>Esc</b> pause, or save and quit</p>
           </section>
         </div>
         <h3>The descent</h3>

@@ -1,12 +1,14 @@
 import {
-  WEAPONS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS,
-  POTION_COLORS, SCROLL_SYLLABLES, WAND_MATERIALS, RING_GEMS,
+  WEAPONS, ARMORS, SHIELDS, BOWS, ARROWS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS, CONTAINERS,
+  POTION_COLORS, SCROLL_SYLLABLES, SCROLL_RUNES, WAND_MATERIALS, RING_GEMS,
 } from './defs.js';
+import { RNG } from '../rng.js';
 import { DAMAGE_TYPES, damageType, describeResist } from '../damage.js';
 import { WAND_PLUS_DMG, wandRecharge } from './defs.js';
 import { enchantOf, baneOf } from './enchant.js';
+import { JAB } from '../bow.js';
 
-const GEAR = new Set(['weapon', 'armor', 'ring', 'wand']);
+const GEAR = new Set(['weapon', 'armor', 'shield', 'bow', 'ring', 'wand']);
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
 
 /** What you know of an item's curse, in words (or '' if you don't know). */
@@ -17,7 +19,7 @@ function curseNote(item) {
   return 'It is free of curses.';
 }
 
-/** A weapon's or armour's Enchantment or Curse of ___, as far as you know it: [label, description] or null. */
+/** A weapon's, armour's, shield's or bow's Enchantment or Curse of ___, as far as you know it: [label, description] or null. */
 function effectOf(item) {
   const e = (item.identified || item.enchantKnown) && enchantOf(item);
   if (e) return [`Enchantment of ${cap(e.name)}`, e];
@@ -59,6 +61,23 @@ export class Knowledge {
 
     const gems = rng.shuffle([...RING_GEMS]);
     Object.keys(RINGS).forEach((k, i) => (this.appearance.ring[k] = gems[i]));
+    this.giveRunes();
+  }
+
+  /**
+   * Gives each kind of scroll that hasn't one a rune of its own (see rune), drawn from the run's labels rather than the
+   * seed, so a save from before there were runes gets the same ones every time it's loaded.
+   */
+  giveRunes() {
+    const looks = Object.values(this.appearance.scroll);
+    const taken = new Set(looks.map((a) => a.rune));
+    const free = new RNG(looks.map((a) => a.name).join('|')).shuffle([...Array(SCROLL_RUNES).keys()].filter((r) => !taken.has(r)));
+    for (const a of looks) a.rune ??= free.shift() ?? 0;
+  }
+
+  /** The rune on a kind of scroll this run (a RUNES index in ui/iconArt.js): as much a mystery as its label. */
+  rune(item) {
+    return this.appearance.scroll[item.type]?.rune ?? 0;
   }
 
   isKnown(item) {
@@ -92,6 +111,7 @@ export class Knowledge {
     for (const kind in s.appearance ?? {}) {
       for (const type in s.appearance[kind]) if (this.appearance[kind]?.[type]) this.appearance[kind][type] = s.appearance[kind][type];
     }
+    this.giveRunes();
   }
 
   /** Notes that you've seen a kind of monster resist a damage type or be weak to it. True the first time. */
@@ -115,12 +135,16 @@ export class Knowledge {
         return this.appearance[item.kind][item.type].color;
       case 'weapon': return 0xa8adb4;
       case 'offhand': return 0xffa050;
+      case 'shield': return 0x9a6a3a;
+      case 'bow': return 0x8a5a2a;
+      case 'arrow': return 0xb0a080;
       case 'armor': return ARMORS[item.type].color;
       case 'artefact': return ARTEFACTS[item.type].color;
       case 'food': return 0x8a5a2a;
       case 'gold': return 0xf0c040;
       case 'amulet': return 0xffd040;
-      case 'key': return 0xb8b0a0;
+      case 'key': return item.type === 'gold' ? 0xffd040 : 0xb8b0a0;
+      case 'container': return 0xb07840;
     }
     return 0xffffff;
   }
@@ -149,8 +173,8 @@ export class Knowledge {
         const base = WEAPONS[item.type].name;
         return (item.identified ? `${plus} ${base}` : base) + of + curseTag;
       }
-      case 'armor': {
-        const base = ARMORS[item.type].name;
+      case 'armor': case 'shield': case 'bow': {
+        const base = { armor: ARMORS, shield: SHIELDS, bow: BOWS }[item.kind][item.type].name;
         return (item.identified ? `${plus} ${base}` : base) + of + curseTag;
       }
       case 'potion': {
@@ -179,11 +203,13 @@ export class Knowledge {
         const base = FOOD[item.type].name;
         return plural ? `${q} ${base}s` : base;
       }
+      case 'arrow': return plural ? `${q} ${ARROWS[item.type].name}s` : ARROWS[item.type].name;
       case 'offhand': return OFFHANDS[item.type].name;
       case 'artefact': return ARTEFACTS[item.type].name;
       case 'amulet': return 'the Amulet of Yendor';
       case 'gold': return `${q} gold`;
-      case 'key': return 'iron key';
+      case 'key': return `${item.type} key`;
+      case 'container': return CONTAINERS[item.type].name;
     }
     return 'strange object';
   }
@@ -204,6 +230,38 @@ export class Knowledge {
           : 'You do not know how fine it is. Wear it into a few fights to learn more.');
         parts.push(curseNote(item));
         return parts.filter(Boolean).join('\n\n');
+      }
+      case 'shield': {
+        const d = SHIELDS[item.type], plus = item.identified && item.plus ? ` (+${item.plus})` : '';
+        const parts = [d.desc,
+          `Raised (hold right-click), it takes up to ${d.block}${plus} off a blow from in front of you, each point costing you ${d.stamina} stamina, and slows you to ${Math.round(d.slow * 100)}%. ` +
+          `Click while it's up to shove with it: ${d.bash.dmg[0]}–${d.bash.dmg[1]}${plus} (bash), for ${d.bash.stamina} stamina. ` +
+          `Slung on your back while you grip your weapon in both hands, it takes up to ${d.back}${plus} off a blow from behind.`];
+        const effect = effectOf(item);
+        if (effect) parts.push(`${effect[0]}: ${effect[1].desc}`);
+        if (!item.identified) parts.push('You do not know how fine it is. Turn aside a few blows with it to learn more.');
+        parts.push(curseNote(item));
+        return parts.filter(Boolean).join('\n\n');
+      }
+      case 'bow': {
+        const d = BOWS[item.type], plus = item.identified && item.plus ? ` (+${item.plus})` : '';
+        // (Its own numbers: not what an unknown + or curse makes of them.)
+        const [lo, hi] = d.dmg, jab = (v) => Math.max(1, Math.round(v * JAB));
+        const parts = [d.desc,
+          `Hold right-click to nock an arrow from your quiver, then hold click to draw it, and let go to loose it. At full draw ` +
+          `(${d.draw.toFixed(2)}s) an arrow does ${lo}–${hi}${plus} (${DAMAGE_TYPES[ARROWS.standard.dmgType].name}); drawn less, it flies slower ` +
+          `and does less. Drawn, the bow slows you to ${Math.round(d.slow * 100)}%. A click alone jabs with the arrow in your hand, ` +
+          `for ${jab(lo)}–${jab(hi)}.`];
+        const effect = effectOf(item);
+        if (effect) parts.push(`${effect[0]}: ${effect[1].desc}`);
+        if (!item.identified) parts.push('You do not know how fine it is. Put a few arrows home with it to learn more.');
+        parts.push(curseNote(item));
+        return parts.filter(Boolean).join('\n\n');
+      }
+      case 'arrow': {
+        const a = ARROWS[item.type];
+        return [a.desc, `Shot from a bow in your quiver.${a.dmg ? ` It adds ${a.dmg} to the bow's damage.` : ''} One that strikes something may break; ` +
+          'the rest fall where they strike, to be picked up again.'].join('\n\n');
       }
       case 'potion': return known ? POTIONS[item.type].desc
         : `A flask of ${this.appearance.potion[item.type].name} liquid. Who knows what it does?` +
@@ -243,9 +301,11 @@ export class Knowledge {
       case 'food': return FOOD[item.type].desc;
       case 'offhand': return OFFHANDS[item.type].desc;
       case 'artefact': return ARTEFACTS[item.type].desc;
+      case 'container': return CONTAINERS[item.type].desc;
       case 'amulet': return 'The Amulet of Yendor. It thrums with the heartbeat of the dungeon itself. Invoke it to escape now, or carry it back to the surface for true glory.';
       case 'gold': return 'Shiny.';
-      case 'key': return `A heavy iron key. It opens a locked door somewhere on depth ${item.depth}.`;
+      case 'key': return item.type === 'gold' ? `A finely wrought gold key. It opens a locked chest somewhere on depth ${item.depth}.`
+        : `A heavy iron key. It opens a locked door somewhere on depth ${item.depth}.`;
     }
     return '';
   }

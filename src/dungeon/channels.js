@@ -4,7 +4,7 @@ import { T } from './tiles.js';
 // it is the theme's (`channels.fill` in config.js): water in the Sewers, flowing in through a grate in one wall
 // and out through another; spikes and bones in the Catacombs.
 
-const WALKABLE = new Set([T.FLOOR, T.DOOR, T.BRIDGE]);
+const WALKABLE = new Set([T.FLOOR, T.DOOR, T.BRIDGE, T.POOL]);
 
 /**
  * Digs `count` ([min, max]) channels across standard rooms, as many as there are rooms for. A channel keeps

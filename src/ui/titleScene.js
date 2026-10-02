@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { THEMES, FLOORS_PER_THEME, TILE, EYE_H } from '../config.js';
 import { generateLevel } from '../dungeon/generator.js';
-import { buildLevelMeshes, disposeGroup, flowWater, propsForTheme } from '../dungeon/levelBuilder.js';
+import { buildLevelMeshes, disposeGroup, flowWater, propsForTheme, poseDoor, stairsDescent, shareLights } from '../dungeon/levelBuilder.js';
 import { loadProps } from '../dungeon/props.js';
 import { T } from '../dungeon/tiles.js';
 import { Drips } from '../fx/drips.js';
@@ -25,9 +25,9 @@ export class TitleScene {
     this.scene.fog = new THREE.Fog(0x000000, 2, 20);
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.05, 80);
     this.camera.rotation.order = 'YXZ';
-    this.torch = new THREE.PointLight(0xffb060, 24, 26, 1.7);
+    this.lantern = new THREE.PointLight(0xffb060, 24, 26, 1.7);
     this.ambient = new THREE.AmbientLight(0xffffff, 5);
-    this.scene.add(this.camera, this.torch, this.ambient);
+    this.scene.add(this.camera, this.lantern, this.ambient);
     this.themeIndex = -1;
     this.token = 0; // bumped by stop(), so a walk still waiting for its props doesn't start after all
     this.built = null;
@@ -80,7 +80,8 @@ export class TitleScene {
 
     this.built = buildLevelMeshes(data);
     this.drips = new Drips(this.built.group, this.built.drips);
-    for (const d of this.built.doors) d.pivot.rotation.y = (d.swing * Math.PI) / 2; // every door stands open
+    // Every door stands open, but the locked ones (the walk never goes through them: they only lead to dead ends).
+    this.built.doors.forEach((d, i) => { if (!data.doors[i].locked) poseDoor(d, 1); });
     this.scene.add(this.built.group);
     this.scene.fog.color.setHex(theme.fog);
     this.scene.fog.near = theme.fogNear;
@@ -121,10 +122,10 @@ export class TitleScene {
     const bob = Math.sin(this.dist * 3.4) * 0.025;
     this.camera.position.set(pos.x, pos.y + bob, pos.z);
     this.camera.rotation.set(this.pitch, this.yaw, Math.sin(this.t * 0.4) * 0.012);
-    // The torch you carry, a little ahead and to the left.
+    // The lantern you carry, a little ahead and to the left, its flame steady behind glass (as in Game.updateCamera).
     const fx = -Math.sin(this.yaw), fz = -Math.cos(this.yaw);
-    this.torch.position.set(pos.x + fx * 0.35 + fz * 0.25, pos.y - 0.1, pos.z + fz * 0.35 - fx * 0.25);
-    this.torch.intensity = 24 * (0.9 + Math.sin(this.t * 21) * 0.04 + Math.sin(this.t * 7.7) * 0.06);
+    this.lantern.position.set(pos.x + fx * 0.35 + fz * 0.25, pos.y - 0.1, pos.z + fz * 0.35 - fx * 0.25);
+    this.lantern.intensity = 24 * (0.95 + Math.sin(this.t * 17) * 0.02 + Math.sin(this.t * 5.3) * 0.03);
 
     const left = this.length - this.dist;
     this.fade = Math.max(1 - this.t / FADE_IN, left < this.descent ? 1 - left / this.descent : 0);
@@ -132,11 +133,12 @@ export class TitleScene {
     flowWater(this.built.water, this.t);
     this.built.haze?.update(this.t);
     this.drips.update(dt, this.camera.position);
+    shareLights(this.built.lights, this.built.share, pos.x, pos.z, dt);
     for (const f of this.built.flames) {
       const k = 0.85 + Math.sin(this.t * 17 + f.phase) * 0.08 + Math.sin(this.t * 5.3 + f.phase * 2) * 0.07;
       f.flame.update(this.t, k);
       f.halo.material.opacity = 0.35 + (k - 0.85) * 1.6;
-      if (f.light) f.light.intensity = f.light.userData.base * k;
+      if (f.light) f.light.intensity = f.light.userData.base * f.light.userData.w * k;
     }
   }
 
@@ -157,7 +159,7 @@ function planWalk(data) {
   const { w, h, grid, up, down } = data;
   if (!down) return null;
   const at = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? T.WALL : grid[y * w + x]);
-  const open = (x, y) => at(x, y) === T.FLOOR || at(x, y) === T.DOOR || at(x, y) === T.BRIDGE;
+  const open = (x, y) => at(x, y) === T.FLOOR || at(x, y) === T.DOOR || at(x, y) === T.BRIDGE || at(x, y) === T.POOL;
   const [ux, uy] = DIRS[up.dir], [ddx, ddy] = DIRS[down.dir];
   const start = (up.y + uy) * w + up.x + ux, goal = (down.y + ddy) * w + down.x + ddx;
 
@@ -200,9 +202,9 @@ function planWalk(data) {
     out.push(pts[pts.length - 1]);
     pts = out;
   }
-  // Down the stairs: step into the stairwell and sink, heading away from its opening.
-  const sx = (down.x + 0.5) * TILE, sz = (down.y + 0.5) * TILE;
-  pts.push([sx + ddx * 0.5, EYE_H - 0.35, sz + ddy * 0.5], [sx, EYE_H - 0.9, sz], [sx - ddx * 0.6, EYE_H - 1.8, sz - ddy * 0.6]);
+  // Down the stairs, as the theme's go (see stairsDescent): points in their own frame, turned the way they face.
+  const sx = (down.x + 0.5) * TILE, sz = (down.y + 0.5) * TILE, a = Math.atan2(ddx, ddy), c = Math.cos(a), s = Math.sin(a);
+  for (const [x, y, z] of stairsDescent(data.theme)) pts.push([sx + x * c + z * s, EYE_H + y, sz - x * s + z * c]);
   const points = pts.map(([x, y, z]) => new THREE.Vector3(x, y, z));
   points.descent = TILE * 1.3;
   return points;

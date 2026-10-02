@@ -10,7 +10,9 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { weapons } from './weapons.mjs';
-import { torch } from './torch.mjs';
+import { handLantern } from './lantern.mjs';
+import { woodenShield } from './shields.mjs';
+import { woodenBow, arrow } from './bows.mjs';
 import { sconce } from './sconce.mjs';
 import { items } from './items.mjs';
 import { armors } from './armor.mjs';
@@ -24,14 +26,18 @@ import { caves } from './caves.mjs';
 import { dwarven } from './dwarven.mjs';
 import { underworld } from './underworld.mjs';
 import { traps } from './traps.mjs';
+import { chests, mimic } from './chests.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const MODELS = {
   ...Object.fromEntries(Object.entries(weapons).map(([name, build]) => [name, { file: `weapons/${name}.bbmodel`, build }])),
-  torch: { file: 'torch.bbmodel', build: torch },
+  hand_lantern: { file: 'hand_lantern.bbmodel', build: handLantern },
+  wooden_shield: { file: 'wooden_shield.bbmodel', build: woodenShield },
+  wooden_bow: { file: 'wooden_bow.bbmodel', build: woodenBow },
+  arrow: { file: 'arrow.bbmodel', build: arrow },
   sconce: { file: 'sconce.bbmodel', build: sconce },
-  ...Object.fromEntries(Object.entries(monsters).map(([name, build]) => [name, { file: `monsters/${name}.bbmodel`, build }])),
-  ...Object.fromEntries(Object.entries({ ...props, ...sewers, ...catacombs, ...caves, ...dwarven, ...underworld }).map(([name, build]) => [name, { file: `props/${name}.bbmodel`, build }])),
+  ...Object.fromEntries(Object.entries({ ...monsters, mimic }).map(([name, build]) => [name, { file: `monsters/${name}.bbmodel`, build }])),
+  ...Object.fromEntries(Object.entries({ ...props, ...chests, ...sewers, ...catacombs, ...caves, ...dwarven, ...underworld }).map(([name, build]) => [name, { file: `props/${name}.bbmodel`, build }])),
   ...Object.fromEntries(Object.entries(npcs).map(([name, build]) => [name, { file: `npcs/${name}.bbmodel`, build }])),
   ...Object.fromEntries(Object.entries(traps).map(([name, build]) => [name, { file: `traps/${name.replace('trap_', '')}.bbmodel`, build }])),
   ...Object.fromEntries(Object.entries({ ...items, ...armors, ...artefacts }).map(([name, build]) => [name, { file: `items/${name}.bbmodel`, build }])),

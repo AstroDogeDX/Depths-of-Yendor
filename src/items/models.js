@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WEAPONS, OFFHANDS } from './defs.js';
+import { WEAPONS, OFFHANDS, SHIELDS, BOWS, ARROWS } from './defs.js';
 import { buildBBModel } from './bbmodel.js';
 import { MODEL_PX, ITEM_MIN_SIZE } from '../config.js';
 
@@ -36,12 +36,13 @@ export function buildWeaponMesh(model) {
   return weaponCache.get(model).clone();
 }
 
-// Floor items are Blockbench projects too: one per kind, except armour and artefacts (one per type) and food
-// (one per kind of food).
+// Floor items are Blockbench projects too: one per kind, except armour and artefacts (one per type), food and pack
+// expansions (one per type) and keys (the iron key's `key`, and `key_gold`).
 const ITEM_FILES = import.meta.glob('../../assets/models/items/*.bbmodel', { import: 'default', eager: true });
 const itemCache = new Map();
 const itemModelName = (item) =>
-  item.kind === 'armor' ? `armor_${item.type}` : item.kind === 'food' || item.kind === 'artefact' ? item.type : item.kind;
+  item.kind === 'armor' ? `armor_${item.type}` : ['food', 'artefact', 'container'].includes(item.kind) ? item.type
+    : item.kind === 'key' && item.type === 'gold' ? 'key_gold' : item.kind;
 // Parts on a "_tint" texture are painted in greys and take the item's colour; some also glow in it.
 const TINT_GLOW = { potion: 0.25, ring: 0.6 };
 // Lowest point of an item lying in the world, relative to the height it is placed (and bobs) at.
@@ -54,7 +55,8 @@ const ITEM_BASE = -0.16;
  */
 export function buildItemModel(item, color, { floor = false } = {}) {
   const g = new THREE.Group();
-  const model = item.kind === 'weapon' ? lyingWeapon(item) : item.kind === 'offhand' ? lyingOffhand(item) : itemModel(item, color);
+  const model = item.kind === 'weapon' ? lyingWeapon(item) : OFFHAND_DEFS[item.kind] ? lyingOffhand(item)
+    : item.kind === 'arrow' ? lyingArrows(item) : itemModel(item, color);
   if (floor) {
     const bounds = new THREE.Box3().setFromObject(model);
     const longest = Math.max(...bounds.getSize(new THREE.Vector3()).toArray());
@@ -76,25 +78,64 @@ function lyingWeapon(item) {
   return w;
 }
 
-// An off-hand thing (items/defs.js OFFHANDS) has the one model, in your hand (see ViewModel) or on the floor: the
-// torch is assets/models/torch.bbmodel. On the floor it lies on its side, like a weapon.
+// What you hold in your off hand (items/defs.js OFFHANDS, SHIELDS and BOWS) has the one model, in your hand (see
+// ViewModel) or on the floor: the lantern is assets/models/hand_lantern.bbmodel, the wooden shield wooden_shield.bbmodel,
+// the wooden bow wooden_bow.bbmodel. On the floor an off-hand thing lies on its side, like a weapon, unless it `stands`;
+// a shield lies flat, face up. Arrows (ARROWS) are models of their own there too (arrow.bbmodel), as they are nocked and
+// in flight.
 const HELD_FILES = import.meta.glob('../../assets/models/*.bbmodel', { import: 'default', eager: true });
+const OFFHAND_DEFS = { offhand: OFFHANDS, shield: SHIELDS, bow: BOWS };
 
-function lyingOffhand(item) {
-  const name = OFFHANDS[item.type].model, key = `held:${name}`;
+/** A model held in a hand, assets/models/<name>.bbmodel: a copy of it, built once. */
+export function heldModel(name) {
+  const key = `held:${name}`;
   if (!itemCache.has(key)) {
     const src = HELD_FILES[`../../assets/models/${name}.bbmodel`];
-    if (!src) console.warn(`No off-hand model assets/models/${name}.bbmodel`);
+    if (!src) console.warn(`No model assets/models/${name}.bbmodel`);
     itemCache.set(key, src ? buildBBModel(src, MODEL_PX) : box(0.05, 0.4, 0.05, lam(0x8a5a2a), 0, 0.2));
   }
-  const m = itemCache.get(key).clone();
-  m.rotation.z = Math.PI / 2.2;
-  m.position.x = -new THREE.Box3().setFromObject(m).getCenter(new THREE.Vector3()).x;
+  return itemCache.get(key).clone();
+}
+
+function lyingOffhand(item) {
+  const shield = item.kind === 'shield', bow = item.kind === 'bow', def = OFFHAND_DEFS[item.kind][item.type];
+  const m = heldModel(def.model);
+  if (shield) m.rotation.x = -Math.PI / 2;
+  else if (bow) m.rotation.z = Math.PI / 2;
+  else if (!def.stands) m.rotation.z = Math.PI / 2.2;
+  // Centred on the item's spot, about which floor items turn (standing, its middle too, where they bob).
+  const mid = new THREE.Box3().setFromObject(m).getCenter(new THREE.Vector3());
+  m.position.set(-mid.x, def.stands ? -mid.y : 0, def.stands || shield || bow ? -mid.z : 0);
   return m;
 }
 
-function itemModel(item, color) {
-  const name = itemModelName(item);
+/** A pile of arrows on the floor: one, two or three of them (as many as there are, to three), side by side. */
+function lyingArrows(item) {
+  const g = new THREE.Group(), n = Math.min(3, item.qty);
+  for (let i = 0; i < n; i++) {
+    const m = heldModel(ARROWS[item.type].model);
+    m.rotation.set(0, (i - (n - 1) / 2) * 0.12, -Math.PI / 2);
+    m.position.z = (i - (n - 1) / 2) * 0.05;
+    g.add(m);
+  }
+  const mid = new THREE.Box3().setFromObject(g).getCenter(new THREE.Vector3());
+  for (const m of g.children) m.position.x -= mid.x;
+  return g;
+}
+
+/**
+ * Model for an item's icon (see ui/icons.js): as it's held or stands rather than lying on the floor, a weapon or an
+ * arrow point up, an off-hand thing in your hand's frame, and a scroll open (scroll_open.bbmodel), its rune to be
+ * painted on.
+ */
+export function iconItemModel(item, color) {
+  if (item.kind === 'weapon') return buildWeaponMesh(WEAPONS[item.type].model);
+  if (OFFHAND_DEFS[item.kind]) return heldModel(OFFHAND_DEFS[item.kind][item.type].model);
+  if (item.kind === 'arrow') return heldModel(ARROWS[item.type].model);
+  return itemModel(item, color, item.kind === 'scroll' ? 'scroll_open' : itemModelName(item));
+}
+
+function itemModel(item, color, name = itemModelName(item)) {
   if (!itemCache.has(name)) {
     const src = ITEM_FILES[`../../assets/models/items/${name}.bbmodel`];
     if (!src) console.warn(`No item model assets/models/items/${name}.bbmodel`);

@@ -1,13 +1,21 @@
 import { rand } from './rng.js';
-import { EYE_H } from './config.js';
 import { damageMult } from './damage.js';
 
 const CONE = Math.cos(0.75); // ~43° either side of the crosshair
 
-/** Resolve the player's melee swing at the moment the blade connects. power is 0.3..1 from the attack meter. */
-export function playerStrike(game, power) {
+/** Which way you're looking, as a unit vector. */
+export function lookDir(p) {
+  const cp = Math.cos(p.pitch);
+  return { x: -Math.sin(p.yaw) * cp, y: Math.sin(p.pitch), z: -Math.cos(p.yaw) * cp };
+}
+
+/**
+ * Resolve the player's melee swing at the moment the blade connects. power is 0.3..1 from the attack meter. `w`: what
+ * strikes, as Player.weaponStats gives it; `jab`: it's a jab with an arrow (see bow.js), which teaches you nothing of
+ * your weapon.
+ */
+export function playerStrike(game, power, w = game.player.weaponStats(), jab = false) {
   const p = game.player, level = game.level;
-  const w = p.weaponStats();
   const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
 
   // The nearest monster in reach, in front of you; your allies only if there's nothing else to hit.
@@ -23,11 +31,21 @@ export function playerStrike(game, power) {
     const key = d + (m.isAlly() ? 100 : 0);
     if (key < bestKey) { best = m; bestD = d; bestKey = key; }
   }
-  if (!best) return false;
+  // No monster in reach: the blow lands on a chest, if the crosshair's on one (so a swing at something else never
+  // smashes one by chance), and a blade that burns burns it. A mimic wakes to it, and takes it unawares.
+  let revealed = false;
+  if (!best) {
+    const d = lookDir(p);
+    const chest = level.chestInSight(p.x, p.eyeHeight(), p.z, d.x, d.y, d.z, Math.hypot(w.reach, 1.1));
+    best = chest && game.hitChest(chest, { type: w.onHit?.ignite || p.hasArtefact('ember') ? 'fire' : w.dmgType });
+    if (!best) return !!chest;
+    bestD = Math.hypot(best.x - p.x, best.z - p.z);
+    revealed = true;
+  }
 
   const m = best;
-  // Unaware: asleep, wandering, or still searching for a noise it hasn't traced to you.
-  const sneak = m.state !== 'hunt' || !m.seen || m.held();
+  // Unaware: asleep, wandering, or still searching for a noise it hasn't traced to you (or a mimic you've found out).
+  const sneak = revealed || m.state !== 'hunt' || !m.seen || m.held();
   const acc = Math.max(0.35, Math.min(0.98, 0.88 + w.accuracy - m.def.dodge + (p.level - m.danger) * 0.015));
   if (!sneak && !rand.chance(acc)) {
     game.popup(m.headPos(), 'miss', 'miss');
@@ -42,7 +60,8 @@ export function playerStrike(game, power) {
   dmg -= rand.int(0, m.def.def);
   dmg = Math.max(1, dmg);
 
-  if (sneak) game.log(`You strike the unsuspecting ${m.name}!`, 'good');
+  if (revealed) game.log(`Your blow catches the ${m.name} before it can spring!`, 'good');
+  else if (sneak) game.log(`You strike the unsuspecting ${m.name}!`, 'good');
   const dist = Math.max(0.01, bestD);
   const dealt = m.takeDamage(game, dmg, { type: w.dmgType, knockback: { x: (m.x - p.x) / dist, z: (m.z - p.z) / dist }, sneak });
   const mult = damageMult(m.def, w.dmgType);
@@ -62,7 +81,7 @@ export function playerStrike(game, power) {
   if (p.hasArtefact('ember') && !m.dead) m.afflict(game, 'burning', 3, false);
 
   const weapon = p.equip.weapon;
-  if (weapon && !weapon.identified && --weapon.hitsToId <= 0) {
+  if (weapon && !jab && !weapon.identified && --weapon.hitsToId <= 0) {
     game.knowledge.identify(weapon);
     game.log(`You are now familiar enough with your weapon to know it: ${game.knowledge.name(weapon)}.`, 'info');
   }
@@ -71,5 +90,5 @@ export function playerStrike(game, power) {
 
 /** Point just in front of the player's face, used for popups about the player. */
 export function playerPopupPos(p) {
-  return { x: p.x - Math.sin(p.yaw) * 0.9, y: EYE_H - 0.2, z: p.z - Math.cos(p.yaw) * 0.9 };
+  return { x: p.x - Math.sin(p.yaw) * 0.9, y: p.eyeHeight() - 0.2, z: p.z - Math.cos(p.yaw) * 0.9 };
 }

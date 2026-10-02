@@ -65,6 +65,18 @@ export class Sfx {
     const freq = (mode === 'sprint' ? 140 : 180) + Math.random() * 60;
     this.noise({ dur: mode === 'sprint' ? 0.09 : 0.07, vol, freq, q: 0.8, type: 'lowpass' });
   }
+  /** A step wading through a pool: a slosh of water rather than a footfall. */
+  wade(mode = 'walk') {
+    const vol = mode === 'sprint' ? 0.14 : mode === 'sneak' ? 0.02 : 0.08;
+    const f = 650 + Math.random() * 250;
+    this.noise({ dur: mode === 'sprint' ? 0.2 : 0.16, vol, freq: f, freq2: f * 0.45, q: 1.1 });
+    this.tone({ f: 190 + Math.random() * 40, f2: 95, dur: 0.1, type: 'sine', vol: vol * 0.5 });
+  }
+  /** Something stepping down into a pool, `vol` 0..1 as near as it is. */
+  splash(vol = 1) {
+    this.noise({ dur: 0.38, vol: 0.2 * vol, freq: 1400, freq2: 320, q: 0.8 });
+    this.tone({ f: 150, f2: 60, dur: 0.22, type: 'sine', vol: 0.12 * vol });
+  }
   swing() { this.noise({ dur: 0.18, vol: 0.22, freq: 700, freq2: 2600, q: 0.9 }); }
   whiff() { this.noise({ dur: 0.14, vol: 0.1, freq: 2000, freq2: 800, q: 0.7 }); }
   /** A melee blow landing: 'weak' (on a weakness) crunches, 'resist' (resisted) lands dull with a clank. */
@@ -83,6 +95,10 @@ export class Sfx {
     }
   }
   block() { this.tone({ f: 1000, f2: 750, dur: 0.09, type: 'triangle', vol: 0.15 }); }
+  guardBreak() {
+    this.noise({ dur: 0.3, vol: 0.28, freq: 500, freq2: 120, type: 'lowpass', q: 1 });
+    this.tone({ f: 240, f2: 80, dur: 0.25, type: 'square', vol: 0.1 });
+  }
   hurt() {
     this.tone({ f: 200, f2: 90, dur: 0.22, type: 'sawtooth', vol: 0.2 });
     this.noise({ dur: 0.1, vol: 0.2, freq: 300, q: 0.5 });
@@ -105,7 +121,15 @@ export class Sfx {
     this.tone({ f: 660, dur: 0.08, type: 'triangle', vol: 0.14 });
     this.tone({ f: 990, dur: 0.12, type: 'triangle', vol: 0.14, delay: 0.07 });
   }
-  door(open) {
+  /** A door opening or shutting: a swinging one creaks and thuds; one of halves sliding apart ('slide') grinds, humming. */
+  door(open, kind = 'swing') {
+    if (kind === 'slide') {
+      this.noise({ dur: 0.45, vol: 0.2, freq: open ? 220 : 320, freq2: open ? 90 : 120, type: 'lowpass', q: 1.2 });
+      this.tone({ f: open ? 70 : 110, f2: open ? 115 : 65, dur: 0.6, type: 'sine', vol: 0.12 });
+      this.tone({ f: open ? 104 : 164, f2: open ? 172 : 97, dur: 0.6, type: 'sine', vol: 0.06 });
+      if (!open) this.noise({ dur: 0.18, vol: 0.22, freq: 140, type: 'lowpass', q: 0.8, delay: 0.38 });
+      return;
+    }
     if (open) {
       this.tone({ f: 140, f2: 90, dur: 0.45, type: 'sawtooth', vol: 0.05 });
       this.noise({ dur: 0.35, vol: 0.12, freq: 700, freq2: 300, q: 3 });
@@ -121,6 +145,30 @@ export class Sfx {
     this.tone({ f: 900, f2: 1400, dur: 0.06, type: 'square', vol: 0.08 });
     this.noise({ dur: 0.12, vol: 0.2, freq: 2400, q: 3, delay: 0.08 });
   }
+  /** A chest's lid creaking up on its hinges, and falling back against them. */
+  chestOpen() {
+    this.tone({ f: 190, f2: 120, dur: 0.38, type: 'sawtooth', vol: 0.045 });
+    this.noise({ dur: 0.3, vol: 0.1, freq: 900, freq2: 420, q: 4 });
+    this.noise({ dur: 0.12, vol: 0.2, freq: 220, type: 'lowpass', q: 0.8, delay: 0.42 });
+  }
+  /** A chest smashed: a crunch of wood, and splinters snapping. */
+  chestBreak() {
+    this.noise({ dur: 0.22, vol: 0.34, freq: 380, type: 'lowpass', q: 0.7 });
+    this.tone({ f: 120, f2: 50, dur: 0.16, type: 'square', vol: 0.16 });
+    for (let i = 0; i < 3; i++) this.noise({ dur: 0.04, vol: 0.14, freq: 1800 + Math.random() * 1400, q: 3, delay: 0.04 + i * 0.05 + Math.random() * 0.03 });
+  }
+  /** A mimic giving itself away: a wet snarl, and its jaws snapping. */
+  mimic() {
+    this.tone({ f: 95, f2: 60, dur: 0.55, type: 'sawtooth', vol: 0.16 });
+    this.tone({ f: 142, f2: 88, dur: 0.5, type: 'sawtooth', vol: 0.08 });
+    this.noise({ dur: 0.5, vol: 0.16, freq: 600, freq2: 260, q: 2 });
+    this.noise({ dur: 0.06, vol: 0.24, freq: 1500, q: 1.5, delay: 0.45 });
+  }
+  /** A mimic licking its lips, `vol` 0..1 by how near it is: a faint, wet smack. */
+  lick(vol = 1) {
+    this.noise({ dur: 0.18, vol: 0.05 * vol, freq: 700, freq2: 1600, q: 5 });
+    this.noise({ dur: 0.05, vol: 0.05 * vol, freq: 2400, q: 2, delay: 0.5 });
+  }
   equip() { this.noise({ dur: 0.12, vol: 0.18, freq: 1500, q: 2 }); }
   stairs() { this.noise({ dur: 0.9, vol: 0.3, freq: 300, freq2: 60, type: 'lowpass', q: 0.7 }); }
   drink() { for (let i = 0; i < 4; i++) this.tone({ f: 380 + i * 90, f2: 260, dur: 0.07, type: 'sine', vol: 0.12, delay: i * 0.08 }); }
@@ -134,6 +182,22 @@ export class Sfx {
   shoot(kind) {
     if (kind === 'arrow') this.noise({ dur: 0.16, vol: 0.14, freq: 2600, freq2: 1100, q: 1.5 });
     else this.tone({ f: 520, f2: 140, dur: 0.35, type: 'sine', vol: 0.14 });
+  }
+  // Your bow (see bow.js): the string creaking back, loosed with a twang and the hiss of the arrow, eased off, and an
+  // arrow clattering off a wall.
+  drawBow() {
+    this.tone({ f: 70, f2: 95, dur: 0.5, type: 'sawtooth', vol: 0.025 });
+    this.noise({ dur: 0.45, vol: 0.04, freq: 500, freq2: 900, q: 6 });
+  }
+  loose() {
+    this.tone({ f: 190, f2: 120, dur: 0.18, type: 'triangle', vol: 0.18 });
+    this.tone({ f: 380, f2: 240, dur: 0.1, type: 'triangle', vol: 0.06 });
+    this.noise({ dur: 0.22, vol: 0.12, freq: 3200, freq2: 1200, q: 1.2, delay: 0.02 });
+  }
+  ease() { this.noise({ dur: 0.18, vol: 0.05, freq: 700, freq2: 400, q: 4 }); }
+  thunk() {
+    this.noise({ dur: 0.07, vol: 0.18, freq: 1400, q: 2 });
+    this.tone({ f: 260, f2: 160, dur: 0.08, type: 'triangle', vol: 0.08 });
   }
   levelUp() { [523, 659, 784, 1046].forEach((f, i) => this.tone({ f, dur: 0.18, type: 'triangle', vol: 0.14, delay: i * 0.1 })); }
   trap() { this.tone({ f: 90, f2: 420, dur: 0.22, type: 'square', vol: 0.2 }); }
@@ -195,6 +259,7 @@ export class Sfx {
 
   stopDrone() {
     this.water(0);
+    this.outdoors(0);
     this.wind(0);
     this.rift(0);
     this.lava(0);
@@ -238,6 +303,38 @@ export class Sfx {
       src.start();
     }
     this.waterOut.gain.setTargetAtTime(level * 0.14, this.ctx.currentTime, 0.4);
+  }
+
+  /**
+   * The world above, heard down the way up from the first floor, as loud as `level` (0..1): a soft breeze, and now and
+   * then a bird singing up there. Called a few times a second (see Level.update).
+   */
+  outdoors(level) {
+    if (!this.ctx) return;
+    const c = this.ctx;
+    if (!this.airOut) {
+      if (level <= 0) return;
+      const src = c.createBufferSource();
+      src.buffer = this.noiseBuf;
+      src.loop = true;
+      const high = c.createBiquadFilter(), low = c.createBiquadFilter();
+      high.type = 'highpass';
+      high.frequency.value = 500;
+      low.type = 'lowpass';
+      low.frequency.value = 2400;
+      this.airOut = c.createGain();
+      this.airOut.gain.value = 0;
+      src.connect(high).connect(low).connect(this.airOut).connect(this.master);
+      src.start();
+    }
+    this.airOut.gain.setTargetAtTime(level * 0.035, c.currentTime, 0.8);
+    if (level > 0.1 && Math.random() < 0.07 * level) {
+      const f = 2600 + Math.random() * 1400, notes = 2 + Math.floor(Math.random() * 4);
+      for (let i = 0; i < notes; i++) {
+        const up = Math.random() < 0.5;
+        this.tone({ f: f * (up ? 0.85 : 1.15), f2: f * (up ? 1.2 : 0.8), dur: 0.07, type: 'sine', vol: 0.03 * level, delay: i * (0.09 + Math.random() * 0.05) });
+      }
+    }
   }
 
   /** Wind moaning up out of a chasm, as loud as `level` (0..1). */

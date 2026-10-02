@@ -10,6 +10,7 @@ const PROP_PAL = {
   rugRed: P('#2a0808', '#420c0c', '#5c1412', '#761c16', '#8e281e'),
   rugGold: P('#4a3208', '#6e4c12', '#94681c', '#b8862a', '#d4a440'),
   rugBlue: P('#0a1024', '#121a36', '#1a2648', '#24325c'),
+  velvet: P('#1e0208', '#34060e', '#4e0a16', '#6a1020', '#86182c', '#a4263a'),
   clay: P('#3a2216', '#54321f', '#6e4429', '#8a5734', '#a36c42', '#b98252'),
   glassGreen: P('#0c2414', '#14381e', '#1e4e2a', '#2c6a3a', '#4a8e56', '#8cc49a'),
   glassBlue: P('#0c1830', '#142648', '#1e3862', '#2c4e82', '#4a70a8', '#8cb0d8'),
@@ -69,6 +70,12 @@ const MATS = {
     if (d < 0.12) return ramp(PROP_PAL.rugGold, 0.55 + weave, c.ax, c.ay);
     return ramp(PROP_PAL.rugRed, 0.5 + 0.15 * patches(p, 640, 0.2) + weave, c.ax, c.ay);
   },
+  // Crushed velvet: soft sheen that brightens toward the top of the cushion, darker in the folds.
+  velvet(c) {
+    const { p, n } = c;
+    const v = 0.45 + 0.22 * n.y + 0.14 * patches(p, 680, 0.5) + ((c.ax + c.ay) % 2 ? 0.03 : -0.03);
+    return ramp(PROP_PAL.velvet, v, c.ax, c.ay);
+  },
   clay: (c) => ramp(PROP_PAL.clay, 0.5 + 0.16 * patches(c.p, 650, 0.6) + 0.12 * c.n.y + bevel(c, 0.1), c.ax, c.ay),
   glassGreen: (c) => glass('glassGreen', c),
   glassBlue: (c) => glass('glassBlue', c),
@@ -101,6 +108,21 @@ export const props = {
     for (const x of [-100, 100]) m.cube(`post_${x < 0 ? 'left' : 'right'}`, [x - 3, 0, 16], [x + 3, 46, 21], { mat: 'darkOak' });
     [-62, 0, 62].forEach((x, i) => slot(m, i + 1, [x, 51, 0]));
   }, { density: 1 }),
+
+  display_plinth: defineModel('display_plinth', MATS, (m) => {
+    // A pedestal for the shop's finest: a turned column on a stepped base and a square capital, with a red velvet
+    // cushion on top, gold-tasselled at its corners.
+    m.cube('base', [-16, 0, -16], [16, 5, 16], { mat: 'darkOak' });
+    m.cube('step', [-13, 5, -13], [13, 8, 13], { mat: 'counterTop' });
+    m.mesh('column', lathe([[8, 8], [11, 6], [36, 6], [40, 8.5], [42, 8.5]], { sides: 8 }), { mat: 'darkOak' });
+    m.cube('capital', [-14, 42, -14], [14, 46, 14], { mat: 'counterTop' });
+    const pad = (y, h) => [[h, y, h], [h, y, -h], [-h, y, -h], [-h, y, h]];
+    m.mesh('cushion', loft([pad(46, 11.5), pad(48.5, 13), pad(51, 12.2), pad(52.5, 9.5)]), { mat: 'velvet' });
+    for (const [x, z] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      m.cube(`tassel_${x > 0 ? 'e' : 'w'}${z > 0 ? 's' : 'n'}`, [x * 15 - 1, 40, z * 15 - 1], [x * 15 + 1, 46, z * 15 + 1], { mat: 'gold' });
+    }
+    slot(m, 1, [0, 52.5, 0]);
+  }, { density: 2 }),
 
   display_table: defineModel('display_table', MATS, (m) => {
     // A round pedestal table for showing off a single piece of merchandise.

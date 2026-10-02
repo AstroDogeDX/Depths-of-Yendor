@@ -1,28 +1,45 @@
 import * as THREE from 'three';
-import { TILE, EYE_H, MAX_DEPTH, ARTEFACT_DEPTHS, RENDER_HEIGHTS, HOTBAR_SIZE, CROUCH_DROP, danger, themeForDepth } from './config.js';
+import { TILE, MAX_DEPTH, ARTEFACT_DEPTHS, SHOP_DEPTHS, RENDER_HEIGHTS, HOTBAR_SIZE, danger, themeForDepth } from './config.js';
 import { RNG, rand } from './rng.js';
 import { generateLevel } from './dungeon/generator.js';
 import { Level } from './world/level.js';
 import { Player } from './player.js';
 import { Knowledge } from './items/identify.js';
-import { ARTEFACTS, WEAPONS } from './items/defs.js';
-import { makeItem, randomItem, nextItemUid, reserveUids } from './items/generate.js';
-import { itemActions, drinkPotion, activateArtefact, toggleGrip, useOffhand } from './items/use.js';
-import { ViewModel } from './fx/viewmodel.js';
+import { ARTEFACTS, WEAPONS, CONTAINERS } from './items/defs.js';
+import { makeItem, randomItem, nextItemUid, reserveUids, arrows, soldByThePile } from './items/generate.js';
+import { itemActions, activateArtefact, toggleGrip, useOffhand } from './items/use.js';
+import { ViewModel, HOLD_RAISE, HOLD_USE, actTime } from './fx/viewmodel.js';
 import { burst, ring, gasCloud, lightColumn } from './fx/particles.js';
 import { playerPopupPos } from './combat.js';
 import { Input, GAME_KEYS } from './input.js';
 import { Sfx } from './audio.js';
-import { useSlot } from './hotbar.js';
+import { useSlot, slotItem, useHeldSlot, useHeld, HELD } from './hotbar.js';
 import { disposeGroup, propsForTheme } from './dungeon/levelBuilder.js';
 import { loadProps } from './dungeon/props.js';
 import { loadTraps } from './world/trapModels.js';
 import { TitleScene } from './ui/titleScene.js';
 import { SAVE_VERSION, SAVE_FORMAT, writeSave, deleteSave, fingerprint } from './save.js';
 import { damageTakenMult, hitStatuses } from './status.js';
+import { blockHit } from './shield.js';
+import { quiverOf } from './bow.js';
 import { BUILD } from './build.js';
 
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, matches stair `dir`
+
+// What smashing a chest (or burning it) does to a thing in it that's lost with it (see Game.hitChest).
+function ruined(item, fire) {
+  const [one, many] = {
+    potion: fire ? ['bursts in the heat', 'burst in the heat'] : ['shatters', 'shatter'],
+    scroll: fire ? ['burns up', 'burn up'] : ['is torn to shreds', 'are torn to shreds'],
+    wand: fire ? ['burns', 'burn'] : ['snaps in two', 'snap in two'],
+    food: fire ? ['is burnt to a crisp', 'are burnt to a crisp'] : ['is crushed', 'are crushed'],
+    ring: fire ? ['is lost in the flames', 'are lost in the flames'] : ['is crushed', 'are crushed'],
+    weapon: fire ? ['is lost in the flames', 'are lost in the flames'] : ['is broken', 'are broken'],
+    bow: fire ? ['burns', 'burn'] : ['snaps in two', 'snap in two'],
+    arrow: fire ? ['burns', 'burn'] : ['snaps', 'snap'],
+  }[item.kind] ?? (fire ? ['is lost in the flames', 'are lost in the flames'] : ['is ruined', 'are ruined']);
+  return item.qty > 1 ? many : one;
+}
 
 export class Game {
   constructor(canvas, ui) {
@@ -36,8 +53,8 @@ export class Game {
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.05, 80);
     this.camera.rotation.order = 'YXZ';
     this.scene.add(this.camera);
-    this.torch = new THREE.PointLight(0xffb060, 26, 28, 1.7);
-    this.scene.add(this.torch);
+    this.lantern = new THREE.PointLight(0xffb060, 26, 28, 1.7); // the lantern you carry (see updateCamera)
+    this.scene.add(this.lantern);
     this.ambient = new THREE.AmbientLight(0xffffff, 5);
     this.scene.add(this.ambient);
 
@@ -104,6 +121,9 @@ export class Game {
     const rng = new RNG(`${this.seed}:run`);
     this.knowledge = new Knowledge(rng);
     this.artefactQueue = rng.shuffle(Object.keys(ARTEFACTS));
+    // What the shops have on their plinths (see shopWares): the pack expansions, one to a shop in an order of their
+    // own, and the artefact no shrine has (there being one more artefact than shrines), in one of them.
+    this.shops = { containers: rng.shuffle(Object.keys(CONTAINERS).filter((t) => CONTAINERS[t].shop)), artefact: rng.int(0, SHOP_DEPTHS.length - 1) };
 
     if (this.level) this.scene.remove(this.level.group);
     for (const lvl of this.levels?.values() ?? []) disposeGroup(lvl.group);
@@ -118,20 +138,21 @@ export class Game {
     this.amuletTaken = false;
     this.paraMsgT = -Infinity;
     this.menu = null;
+    this.hold = null;
   }
 
   newRun({ seed, name }) {
     this.beginRun(seed || Math.random().toString(36).slice(2, 8).toUpperCase(), name || 'Adventurer');
     const p = this.player;
     const sword = makeItem('weapon', 'shortsword', { identified: true, curseKnown: true, hitsToId: 0 });
-    const torch = makeItem('offhand', 'torch');
+    const lantern = makeItem('offhand', 'lantern');
     const armor = makeItem('armor', 'leather', { identified: true, curseKnown: true, hitsToId: 0 });
     p.addItem(sword);
-    p.addItem(torch);
+    p.addItem(lantern);
     p.addItem(armor);
     p.addItem(makeItem('food', 'ration'));
     p.equip.weapon = sword;
-    p.equip.offhand = torch;
+    p.equip.offhand = lantern;
     p.equip.armor = armor;
     this.viewmodel.setWeapon(WEAPONS.shortsword);
 
@@ -153,6 +174,7 @@ export class Game {
     this.beginRun(s.seed, s.name);
     this.knowledge.restore(s.knowledge);
     this.artefactQueue = s.artefactQueue;
+    if (s.shops) this.shops = s.shops;
     this.savedLevels = new Map(s.levels.map((l) => [l.depth, l]));
     reserveUids(s.nextUid);
     this.player.restore(s.player);
@@ -185,7 +207,8 @@ export class Game {
     return writeSave({
       version: SAVE_VERSION, format: SAVE_FORMAT, build: BUILD, savedAt: Date.now(),
       seed: this.seed, name: this.playerName, depth: this.level.depth, time: Math.round(this.time),
-      level: p.level, amuletTaken: this.amuletTaken, artefactQueue: this.artefactQueue, nextUid: nextItemUid(),
+      level: p.level, amuletTaken: this.amuletTaken, artefactQueue: this.artefactQueue, shops: this.shops,
+      nextUid: nextItemUid(),
       knowledge: this.knowledge.snapshot(), player: p.snapshot(), levels,
     });
   }
@@ -246,13 +269,26 @@ export class Game {
     return i >= 0 ? this.artefactQueue[i] : null;
   }
 
+  /** What the shop on this floor has on its plinths, if it has a shop: { container, artefact } (see shopStock). */
+  shopWares(depth) {
+    const i = SHOP_DEPTHS.indexOf(depth);
+    if (i < 0) return undefined;
+    const spare = this.artefactQueue[ARTEFACT_DEPTHS.length] ?? null;
+    return { container: this.shops.containers[i] ?? null, artefact: i === this.shops.artefact ? spare : null };
+  }
+
+  /** What a floor is generated with besides its seed and depth (see generateLevel). */
+  floorOpts(depth) {
+    return { artefact: this.artefactFor(depth), wares: this.shopWares(depth) };
+  }
+
   makeAmulet() {
     return makeItem('amulet', 'yendor');
   }
 
   getLevel(depth) {
     if (!this.levels.has(depth)) {
-      const data = generateLevel(this.seed, depth, { artefact: this.artefactFor(depth) });
+      const data = generateLevel(this.seed, depth, this.floorOpts(depth));
       // A floor from a save comes back as it was left, unless floors are laid out differently since it was saved
       // (a newer version of the game): then it starts afresh, rather than with things in its walls.
       const saved = this.savedLevels.get(depth);
@@ -391,10 +427,11 @@ export class Game {
     else if (inp.wasPressed('KeyM')) this.openMenu('map');
     if (inp.wasPressed('KeyE') && this.canAct()) this.interact();
     if (inp.wasPressed('KeyF') && this.canAct()) toggleGrip(this);
+    this.holdSlot(inp);
     if (inp.wasPressed('Mouse2') && this.canAct()) useOffhand(this);
     if (inp.wasPressed('KeyQ') && this.canAct()) this.quickHeal();
     for (let i = 0; i < HOTBAR_SIZE; i++) {
-      if ((inp.wasPressed(`Digit${i + 1}`) || inp.wasPressed(`Numpad${i + 1}`)) && useSlot(this, i)) this.ui.flashSlot(i);
+      if (this.hold?.i !== i && (inp.wasPressed(`Digit${i + 1}`) || inp.wasPressed(`Numpad${i + 1}`)) && useSlot(this, i)) this.ui.flashSlot(i);
     }
     if (inp.wasPressed('KeyR') && this.canAct()) activateArtefact(this, 0);
     if (inp.wasPressed('KeyT') && this.canAct()) activateArtefact(this, 1);
@@ -403,6 +440,54 @@ export class Game {
       this.resize();
       this.log(`Render resolution: ${RENDER_HEIGHTS[this.resIdx] || 'native'}.`, 'info');
     }
+  }
+
+  /**
+   * Holding the key of a hotbar slot with a potion or wand in it (see HELD in hotbar.js) lowers your weapon and raises
+   * that in its place (see ViewModel), and once it's up (HOLD_RAISE), click uses it one way and right-click the other,
+   * on yourself: again, for another, while you still hold the key (after HOLD_USE). A click while it's on its way up
+   * waits for it. Meanwhile the mouse does nothing else: no swing, nothing from your off hand. Let go and it goes back
+   * down, the weapon back up. Having to raise each one in turn is what keeps a hotbar of wands from being played like
+   * piano keys. `hold`: { i (the slot), readyAt (this.time), queued (a click waiting: 'left' | 'right') } while a key
+   * is held; or, quaffing a potion with Q (see quickHeal), { i: -1, item, readyAt, queued: 'right', until }, which
+   * lets go by itself once it's drunk (`until`).
+   */
+  holdSlot(inp) {
+    const down = (i) => inp.down(`Digit${i + 1}`) || inp.down(`Numpad${i + 1}`);
+    if (this.hold && (this.hold.item ? this.time >= this.hold.until : !down(this.hold.i))) this.hold = null;
+    if (!this.hold) {
+      for (let i = 0; i < HOTBAR_SIZE; i++) {
+        if ((inp.wasPressed(`Digit${i + 1}`) || inp.wasPressed(`Numpad${i + 1}`)) && HELD[slotItem(this.player, i)?.kind]) {
+          this.hold = { i, readyAt: this.time + HOLD_RAISE, queued: null };
+          break;
+        }
+      }
+    }
+    if (!this.hold) return;
+    const h = this.hold;
+    const click = inp.wasPressed('Mouse0') ? 'left' : inp.wasPressed('Mouse2') ? 'right' : null;
+    inp.pressed.delete('Mouse0');
+    inp.pressed.delete('Mouse2');
+    inp.mouseDown = false;
+    if (click && !h.item) h.queued = click; // (quaffing, a click does nothing)
+    if (h.queued && this.time >= h.readyAt) {
+      if (h.item) {
+        useHeld(this, h.item, h.queued);
+        h.until = this.time + actTime('drink');
+      } else if (useHeldSlot(this, h.i, h.queued)) this.ui.flashSlot(h.i);
+      h.queued = null;
+      h.readyAt = this.time + HOLD_USE;
+    }
+    if (!h.item && !slotItem(this.player, h.i)) this.hold = null; // (the last of them)
+  }
+
+  /**
+   * What's held up in place of your weapon (see holdSlot), as the ViewModel draws it, or null. A potion being quaffed
+   * stays in your hand until it's drunk, even the last of them.
+   */
+  heldItem() {
+    const it = this.hold && (this.hold.item ?? slotItem(this.player, this.hold.i));
+    return it ? { item: it, color: this.knowledge.color(it) } : null;
   }
 
   /** False while you're charmed: no swinging, zapping, throwing or warlike powers. Says so, at most every 0.6s. */
@@ -456,8 +541,9 @@ export class Game {
     const p = this.player;
     this.viewmodel.update(dt, {
       moving: p.moving, bob: p.bob, charge: p.charge, time: this.time, yaw: p.yaw, sprint: p.moving && p.mode === 'sprint',
-      lightLevel: p.status.blind > 0 ? 0.1 : 1, torchLight: p.torchLight(),
-      offhand: p.equip.offhand?.type ?? null, twoHanded: p.twoHanded,
+      lightLevel: p.status.blind > 0 ? 0.1 : 1, carriedLight: p.carriedLight(),
+      offhand: p.equip.offhand, guard: p.guard, twoHanded: p.twoHanded, held: this.heldItem(),
+      nock: p.nock, draw: p.draw, quiver: quiverOf(p)?.type ?? null,
     });
     this.interaction = this.findInteraction();
     this.target = this.findTarget();
@@ -467,7 +553,7 @@ export class Game {
     const p = this.player;
     if (!p) return;
     const cam = this.camera;
-    const eye = EYE_H - p.crouch * CROUCH_DROP;
+    const eye = p.eyeHeight();
     const bobAmp = p.mode === 'sprint' ? 0.05 : p.mode === 'sneak' ? 0.015 : 0.03;
     const bobY = p.moving ? Math.sin(p.bob * 2) * bobAmp : 0;
     cam.position.set(p.x, eye + bobY, p.z);
@@ -482,14 +568,15 @@ export class Game {
     }
     cam.rotation.set(pitch, yaw, roll);
 
-    // The torch you carry is the main light: held up, slightly left of and ahead of your eyes; stowed while you grip
-    // your weapon in both hands, lower down at your belt, and dimmer (see Player.torchLight).
+    // The lantern you carry is the main light: held up, slightly left of and ahead of your eyes, and swaying as it
+    // swings from your hand (see ViewModel.pendulum); stowed while you grip your weapon in both hands, or hung at your
+    // belt from the hotbar, lower down and dimmer (see Player.carriedLight). Its flame burns behind glass, so it flickers only a little.
     const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
-    const held = p.twoHanded ? 0 : 1;
-    this.torch.position.set(p.x + fx * 0.35 * held + fz * 0.25, eye - 0.1 - 0.6 * (1 - held), p.z + fz * 0.35 * held - fx * 0.25);
-    const flick = 0.9 + Math.sin(this.time * 21) * 0.04 + Math.sin(this.time * 7.7) * 0.06;
+    const held = p.lightInHand() ? 1 : 0, sway = this.viewmodel.pendulum.z * 0.3 * held;
+    this.lantern.position.set(p.x + fx * 0.35 * held + fz * (0.25 - sway), eye - 0.1 - 0.6 * (1 - held), p.z + fz * 0.35 * held - fx * (0.25 - sway));
+    const flick = 0.95 + Math.sin(this.time * 17) * 0.02 + Math.sin(this.time * 5.3) * 0.03;
     const blind = p.status.blind > 0;
-    this.torch.intensity = (blind ? 4 : 26) * flick * p.torchLight();
+    this.lantern.intensity = (blind ? 4 : 26) * flick * p.carriedLight();
     this.scene.fog.far = blind ? 4 : this.level.theme.fogFar;
     this.ambient.intensity = blind ? 0.8 : 5;
   }
@@ -533,7 +620,7 @@ export class Game {
   findInteraction() {
     const p = this.player, level = this.level;
     const fx = -Math.sin(p.yaw), fz = -Math.cos(p.yaw);
-    let best = null, bestScore = Infinity;
+    let best = null, bestScore = Infinity, chest = null;
     for (const it of level.items) {
       const dx = it.x - p.x, dz = it.z - p.z, d = Math.hypot(dx, dz);
       if (d > (it.onPedestal ? 2.1 : 1.7)) continue;
@@ -541,12 +628,28 @@ export class Game {
       const score = d - facing * 0.6;
       if (score < bestScore) { bestScore = score; best = it; }
     }
+    // A shut chest in front of you (its middle is further off than a thing on the floor would be, so it's let off that).
+    for (const c of level.chests) {
+      if (c.state !== 'closed') continue;
+      const dx = c.x - p.x, dz = c.z - p.z, d = Math.hypot(dx, dz);
+      const facing = (dx * fx + dz * fz) / (d || 1);
+      if (d > 1.9 || facing < 0.3) continue;
+      const score = d - 0.35 - facing * 0.6;
+      if (score < bestScore) { bestScore = score; best = null; chest = c; }
+    }
+    if (chest) {
+      if (chest.kind !== 'locked') return { kind: 'chest', chest, label: 'Open the chest' };
+      const keys = p.goldKeys[level.depth] || 0;
+      return { kind: 'chest', chest, label: keys ? 'Unlock the chest (uses a gold key)' : 'Locked. It needs a gold key from this floor' };
+    }
     if (best) {
       if (!best.price) return { kind: 'item', entry: best, label: `Pick up ${this.knowledge.name(best.item, { article: true })}` };
-      // Piles in the shop sell one at a time.
-      const name = this.knowledge.name({ ...best.item, qty: 1 }, { article: true });
-      const left = best.item.qty > 1 ? ` (${best.item.qty} left)` : '';
-      const label = p.gold >= best.price ? `Buy ${name} for ${best.price} gold${left}` : `${name}: ${best.price} gold (you have ${p.gold})`;
+      // Piles in the shop sell one at a time, and arrows by the pile, as many as you can pay for (see buy).
+      const pile = soldByThePile(best.item), n = pile ? Math.max(1, Math.min(best.item.qty, Math.floor(p.gold / best.price))) : 1;
+      const name = this.knowledge.name({ ...best.item, qty: n }, { article: true });
+      const left = best.item.qty <= 1 ? '' : !pile ? ` (${best.item.qty} left)` : n < best.item.qty ? ` (of ${best.item.qty})` : '';
+      const label = p.gold >= best.price ? `Buy ${name} for ${best.price * n} gold${left}`
+        : pile ? `${this.knowledge.name(best.item)}: ${best.price} gold each (you have ${p.gold})` : `${name}: ${best.price} gold (you have ${p.gold})`;
       return { kind: 'buy', entry: best, label: label[0].toUpperCase() + label.slice(1) };
     }
     const door = level.doorAt(level.toTile(p.x + fx * 1.4), level.toTile(p.z + fz * 1.4));
@@ -590,6 +693,7 @@ export class Game {
     switch (it.kind) {
       case 'item': this.pickUp(it.entry); break;
       case 'buy': this.buy(it.entry); break;
+      case 'chest': this.useChest(it.chest); break;
       case 'door': this.useDoor(it.door); break;
       case 'down': this.changeLevel(this.level.depth + 1, 'down'); break;
       case 'up': this.changeLevel(this.level.depth - 1, 'up'); break;
@@ -622,13 +726,17 @@ export class Game {
       return;
     }
     if (item.kind === 'key') {
-      this.log('You pick up an iron key. Somewhere on this floor, a lock is waiting for it.', 'good');
+      this.log(item.type === 'gold' ? 'You pick up a gold key. Somewhere on this floor, a locked chest is waiting for it.'
+        : 'You pick up an iron key. Somewhere on this floor, a lock is waiting for it.', 'good');
       return;
     }
-    this.log(`You pick up ${k.name(item, { article: true })}.`);
+    // Arrows go into your quiver, if they're the kind in it (see Player.addItem).
+    const q = item.kind === 'arrow' && quiverOf(p);
+    this.log(`You pick up ${k.name(item, { article: true })}${q?.type === item.type ? `: ${q.qty} in your quiver` : ''}.`);
     if (item.kind === 'artefact') {
       this.log(`${ARTEFACTS[item.type].name}: ${ARTEFACTS[item.type].desc} Put it on from your pack.`, 'good');
     }
+    this.noteContainer(item);
     if (item.kind === 'amulet' && !this.amuletTaken) {
       this.amuletTaken = true;
       this.audio.victory();
@@ -636,6 +744,13 @@ export class Game {
       this.shake(0.4);
       this.amuletDialog(true);
     }
+  }
+
+  /** Says what a pack expansion you've just got does. */
+  noteContainer(item) {
+    if (item.kind !== 'container') return;
+    const c = CONTAINERS[item.type];
+    this.log(`You fasten the ${c.name} to your pack. Your ${c.what} go in it now, on a tab of their own.`, 'good');
   }
 
   /** Buys an item from the shop: gold for goods, no haggling, no refunds. */
@@ -646,16 +761,19 @@ export class Game {
       level.shopkeeper?.cantAfford(this);
       return;
     }
-    const one = entry.item.qty > 1 ? { ...entry.item, qty: 1 } : entry.item; // piles sell one at a time
+    // Piles sell one at a time, and arrows by the pile, as many as you can pay for (see soldByThePile).
+    const n = soldByThePile(entry.item) ? Math.min(entry.item.qty, Math.floor(p.gold / entry.price)) : 1;
+    const one = entry.item.qty > n ? { ...entry.item, qty: n } : entry.item;
     if (!p.addItem(one)) {
       this.log('Your pack is full.', 'warn');
       return;
     }
-    p.gold -= entry.price;
+    p.gold -= entry.price * n;
     if (one === entry.item) level.removeItem(entry);
-    else entry.item.qty--;
+    else entry.item.qty -= n;
     this.audio.coins();
-    this.log(`You buy ${this.knowledge.name(one, { article: true })} for ${entry.price} gold.`, 'good');
+    this.log(`You buy ${this.knowledge.name(one, { article: true })} for ${entry.price * n} gold.`, 'good');
+    this.noteContainer(one);
     level.shopkeeper?.sold(this, level);
   }
 
@@ -695,7 +813,7 @@ export class Game {
     if (door.locked) {
       if ((p.keys[depth] || 0) > 0) {
         p.keys[depth]--;
-        door.locked = false;
+        this.level.unlockDoor(door);
         this.audio.unlock();
         this.log('You turn the iron key in the lock. The door grinds open.', 'good');
       } else {
@@ -708,17 +826,107 @@ export class Game {
         return;
       }
     }
-    this.level.openDoor(door);
+    this.level.openDoor(door, p);
   }
 
+  /**
+   * Opens a chest you used (E): out comes what's in it. A locked one takes a gold key for this floor. A mimic springs
+   * at you as you reach for it.
+   */
+  useChest(chest) {
+    const p = this.player, level = this.level, depth = level.depth;
+    if (chest.state !== 'closed') return;
+    if (chest.kind === 'mimic') {
+      this.revealMimic(chest, true);
+      return;
+    }
+    let how = 'You open the chest.';
+    if (chest.kind === 'locked') {
+      if (!((p.goldKeys[depth] || 0) > 0)) {
+        if (this.time - (chest.lastRattle ?? -Infinity) > 2) {
+          chest.lastRattle = this.time;
+          this.audio.locked();
+          this.log('The chest is locked. Its gold key must be somewhere on this floor.', 'warn');
+        }
+        return;
+      }
+      p.goldKeys[depth]--;
+      this.audio.unlock();
+      how = 'You turn the gold key in the lock and lift the lid.';
+    }
+    const items = level.openChest(chest);
+    this.audio.chestOpen();
+    this.log(items.length ? `${how} Inside: ${this.listItems(items)}.` : `${how} It's empty.`, chest.kind === 'locked' ? 'good' : '');
+  }
+
+  /**
+   * A mimic gives itself away: `ambush` if you reached for it, and it bites before you can pull back; otherwise
+   * something you did woke it (a blow, a bolt, a splash). Returns it, now a monster.
+   */
+  revealMimic(chest, ambush = false) {
+    const m = this.level.wakeMimic(chest);
+    this.audio.mimic();
+    this.popup(m.headPos(), '!', 'alert');
+    if (ambush) {
+      this.log('You reach for the chest, and it lunges at you with a mouthful of teeth. A mimic!', 'danger');
+      m.startAttack(false, this.player);
+      m.attack.t = m.def.windup * 0.4; // (it was ready for you)
+    } else this.log('The chest shrieks and lurches open. A mimic!', 'danger');
+    return m;
+  }
+
+  /**
+   * An attack of yours reaching a shut chest: a blow at it, a bolt, lightning or a splash. A mimic wakes to it, and is
+   * returned, so the attack lands on the monster instead. A chest is smashed, and some of what's in it may be lost
+   * with it (see Level.breakChest); `type` 'fire' burns it. Nothing gets through the ironwork of a locked chest.
+   * A `harmless` bolt (teleport other) wakes a mimic, but does nothing to a chest.
+   */
+  hitChest(chest, { type = null, harmless = false } = {}) {
+    if (chest.state !== 'closed') return null;
+    if (chest.kind === 'mimic') return this.revealMimic(chest);
+    if (harmless) return null;
+    if (chest.kind === 'locked') {
+      this.audio.block();
+      burst(this.level, chest.x, 0.45, chest.z, 0xffd070, 5, 2, 0.3);
+      if (this.time - (chest.lastClang ?? -Infinity) > 2) {
+        chest.lastClang = this.time;
+        this.log('It glances off the iron-bound chest. Only its key will open it.', 'info');
+      }
+      return null;
+    }
+    const fire = type === 'fire';
+    const lost = this.level.breakChest(chest);
+    this.audio.chestBreak();
+    this.shake(0.08);
+    this.log(fire ? 'The chest bursts into flame and falls to pieces!' : 'The chest splinters apart!', 'warn');
+    if (lost.length) {
+      const said = lost.map((it) => `${this.knowledge.name(it, { article: true })} ${ruined(it, fire)}`);
+      const line = said.length > 1 ? `${said.slice(0, -1).join(', ')} and ${said[said.length - 1]}` : said[0];
+      this.log(`${line[0].toUpperCase()}${line.slice(1)}.`, 'warn');
+    }
+    return null;
+  }
+
+  /** Things as a list for the log: "a crimson potion, a gold key and 14 gold". */
+  listItems(items) {
+    const names = items.map((it) => this.knowledge.name(it, { article: true }));
+    return names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] ?? '';
+  }
+
+  /**
+   * Q: quaffs a potion you know is healing, as if you'd held it up from the hotbar and right-clicked: your weapon goes
+   * down, the potion comes up and is drunk, and your weapon comes back up (see holdSlot). Not while something else is
+   * held up.
+   */
   quickHeal() {
     const p = this.player;
+    if (this.hold) return;
     const potion = p.inventory.find((i) => i.kind === 'potion' && i.type === 'healing' && this.knowledge.isKnown(i));
     if (!potion) {
       this.log('You have no potion you know to be healing.', 'info');
       return;
     }
-    drinkPotion(this, potion);
+    this.hold = { i: -1, item: potion, readyAt: this.time + HOLD_RAISE, queued: 'right', until: Infinity };
   }
 
   // --- Combat & events ---
@@ -737,8 +945,12 @@ export class Game {
       if (!opts.dot) this.popup(playerPopupPos(p), 'IMMUNE', 'immune');
       return;
     }
-    let dmg = amount;
+    let dmg = amount, shielded = 0;
     if (!opts.ignoreArmor) {
+      // A shield takes its share first, raised against a blow from in front or on your back against one from behind
+      // (see shield.js), if the blow came from somewhere (`from`, or the monster that struck it); then your armour.
+      shielded = blockHit(this, p, dmg, opts.from ?? opts.monster, opts.monster);
+      dmg -= shielded;
       const def = p.defense;
       if (def > 0) dmg -= rand.int(Math.ceil(def * 0.4), def);
       const a = p.equip.armor;
@@ -749,9 +961,10 @@ export class Game {
     }
     dmg = Math.max(0, dmg);
     if (dmg > 0 && mult !== 1) dmg = Math.max(1, Math.round(dmg * mult));
+    if (shielded) this.audio.block();
     if (dmg === 0) {
       this.popup(playerPopupPos(p), 'blocked', 'miss');
-      this.audio.block();
+      if (!shielded) this.audio.block();
       return;
     }
     p.hp -= dmg;
@@ -787,9 +1000,15 @@ export class Game {
       p.gainXp(Math.round(m.def.xp * (1 + (m.maxHp / m.def.hp - 1) * 0.5)), this);
     }
     const level = this.level;
-    // Whatever it carried falls where it died, or onto the bank if it flew over water.
+    // A mimic spills what its chest held out of its maw. Anything else may have carried something, which falls where
+    // it died, or onto the bank if it flew over water.
+    if (m.loot) {
+      level.spill(m.loot, m, { from: 0.4, delay: 0.3 });
+      return;
+    }
     const at = level.landSpot(m.x, m.z);
     if (m.guardian || rand.chance(0.12)) level.addItem(randomItem(rand, level.depth), at.x, at.z);
+    if (m.def.ranged?.kind === 'arrow' && rand.chance(0.4)) level.addItem(arrows(rand, 2, 5), at.x - 0.3, at.z - 0.2); // some of its arrows
     if (rand.chance(0.15)) level.addItem(makeItem('gold', 'gold', { qty: rand.int(4, 12) + Math.round(danger(level.depth) * 3) }), at.x + 0.3, at.z + 0.2);
   }
 

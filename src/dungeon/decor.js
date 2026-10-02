@@ -3,9 +3,10 @@ import { T } from './tiles.js';
 // Decorations by theme `style`: props set about the rooms after they're furnished (see props.js for the models).
 // Wall pieces hang on walls facing into a room; floor pieces keep to the edges of rooms, or to tiles open all
 // round, and clear of doorways, so they never block a way through. Each is { type, x, y (grid tiles,
-// fractional), yaw, solid, round }, with `wall` set on those hung on a wall and `ceiling` on those hung from
-// the vault. The level builder draws two kinds itself, puddles { type: 'puddle', x, y, size, yaw } and cobwebs
-// { type: 'cobweb', x, y (a room corner), corner: [dx, dy] (the way into the room) }.
+// fractional), yaw, solid, round }, with `wall` set on those hung on a wall, `ceiling` on those hung from
+// the vault, and `span` on those standing across a passage from wall to wall. The level builder draws two kinds
+// itself, puddles { type: 'puddle', x, y, size, yaw } and cobwebs { type: 'cobweb', x, y (a room corner), corner:
+// [dx, dy] (the way into the room) }. A style may also dress the passages between the rooms (`tunnels`).
 
 const SIDE = {
   // Where a wall face lies for a tile with a wall on that side, and the way a prop on it faces (into the room).
@@ -24,10 +25,25 @@ export const faceKey = (x, y, side) => `${x},${y},${side}`;
 export const wallFace = (x, y, side) => ({ x: x + SIDE[side].dx, y: y + SIDE[side].dy, yaw: SIDE[side].yaw });
 
 /**
- * Decorates a floor. `occupied` (a Set of tile indices) gets the tiles solid props stand on, so nothing is placed
- * on them later. Returns { props, wallUsed }: wallUsed holds the wall faces taken (faceKey), which sconces avoid.
+ * The passages between the rooms: a mask over the grid, 1 on each tile you can walk that's neither in a room nor by a
+ * doorway (the doorway itself and the tiles round it, where doors swing and the way in should stay clear).
  */
-export function decorate({ style, rng, grid, w, rooms, channels, occupied }) {
+export function corridorMask(grid, w, rooms) {
+  const mask = new Uint8Array(grid.length), blocked = new Uint8Array(grid.length);
+  for (const r of rooms) {
+    for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) blocked[y * w + x] = 1;
+    for (const d of r.doorways) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) blocked[(d.y + dy) * w + d.x + dx] = 1;
+  }
+  for (let i = 0; i < grid.length; i++) if (!blocked[i] && (grid[i] === T.FLOOR || grid[i] === T.POOL)) mask[i] = 1;
+  return mask;
+}
+
+/**
+ * Decorates a floor. `occupied` (a Set of tile indices) gets the tiles solid props stand on, so nothing is placed
+ * on them later. The passages are dressed with `tunnelRng`. Returns { props, wallUsed }: wallUsed holds the wall faces
+ * taken (faceKey), which sconces avoid.
+ */
+export function decorate({ style, rng, tunnelRng = rng, grid, w, rooms, channels, occupied }) {
   const idx = (x, y) => y * w + x;
   const at = (x, y) => grid[idx(x, y)];
   const props = [], wallUsed = new Set();
@@ -36,7 +52,7 @@ export function decorate({ style, rng, grid, w, rooms, channels, occupied }) {
   if (!set) return { props, wallUsed };
 
   for (const room of rooms) {
-    if (room.type === 'shop' || room.type === 'vault' || room.type === 'shrine' || room.locked) continue;
+    if (room.type === 'shop' || room.type === 'vault' || room.type === 'shrine') continue;
     // The ways in, and round the stairs and pedestals, stay clear.
     const nearDoor = (x, y) => room.doorways.some((d) => Math.max(Math.abs(d.x - x), Math.abs(d.y - y)) <= 2) ||
       [-1, 0, 1].some((dy) => [-1, 0, 1].some((dx) => FIXTURES.has(at(x + dx, y + dy))));
@@ -122,6 +138,35 @@ export function decorate({ style, rng, grid, w, rooms, channels, occupied }) {
     };
     set(ctx);
   }
+
+  // The passages, for a style that dresses them.
+  const tunnels = SETS[style].tunnels;
+  if (tunnels) {
+    const passage = corridorMask(grid, w, rooms), open = (x, y) => passage[idx(x, y)] === 1;
+    const spans = [];
+    tunnels({
+      rng: tunnelRng,
+      /**
+       * Stands `type` across the passage every so often (by `chance`, none nearer another than `gap` tiles), on straight
+       * stretches only, where there's wall either side and passage on ahead and behind: its x across the passage, from
+       * wall to wall, its 12 px of depth along it. It takes the walls either side, so nothing hangs there.
+       */
+      across(type, { chance = 0.5, gap = 4 } = {}) {
+        const tiles = [];
+        for (let i = 0; i < grid.length; i++) if (passage[i]) tiles.push([i % w, (i / w) | 0]);
+        for (const [x, y] of tunnelRng.shuffle(tiles)) {
+          const ns = at(x, y - 1) === T.WALL && at(x, y + 1) === T.WALL && open(x - 1, y) && open(x + 1, y);
+          const ew = at(x - 1, y) === T.WALL && at(x + 1, y) === T.WALL && open(x, y - 1) && open(x, y + 1);
+          if ((!ns && !ew) || spans.some(([sx, sy]) => Math.max(Math.abs(sx - x), Math.abs(sy - y)) < gap) || !tunnelRng.chance(chance)) continue;
+          spans.push([x, y]);
+          // Turned a quarter from facing along the passage, either way round, and set back by half its depth.
+          const yaw = (ns ? Math.PI / 2 : 0) + (tunnelRng.chance(0.5) ? Math.PI : 0), back = 6 / 128;
+          props.push({ type, x: x + 0.5 - Math.sin(yaw) * back, y: y + 0.5 - Math.cos(yaw) * back, yaw, solid: false, span: true });
+          for (const side of ns ? ['N', 'S'] : ['E', 'W']) wallUsed.add(faceKey(x, y, side));
+        }
+      },
+    });
+  }
   return { props, wallUsed };
 }
 
@@ -178,6 +223,10 @@ const SETS = {
       // And the cave's own: stalagmites rising from the floor, stalactites dripping from the vault.
       if (rng.chance(0.45)) d.inOpen('stalagmite', { round: true });
       for (let i = rng.int(0, 2); i > 0; i--) d.onFloor('stalactites', { ceiling: true });
+    },
+    // The miners' tunnels, shored with timber sets every few paces: posts against either wall under a cap beam.
+    tunnels(d) {
+      d.across('mine_timbers', { chance: 0.55, gap: 4 });
     },
   },
   dwarven: {

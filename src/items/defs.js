@@ -19,6 +19,54 @@ export const WEAPONS = {
                 value: 220, desc: 'A crushing maul that only the strong can swing well.' },
 };
 
+// Shields (kind 'shield'), carried in your off hand in place of the lantern: how one works is in shield.js, and a new
+// one is an entry here.
+//   block      what a raised shield (hold right-click) takes off a blow from in front of you, as armour takes its
+//              defense (a roll up to it), each point of it costing you `stamina`
+//   back       what it takes off a blow from behind, for nothing, slung on your back while you grip your weapon in
+//              both hands
+//   arc        how far either side of where you face (or where you face away from) counts as in front (or behind),
+//              in radians
+//   slow       your speed while it's raised (and you can't sprint)
+//   bash       a shove with it, a click while it's raised: its `dmg` (bash), the `stamina` it costs, its `reach`, how
+//              far it `push`es a monster back, and its `recharge` (seconds)
+//   stow, unstow  what gripping your weapon in both hands does with it, and taking it back in one
+//   model      its Blockbench model in assets/models/ (it lies flat on the floor, face up)
+// Its + adds to `block` and `back`, and to its bash's damage. It's learnt by use, a few blows taken (SHIELD_HITS_TO_ID).
+export const SHIELDS = {
+  wooden: { name: 'wooden shield', tier: 1, value: 70, block: 3, back: 2, arc: 1.05, stamina: 5, slow: 0.65, model: 'wooden_shield',
+            bash: { dmg: [1, 3], stamina: 12, reach: 1.6, push: 1.5, recharge: 0.8 },
+            stow: 'sling your shield onto your back', unstow: 'take your shield on your arm again',
+            desc: 'A round shield of oak boards bound in iron, with an iron boss.' },
+};
+export const SHIELD_HITS_TO_ID = 10;
+
+// Bows (kind 'bow'), carried in your off hand: with one there, your weapon goes down and your main hand takes an arrow
+// from your quiver (Player.equip.arrows). How one shoots is in bow.js, and a new one is an entry here.
+//   dmg        what an arrow shot from it does at full draw (the arrow's damage type), with the arrow's own `dmg`
+//   draw       seconds to draw it all the way (the attack meter fills as you do)
+//   nock       seconds to set an arrow to the string
+//   speed      how fast an arrow leaves it at full draw, in m/s: drawn less, it flies slower and drops sooner
+//   slow       your speed while it's drawn
+//   stow, unstow  what gripping your weapon in both hands does with it, and taking it back in one
+//   model      its Blockbench model in assets/models/ (see tools/modelgen/bows.mjs)
+// Its + adds to its damage, and to your aim. It's learnt by use, a few arrows on target (BOW_HITS_TO_ID).
+export const BOWS = {
+  wooden: { name: 'wooden bow', tier: 1, value: 90, dmg: [3, 8], draw: 0.9, nock: 0.35, speed: 28, slow: 0.6, model: 'wooden_bow',
+            stow: 'sling your bow over your shoulder', unstow: 'take up your bow again',
+            desc: 'A self bow of yew, its grip bound in leather, with horn nocks at its tips.' },
+};
+export const BOW_HITS_TO_ID = 12;
+
+// Arrows (kind 'arrow'), a stack to a type, which a bow shoots from your quiver (see bow.js). `dmg`: what one adds to
+// the bow's; `dmgType`: the damage it deals (see damage.js); `breaks`: the chance one breaks when it strikes a monster
+// (else it falls there, to be picked up again); `onHit`: what it brings, as an enchanted weapon's blows do (none yet:
+// see items/enchant.js); `model`: its Blockbench model in assets/models/. `value` is for one.
+export const ARROWS = {
+  standard: { name: 'arrow', value: 4, dmg: 0, dmgType: 'stab', breaks: 0.35, model: 'arrow',
+              desc: 'A shaft of ash with an iron bodkin point, fletched with goose feathers.' },
+};
+
 // resist: how much of each kind of blow gets through the armour (see damage.js). Each turns some kinds of blow
 // better than others.
 export const ARMORS = {
@@ -60,7 +108,7 @@ export const SCROLLS = {
   summon:      { name: 'summon monster',  freq: 7,  value: 15, desc: 'Calls monsters to your side. Not in a good way.' },
   recharge:    { name: 'recharging',      freq: 8,  value: 70, desc: 'Restores all charges to your wands.' },
   enchant:     { name: 'enchantment',     freq: 8,  value: 90,
-                 desc: 'Lays a random enchantment on a weapon or armour, in place of any it had. It takes only on something free of every curse.' },
+                 desc: 'Lays a random enchantment on a weapon, armour, shield or bow, in place of any it had. It takes only on something free of every curse.' },
 };
 
 // dmg and dmgType: what a wand's zap does, for those that hurt (see damage.js); each + adds WAND_PLUS_DMG to both
@@ -115,14 +163,33 @@ export const FOOD = {
   apple:  { name: 'withered apple', nutrition: 250, value: 5, desc: 'Better than nothing.' },
 };
 
-// What you can hold in your off hand (Player.equip.offhand), in place of the torch you start with. While you grip
+// What you can hold in your off hand (Player.equip.offhand), in place of the lantern you start with. While you grip
 // your weapon in both hands (F), it's stowed: `stow` and `unstow` say how. `light`: how brightly it lights your way
-// held up, and `stowedLight` stowed (a share of the torch's light: see Player.torchLight). `use`: what right-clicking
-// does with it, a key of OFFHAND_USES in use.js (none yet). `model`: its Blockbench model in assets/models/.
+// held up, and `stowedLight` stowed (a share of the lantern's light: see Player.carriedLight). `use`: what
+// right-clicking does with it, a key of OFFHAND_USES in use.js (none yet). `model`: its Blockbench model in
+// assets/models/. `stands`: on the floor it stands up, where most things lie on their side.
 export const OFFHANDS = {
-  torch: { name: 'torch', value: 10, light: 1, stowedLight: 0.45, model: 'torch',
-           stow: 'tuck your torch into your belt', unstow: 'hold your torch up again',
-           desc: 'A pitch-soaked brand, burning steadily. Held up in your off hand, it lights your way. While you grip your weapon in both hands, it hangs at your belt, and lights far less.' },
+  lantern: { name: 'lantern', value: 10, light: 1, stowedLight: 0.45, model: 'hand_lantern', stands: true,
+             stow: 'hang your lantern from your belt', unstow: 'hold your lantern up again',
+             desc: 'An iron lantern with a brass cap, its oil burning steadily behind glass. Held up in your off hand, it lights your way. While you grip your weapon in both hands, it hangs at your belt, and lights far less.' },
+};
+
+// Pack expansions (kind 'container'). Each has CONTAINER_SIZE slots of its own, on a tab of the pack, for the kinds of
+// thing it `holds` (see Player.bags): once you have one it's part of your pack for good, and things of its kinds go in
+// it while it has room, the rest in the pack itself. Every one with `shop` is sold in one of the shops, one to a shop
+// and in an order each run draws (see Game.shopWares); one without comes some other way. `tab`: its tab's name; `what`: what
+// it holds, in words. Its model is assets/models/items/<its type>.bbmodel.
+export const CONTAINER_SIZE = 10;
+export const CONTAINERS = {
+  scroll_holder:    { name: 'scroll holder', tab: 'Scrolls', what: 'scrolls', holds: ['scroll'], shop: true, value: 300,
+                      desc: 'A leather case of stiff tubes, each keeping a scroll dry and uncreased. It holds ten kinds of scroll, in their own slots, apart from your pack.' },
+  potion_bandolier: { name: 'potion bandolier', tab: 'Potions', what: 'potions', holds: ['potion'], shop: true, value: 300,
+                      desc: 'A leather belt worn across the chest, with padded loops for flasks. It holds ten kinds of potion, in their own slots, apart from your pack.' },
+  wand_holster:     { name: 'wand holster', tab: 'Wands', what: 'wands', holds: ['wand'], shop: true, value: 300,
+                      desc: 'A sheath of oiled leather worn at the hip, with a sleeve for each wand. It holds ten wands, in their own slots, apart from your pack.' },
+  // (Thrown weapons, kind 'thrown', are still to come: until then it has nothing to hold.)
+  bullet_pouch:     { name: 'bullet pouch', tab: 'Pouch', what: 'things to throw', holds: ['thrown'], shop: true, value: 300,
+                      desc: 'A drawstring pouch of thick hide for things to throw. It holds ten piles of them, in their own slots, apart from your pack.' },
 };
 
 // --- Unidentified appearances, shuffled per run ---
@@ -139,6 +206,10 @@ export const SCROLL_SYLLABLES = [
   'THA', 'RAX', 'OLM', 'PRA', 'TUR', 'XOK', 'VAS', 'HAR', 'LEP', 'DUA', 'MOR', 'KAH', 'SIN', 'EO', 'QUA',
 ];
 
+// How many runes there are for scrolls (RUNES in ui/iconArt.js): each kind of scroll has one of its own each run, as it
+// has a label (see Knowledge.rune), so there must be at least as many as kinds of scroll.
+export const SCROLL_RUNES = 16;
+
 export const WAND_MATERIALS = [
   { name: 'oak', color: 0x8a6030 }, { name: 'ebony', color: 0x1a1414 }, { name: 'iron', color: 0x6a6e74 },
   { name: 'bone', color: 0xe0d8c0 }, { name: 'copper', color: 0xc07040 }, { name: 'crystal', color: 0xa0e0ff },
@@ -152,6 +223,6 @@ export const RING_GEMS = [
 ];
 
 export const KIND_GLYPH = {
-  weapon: ')', offhand: '(', armor: '[', potion: '!', scroll: '?', wand: '/', ring: '=', food: '%',
-  artefact: '*', amulet: '"', gold: '$', key: '-',
+  weapon: ')', offhand: '(', shield: ']', bow: '}', arrow: '|', armor: '[', potion: '!', scroll: '?', wand: '/', ring: '=', food: '%',
+  artefact: '*', amulet: '"', gold: '$', key: '-', container: '&',
 };

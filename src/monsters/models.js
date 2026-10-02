@@ -4,12 +4,13 @@ import { MODEL_PX } from '../config.js';
 
 // Monster models are Blockbench projects in assets/models/monsters, rigged with groups ("bones") that the
 // animations below turn and move about their pivots, found by name: body, head, arm_left/right and
-// leg_left/right on bipeds, plus wing_*, tail, leg_front_*/leg_back_* and blob on the others.
-// A model's origin is at its feet and it faces +z.
+// leg_left/right on bipeds, plus wing_*, tail, leg_front_*/leg_back_*, blob, and the mimic's lid, tongue and eye
+// on the others. A model's origin is at its feet and it faces +z.
 //
 // buildMonsterModel returns { root, animate(s), materials, height }. animate(s) receives { t, walk, windup,
-// strike } where windup/strike are 0..1 progress or -1. materials are the monster's own lit materials, so
-// it can be tinted (hurt, burning...) on its own.
+// strike, reveal } where windup/strike are 0..1 progress or -1, and reveal the seconds since it gave itself away
+// (a mimic waking) or -1; a mimic passing for a chest gets { dormant: true, lick } instead (see Level.addChest).
+// materials are the monster's own lit materials, so it can be tinted (hurt, burning...) on its own.
 
 const FILES = import.meta.glob('../../assets/models/monsters/*.bbmodel', { import: 'default', eager: true });
 const templates = new Map();
@@ -84,6 +85,45 @@ const ANIMATE = {
         turn(b.arm_right, -Math.PI / 2 + (s.windup >= 0 ? 0 : 0.3));
       }
     };
+  },
+  // A chest that bites. Dormant, passing for a chest, it's shut, but for the odd lick of its lips (`lick`, 0..1): its
+  // lid lifts a crack, its tongue slips out along the front and back in. Awake, its lid hangs open on its teeth with
+  // its tongue lolling out, and it hops after you; it gapes wide to wind up and snaps shut as it lunges. Just woken
+  // (`reveal`), it bursts open and jolts up off the floor.
+  mimic: (b) => (s) => {
+    if (s.dormant) {
+      const k = s.lick >= 0 ? Math.sin(Math.PI * s.lick) : 0;
+      turn(b.body);
+      move(b.body);
+      turn(b.lid, -0.2 * Math.min(1, k * 1.8));
+      move(b.tongue, 0, 0.09 * k, 0.14 * k);
+      turn(b.tongue, 0, 0.3 * Math.sin(s.lick * Math.PI * 5) * k);
+      b.eye.visible = false;
+      return;
+    }
+    b.eye.visible = true;
+    const hop = Math.abs(Math.sin(s.walk * 0.9));
+    let lid = -0.45 - 0.07 * Math.sin(s.t * 2.6) - 0.3 * hop, lift = 0.13 * hop, lean = -0.14 * hop, lunge = 0;
+    if (s.windup >= 0) {
+      lid = -1.35 * easeOut(s.windup);
+      lean = -0.25 * s.windup;
+      lift = 0;
+    } else if (s.strike >= 0) {
+      lid = s.strike < 0.3 ? -1.35 * (1 - easeOut(s.strike / 0.3)) : -0.45 * ((s.strike - 0.3) / 0.7);
+      lunge = 0.32 * Math.sin(Math.PI * s.strike);
+      lean = 0.1 * Math.sin(Math.PI * s.strike);
+      lift = 0;
+    } else if (s.reveal >= 0 && s.reveal < 0.7) {
+      const r = s.reveal / 0.7;
+      lid = -1.25 * Math.sin(Math.PI * Math.min(1, r * 1.5)) * (1 - r) + lid * r;
+      lift = 0.2 * Math.sin(Math.PI * r);
+      lean = -0.3 * Math.sin(Math.PI * r);
+    }
+    turn(b.body, lean);
+    move(b.body, 0, lift, lunge);
+    turn(b.lid, lid);
+    move(b.tongue, 0, 0.02, 0.03 + 0.015 * Math.sin(s.t * 3));
+    turn(b.tongue, -0.06 + 0.06 * Math.sin(s.t * 4.1), 0.2 * Math.sin(s.t * 2.3));
   },
   wraith: (b) => (s) => {
     move(b.body, 0, Math.sin(s.t * 2) * 0.1, s.strike >= 0 ? 0.3 * Math.sin(Math.PI * s.strike) : 0);

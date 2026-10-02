@@ -9,14 +9,18 @@ const ORB_GEO = new THREE.IcosahedronGeometry(1, 0);
 /**
  * o: { x, y, z, vx, vy, vz, owner: 'monster'|'player'|'ally', attacker (the monster that shot it), dmg, kind, color,
  *      size, source,
- *      type? (its damage type, see damage.js: fire sets what it hits burning), gravity?, life?, onImpact?(game, pr, target) }
+ *      type? (its damage type, see damage.js: fire sets what it hits burning), harmless? (a spell that does no harm:
+ *      teleport other), gravity?, life?, mesh? (a model of its own: an arrow's points +z, the way it flies),
+ *      onImpact?(game, pr, target) }
+ * A shot stops at a shut chest. One of yours strikes it (see Game.hitChest), and if that wakes a mimic, the shot hits
+ * the mimic; `pr.chest` is the chest it hit.
  */
 export function spawnProjectile(level, o) {
   let mesh;
-  if (o.kind === 'arrow') {
-    mesh = new THREE.Mesh(ARROW_GEO, new THREE.MeshLambertMaterial({ color: o.color }));
-  } else if (o.mesh) {
+  if (o.mesh) {
     mesh = o.mesh;
+  } else if (o.kind === 'arrow') {
+    mesh = new THREE.Mesh(ARROW_GEO, new THREE.MeshLambertMaterial({ color: o.color }));
   } else {
     mesh = new THREE.Mesh(ORB_GEO, new THREE.MeshBasicMaterial({ color: o.color, fog: false }));
     mesh.scale.setScalar(o.size ?? 0.15);
@@ -43,7 +47,8 @@ export function updateProjectiles(dt, game, level) {
       pr.x += pr.vx * h;
       pr.y += pr.vy * h;
       pr.z += pr.vz * h;
-      if (level.blocksSight(level.toTile(pr.x), level.toTile(pr.z)) || pr.y < 0.03 || pr.y > WALL_H) {
+      // (Over a pool, it goes down to the water, where what's wading in it can still be hit.)
+      if (level.blocksSight(level.toTile(pr.x), level.toTile(pr.z)) || pr.y < level.surfaceY(pr.x, pr.z) + 0.03 || pr.y > WALL_H) {
         done = true;
         break;
       }
@@ -65,12 +70,15 @@ export function updateProjectiles(dt, game, level) {
           break;
         }
       }
+      if (!done && (pr.chest = level.chestAt(pr.x, pr.y, pr.z))) done = true;
     }
     pr.mesh.position.set(pr.x, pr.y, pr.z);
     if (pr.kind === 'arrow') pr.mesh.lookAt(pr.x + pr.vx, pr.y + pr.vy, pr.z + pr.vz);
     else pr.mesh.rotation.y += dt * 8;
 
     if (done) {
+      // (A potion is the splash's business: see potionSplash.)
+      if (pr.chest && pr.owner === 'player' && pr.kind !== 'potion') target = game.hitChest(pr.chest, pr) ?? undefined;
       impact(game, level, pr, target);
       level.group.remove(pr.mesh);
       list.splice(i, 1);
@@ -85,7 +93,8 @@ function impact(game, level, pr, target) {
   }
   burst(level, pr.x, pr.y, pr.z, pr.color, pr.kind === 'arrow' ? 3 : 10, 2.5, 0.4);
   if (target === 'player') {
-    game.hurtPlayer(pr.dmg, { source: pr.source, type: pr.type, ranged: true });
+    // (From the way it came, for a shield: see shield.js.)
+    game.hurtPlayer(pr.dmg, { source: pr.source, type: pr.type, ranged: true, from: { x: pr.x - pr.vx, z: pr.z - pr.vz } });
   } else if (target) {
     target.takeDamage(game, pr.dmg, {
       type: pr.type, ignite: pr.type === 'fire' ? 4 : 0, knockback: { x: pr.vx / 20, z: pr.vz / 20 },

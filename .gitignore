@@ -1,2 +1,4 @@
 node_modules/
 dist/
+# The dev server config Claude Code makes for testing in its browser pane
+.claude/launch.json

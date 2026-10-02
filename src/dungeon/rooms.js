@@ -12,15 +12,18 @@ import { makeItem, shopStock } from '../items/generate.js';
  *   branchable         whether other rooms may hang off this one
  *   monsters, items    whether the general population pass may put things in it
  *   traps              whether hidden traps may be placed in it
+ *   pools              whether the theme's pools may be sunk into it (see pools.js). Any room's furnish() can lay
+ *                      pools of its own with ctx.growPool
  *   furnish(ctx, room) place stairs, pedestals, pillars, guardians, loot... (see ctx in generator.js)
  *
- * Locked rooms are never used as branch parents and are skipped by the general population pass,
- * so a locked specialist room decides its own contents in furnish().
+ * Locked rooms are dead ends: never branch parents. The general population pass leaves them out (no monsters,
+ * traps or loose things); a locked standard room gets a stash of chests and gold instead (see generator.js), and a
+ * locked specialist room decides its own contents in furnish().
  */
 export const ROOM_TYPES = {
   entrance: {
     size: (rng) => ({ w: rng.int(5, 8), h: rng.int(5, 7) }),
-    doors: 'arch', branchable: true, monsters: false, items: true, traps: false,
+    doors: 'arch', branchable: true, monsters: false, items: true, traps: false, pools: true,
     furnish(ctx, room) {
       ctx.up = ctx.placeStairs(room, T.STAIRS_UP);
     },
@@ -28,7 +31,7 @@ export const ROOM_TYPES = {
 
   exit: {
     size: (rng) => ({ w: rng.int(5, 8), h: rng.int(5, 7) }),
-    doors: 'mixed', branchable: true, monsters: true, items: true, traps: true,
+    doors: 'mixed', branchable: true, monsters: true, items: true, traps: true, pools: true,
     furnish(ctx, room) {
       ctx.down = ctx.placeStairs(room, T.STAIRS_DOWN);
     },
@@ -36,7 +39,7 @@ export const ROOM_TYPES = {
 
   standard: {
     size: (rng) => ({ w: rng.int(4, 9), h: rng.int(4, 8) }),
-    doors: 'mixed', branchable: true, monsters: true, items: true, traps: true,
+    doors: 'mixed', branchable: true, monsters: true, items: true, traps: true, pools: true,
     furnish(ctx, room) {
       // Single-tile pillars inset two tiles from the walls: they can never block a doorway or split the room.
       if (room.w < 7 || room.h < 7 || !ctx.rng.chance(0.6)) return;
@@ -76,29 +79,31 @@ export const ROOM_TYPES = {
   },
 
   // A merchant's shop, off the entrance room on the first floor of each theme after the first. A hooded
-  // shopkeeper stands behind a counter of wares, with more on two display tables. Monsters never spawn or
-  // wander in; only one already chasing you will follow you through the door.
+  // shopkeeper stands behind a counter of wares, between two plinths for its finest, with more on display tables
+  // down each side. Monsters never spawn or wander in; only one already chasing you will follow you through the door.
   shop: {
-    size: (rng) => ({ w: rng.int(5, 6), h: rng.int(5, 6) }),
+    size: (rng) => ({ w: rng.int(7, 8), h: rng.int(7, 8) }),
     doors: 'door', branchable: false, monsters: false, items: false, traps: false,
     furnish(ctx, room) {
-      ctx.shop = layoutShop(ctx.rng, ctx.depth, room);
+      ctx.shop = layoutShop(ctx.rng, ctx.depth, room, ctx.wares);
     },
   },
 };
 
 /** The props a shop is furnished with. */
-export const SHOP_PROPS = ['shop_counter', 'display_table', 'shelf', 'barrel', 'crates', 'rug'];
+export const SHOP_PROPS = ['shop_counter', 'display_plinth', 'display_table', 'shelf', 'barrel', 'crates', 'rug'];
 
 /**
  * Lays the shop out relative to its door, in local coordinates: u runs along the back wall and v from the
  * back wall toward the door, both in tiles. Returns positions in (fractional) grid tiles; yaw 0 faces +z.
  *   keeper    where the shopkeeper stands, and which way it faces
- *   props     furniture: { type, x, y, yaw, solid, round }; props with display slots hold the wares
- *   stock     [{ item, price }], set out in the props' slots in order
+ *   props     furniture: { type, x, y, yaw, solid, round, resale }; props with display slots hold the wares: the
+ *             counter, the two plinths either side of it and the tables down the sides, then the rug, where things
+ *             the player sells go once those are full (never on the plinths: `resale: false`)
+ *   stock     [{ item, price } or null], set out in the props' slots in order (see shopStock)
  *   sconces   spots on the side walls for blue-flamed sconces: { x, z (world), ry }
  */
-function layoutShop(rng, depth, room) {
+function layoutShop(rng, depth, room, wares) {
   const side = room.doorways[0].side;
   const across = side === 'N' || side === 'S';
   const U = across ? room.w : room.h, V = across ? room.h : room.w;
@@ -114,16 +119,20 @@ function layoutShop(rng, depth, room) {
     return { type, x, y, yaw: facing + turn, solid: true, ...opts };
   };
   const mid = U / 2;
+  // Three tables down each side, from beside the counter to a clear strip inside the door's wall.
+  const rows = [0, 1, 2].map((i) => 2.3 + (i * (V - 4)) / 2);
   const props = [
     prop('shop_counter', mid, 1.0),
-    prop('display_table', 1.5, V - 1.9),
-    prop('display_table', U - 1.5, V - 1.9),
+    prop('display_plinth', mid - 1.5, 1.0, 0, { round: true, resale: false }),
+    prop('display_plinth', mid + 1.5, 1.0, 0, { round: true, resale: false }),
+    ...rows.map((v) => prop('display_table', 1.15, v, 0, { round: true })),
+    ...rows.map((v) => prop('display_table', U - 1.15, v, 0, { round: true })),
     prop('shelf', 0.55, 0.22),
     prop('shelf', U - 0.55, 0.22),
-    prop('barrel', 0.38, 2.2, rng.range(0, 6), { round: true }),
-    prop('barrel', 0.42, 2.85, rng.range(0, 6), { round: true }),
-    prop('crates', U - 0.45, 2.5, Math.PI / 2),
-    prop('rug', mid, 2.4, 0, { solid: false }),
+    prop('barrel', 0.38, 1.25, rng.range(0, 6), { round: true }),
+    prop('barrel', 0.42, 1.85, rng.range(0, 6), { round: true }),
+    prop('crates', U - 0.45, 1.6, Math.PI / 2),
+    prop('rug', mid, (rows[0] + rows[2]) / 2, 0, { solid: false }),
   ];
   const [kx, ky] = at(mid, 0.6);
   const sconce = (u, turn) => {
@@ -134,7 +143,7 @@ function layoutShop(rng, depth, room) {
     room: room.id,
     keeper: { x: kx, y: ky, yaw: facing },
     props,
-    stock: shopStock(rng, depth),
+    stock: shopStock(rng, depth, wares),
     // 0.1 m out from each side wall, level with the counter, facing into the room.
     sconces: [sconce(0.05, Math.PI / 2), sconce(U - 0.05, -Math.PI / 2)],
   };

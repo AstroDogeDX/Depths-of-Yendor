@@ -4,7 +4,7 @@
 // still ends when it ends.
 //
 // Floors are made from the seed, so a save keeps only what's changed on each one you've seen (Level.snapshot):
-// its monsters and things, doors, traps and how much of it you've mapped. With the player, what you've learned
+// its monsters and things, chests, doors, traps and how much of it you've mapped. With the player, what you've learned
 // and a few odds and ends, a whole run is a few hundred KB at most.
 //
 // A save from an older version of its format (SAVE_VERSION) can't be continued. One from before a change to how
@@ -14,6 +14,7 @@
 import { randomBane } from './items/enchant.js';
 import { WAND_ZAPS_TO_ID } from './items/defs.js';
 import { rand } from './rng.js';
+import { HOTBAR_SIZE } from './config.js';
 
 const KEY = 'doy.save';
 export const SAVE_VERSION = 1;
@@ -49,15 +50,19 @@ export function readSave() {
  * - A wand takes a few zaps to know now (item.zapsToId, see zapWand).
  * - The torch was always in your off hand: now it's a thing you carry, in the off-hand slot (Player.equip.offhand),
  *   so a save from before gets one there.
+ * - The torch you carried is a lantern now.
  * - Before format 2, the scroll of enchanting was what's now the scroll of upgrade, and an item's enchantment could be
  *   negative: now it's a + of 0 or more, a curse is a strength (item.curse), and a cursed weapon or armour has a Curse
  *   of ___ (see items/enchant.js). A cursed ring's old minus becomes a + that works against you, as before.
+ * - The hotbar had six slots, and has HOTBAR_SIZE now: what was in the slots it's lost moves to its empty ones, or if
+ *   there are none, back into the pack (which shows more than it holds, if it must, until you make room).
  */
 function upgrade(save) {
   const old = !(save.format >= 2);
   const fix = (it) => {
     if (!it) return;
     if (it.kind === 'wand' && it.type === 'slow') it.type = 'frost';
+    if (it.kind === 'offhand' && it.type === 'torch') it.type = 'lantern';
     if (it.kind === 'wand' && 'charges' in it && it.zapsToId === undefined) it.zapsToId = WAND_ZAPS_TO_ID; // not a hotbar binding
     if (!old) return;
     if (it.kind === 'scroll' && it.type === 'enchant') it.type = 'upgrade';
@@ -72,7 +77,11 @@ function upgrade(save) {
   };
   save.player.inventory.forEach(fix);
   save.player.hotbar.forEach(fix);
-  for (const level of save.levels) for (const e of level.items) fix(e.item);
+  for (const level of save.levels) {
+    for (const e of level.items) fix(e.item);
+    for (const c of level.chests ?? []) c.items?.forEach(fix);
+    for (const m of level.monsters) m.loot?.forEach(fix);
+  }
   const rename = (list, from, to) => {
     const i = list.indexOf(from);
     if (i >= 0) list[i] = to;
@@ -82,10 +91,16 @@ function upgrade(save) {
   const pl = save.player;
   if (!('offhand' in pl.equip)) {
     // (As makeItem makes it, with the next uid the save has: it always fits, like the Amulet.)
-    const torch = { uid: save.nextUid++, kind: 'offhand', type: 'torch', qty: 1, plus: 0, curse: 0, identified: true, curseKnown: false };
-    pl.inventory.push(torch);
-    pl.equip.offhand = torch.uid;
+    const lantern = { uid: save.nextUid++, kind: 'offhand', type: 'lantern', qty: 1, plus: 0, curse: 0, identified: true, curseKnown: false };
+    pl.inventory.push(lantern);
+    pl.equip.offhand = lantern.uid;
   }
+  const bar = pl.hotbar;
+  for (const b of bar.splice(HOTBAR_SIZE).filter(Boolean)) {
+    const i = bar.indexOf(null);
+    if (i >= 0) bar[i] = b;
+  }
+  while (bar.length < HOTBAR_SIZE) bar.push(null);
   save.format = SAVE_FORMAT;
   return save;
 }
