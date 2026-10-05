@@ -183,8 +183,16 @@ export class UI {
       });
     }
     $('pause-fs').addEventListener('click', (e) => e.stopPropagation());
-    $('music-in').checked = game.music.on;
-    $('music-in').addEventListener('change', () => game.music.setOn($('music-in').checked));
+    // One music preference too, on the title screen and the pause panel.
+    for (const id of ['music-in', 'music-pause']) {
+      const box = $(id);
+      box.checked = game.music.on;
+      box.addEventListener('change', () => {
+        game.music.setOn(box.checked);
+        $('music-in').checked = $('music-pause').checked = box.checked;
+      });
+    }
+    $('pause-music').addEventListener('click', (e) => e.stopPropagation()); // (not a click to resume)
     $('quit-btn').addEventListener('click', (e) => {
       e.stopPropagation(); // (not a click to resume)
       game.saveAndQuit();

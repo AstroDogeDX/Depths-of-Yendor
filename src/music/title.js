@@ -1,4 +1,5 @@
 import { render, seeded } from './synth.js';
+import { N, chord, above, below, scale } from './notes.js';
 
 // The title theme: a minute and forty seconds, in 3/4, looping: mysterious, a little spooky, but beckoning. Its
 // leitmotif, a fifth leaping up, a fall and a climb to the bright sixth of D Dorian, then home, tells of the descent:
@@ -39,26 +40,7 @@ const CHANNELS = {
   heart: { gain: 0.45, pan: 0, send: 0.1 },
 };
 
-const PC = { C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, F: 5, 'F#': 6, Gb: 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11 };
-/** A note's MIDI number, by its name ('D4', 'F#3', 'Bb2'). */
-const N = (name) => {
-  const [, pc, oct] = /^([A-G][#b]?)(-?\d)$/.exec(name);
-  return 12 * (+oct + 1) + PC[pc];
-};
-/** A chord, by its name ('Dm', 'Eb', 'A'): its root (a pitch class) and its third and fifth, in semitones above it. */
-const chord = (name) => {
-  const [, root, kind] = /^([A-G][#b]?)(m?)$/.exec(name);
-  return { root: PC[root], third: kind ? 3 : 4, fifth: 7 };
-};
-/** The lowest note of pitch class `pc` at or above `floor`. */
-const above = (pc, floor) => floor + ((((pc - floor) % 12) + 12) % 12);
-/** The note `steps` steps of `scale` (pitch classes) below `m`: a third below, by default, for a harmony. */
-const below = (m, scale, steps = 2) => {
-  let k = m;
-  for (let s = 0; s < steps;) if (scale.includes(((--k % 12) + 12) % 12)) s++;
-  return k;
-};
-const DORIAN = [2, 4, 5, 7, 9, 11, 0];
+const DORIAN = scale('D', 'E', 'F', 'G', 'A', 'B', 'C');
 
 // The leitmotif, a bar to a line: [note, beats].
 const THEME = [
@@ -227,4 +209,4 @@ export function score() {
 }
 
 /** Renders the title theme: { L, R (its two sides, a loop's worth), sampleRate, loop (seconds), levels }. */
-export const renderTheme = () => render(score(), CHANNELS, { loop: LOOP, tail: 6, seed: 1 });
+export const renderTitle = () => render(score(), CHANNELS, { loop: LOOP, tail: 6, seed: 1 });

@@ -1,14 +1,13 @@
-// Renders the title theme (src/music/theme.js) to a .wav file, to listen to as it's worked on, and says how loud each
-// instrument came out: `npm run music` writes dist/title-theme.wav, or `npm run music -- <file>` writes that. It's the
-// same rendering the game does in a worker as it starts (see src/music/music.js).
+// Renders the game's music (src/music/) to .wav files, to listen to as it's worked on, and says how loud each
+// instrument came out: `npm run music` renders every piece into dist/ (title-theme.wav, shop-theme.wav), and
+// `npm run music -- shop` just that one. It's the same rendering the game does in a worker as it starts (see
+// src/music/music.js).
 import { writeFileSync, mkdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { renderTheme } from '../src/music/theme.js';
+import { resolve } from 'node:path';
+import { renderTitle } from '../src/music/title.js';
+import { renderShop } from '../src/music/shop.js';
 
-const out = resolve(process.argv[2] ?? 'dist/title-theme.wav');
-const t0 = performance.now();
-const { L, R, sampleRate, loop, levels } = renderTheme();
-const secs = ((performance.now() - t0) / 1000).toFixed(1);
+const PIECES = { title: renderTitle, shop: renderShop };
 
 /** 16-bit stereo PCM in a RIFF/WAVE file. */
 function wav(left, right, rate) {
@@ -32,7 +31,18 @@ function wav(left, right, rate) {
   return data;
 }
 
-mkdirSync(dirname(out), { recursive: true });
-writeFileSync(out, wav(L, R, sampleRate));
-console.log(`Rendered ${loop.toFixed(1)} s in ${secs} s: ${out}`);
-console.log('Each instrument, while it plays (dB):', Object.entries(levels).map(([k, v]) => `${k} ${v}`).join(', '));
+const names = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(PIECES);
+mkdirSync(resolve('dist'), { recursive: true });
+for (const name of names) {
+  if (!PIECES[name]) {
+    console.error(`No piece called ${name}: ${Object.keys(PIECES).join(', ')}`);
+    process.exitCode = 1;
+    continue;
+  }
+  const t0 = performance.now();
+  const { L, R, sampleRate, loop, levels } = PIECES[name]();
+  const out = resolve(`dist/${name}-theme.wav`);
+  writeFileSync(out, wav(L, R, sampleRate));
+  console.log(`${name}: ${loop.toFixed(1)} s, rendered in ${((performance.now() - t0) / 1000).toFixed(1)} s: ${out}`);
+  console.log('  each instrument, while it plays (dB):', Object.entries(levels).map(([k, v]) => `${k} ${v}`).join(', '));
+}

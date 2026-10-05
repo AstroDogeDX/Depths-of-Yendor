@@ -1,5 +1,9 @@
-// Renders the title theme off the main thread (it takes a few seconds), and hands its samples back (see music.js).
-import { renderTheme } from './theme.js';
+// Renders the game's music off the main thread (it takes a few seconds), the title theme first, and hands each
+// piece's samples back as it's done (see music.js).
+import { renderTitle } from './title.js';
+import { renderShop } from './shop.js';
 
-const theme = renderTheme();
-postMessage(theme, [theme.L.buffer, theme.R.buffer]);
+for (const [name, renderPiece] of [['title', renderTitle], ['shop', renderShop]]) {
+  const piece = renderPiece();
+  postMessage({ name, ...piece }, [piece.L.buffer, piece.R.buffer]);
+}

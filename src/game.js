@@ -65,8 +65,8 @@ export class Game {
     this.title = new TitleScene(this.renderer); // the walk through the dungeon behind the title screen
     this.input = new Input(canvas);
     this.audio = new Sfx();
-    this.music = new Music(this.audio); // the title theme
-    this.music.setTitle(true);
+    this.music = new Music(this.audio); // the title theme, and the shop's
+    this.music.play('title');
     this.ui = ui;
 
     this.resIdx = 0;
@@ -121,7 +121,7 @@ export class Game {
   /** What a new run and a continued one both start with: the seed's dungeon, cleared of any last run. */
   beginRun(seed, name) {
     this.title.stop();
-    this.music.setTitle(false);
+    this.music.play(null);
     this.screenFx.reset();
     this.seed = seed;
     this.playerName = name;
@@ -235,7 +235,7 @@ export class Game {
     this.paused = false;
     this.input.unlock();
     this.title.start();
-    this.music.setTitle(true);
+    this.music.play('title');
     this.ui.showTitle();
   }
 
@@ -545,6 +545,7 @@ export class Game {
     this.player.update(dt, this, this.input);
     if (this.over) return;
     this.level.update(dt, this);
+    this.music.play(this.level.playerInShop ? 'shop' : null); // (the floors have only their ambience)
     this.updateCamera(dt);
     const p = this.player;
     this.viewmodel.update(dt, {
@@ -1095,6 +1096,7 @@ export class Game {
 
   endRun(info) {
     this.state = 'over';
+    this.music.play(null);
     this.running = false;
     deleteSave(); // death is permanent, and a won run is done
     this.menu = null;

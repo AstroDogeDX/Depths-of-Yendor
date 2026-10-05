@@ -96,7 +96,7 @@ const vibrato = (t, rate, depth, delay) => 1 + depth * Math.sin(TAU * rate * t) 
  * losing `damp` of itself each time round, till it's rung out (`ring` seconds), or let go of (`mute` seconds after the
  * note's held, if it's damped). It's read back a hair faster or slower, to bring it exactly into tune.
  */
-function pluck(note, rand, { damp, bright, ring, mute = null, body = null }) {
+function pluck(note, rand, { damp, bright, ring, mute = null, body = null, buzz = 0 }) {
   // (Averaging each sample with the next, the loop rings a half sample short of its length: tuned for that.)
   const f = hz(note.midi), len = Math.max(2, Math.round(SR / f + 0.5)), rate = (f * (len - 0.5)) / SR;
   const secs = mute === null ? ring : Math.min(ring, note.dur + mute), n = Math.ceil(secs * SR);
@@ -118,6 +118,8 @@ function pluck(note, rand, { damp, bright, ring, mute = null, body = null }) {
   for (let i = 0; i < n; i++) {
     const x = i * rate, i0 = Math.floor(x), fr = x - i0, t = i / SR;
     let v = raw[i0] * (1 - fr) + raw[i0 + 1] * fr;
+    // (A buzz, clipping it where it's loud, as a tanpura's bridge buzzes the string against it.)
+    if (buzz) v = (1 - buzz) * v + buzz * Math.max(-0.15, Math.min(0.15, v * 3));
     for (const flt of filters) v = flt.run(v);
     if (mute !== null && t > note.dur) v *= clamp01(1 - (t - note.dur) / mute);
     out[i] = v * note.vel * clamp01((n - i) / (SR * 0.05)); // (faded out at its very end)
@@ -132,6 +134,23 @@ const harp = (note, rand) => pluck(note, rand, { damp: 0.997, bright: 0.5, ring:
 const lute = (note, rand) => pluck(note, rand, {
   damp: 0.993, bright: 0.8, ring: 1.4, mute: 0.12, body: [['peaking', 420, 1.2, 5], ['lowpass', 3600, 0.7]],
 });
+
+/** An oud: warm and woody, a little nasal, damped soon after the next note's plucked. */
+const oud = (note, rand) => pluck(note, rand, {
+  damp: 0.995, bright: 0.65, ring: 2.5, mute: 0.2, body: [['peaking', 220, 1, 5], ['peaking', 1300, 1.5, -3], ['lowpass', 3200, 0.7]],
+});
+
+/** A kanun: two strings to a note, a hair apart in tune, plucked bright, shimmering. */
+function kanun(note, rand) {
+  const opts = { damp: 0.997, bright: 0.9, ring: 2.2, body: [['lowpass', 6000, 0.7]] };
+  const a = pluck({ ...note, midi: note.midi - 0.025 }, rand, opts), b = pluck({ ...note, midi: note.midi + 0.025 }, rand, opts);
+  const out = new Float32Array(Math.max(a.length, b.length));
+  for (let i = 0; i < out.length; i++) out[i] = ((a[i] ?? 0) + (b[i] ?? 0)) * 0.5;
+  return out;
+}
+
+/** A tanpura's string: plucked, ringing long, buzzing against its bridge. */
+const tanpura = (note, rand) => pluck(note, rand, { damp: 0.9993, bright: 0.7, ring: 6, buzz: 0.35, body: [['lowpass', 5000, 0.7]] });
 
 /** A recorder: a pure, breathy tone, a hair flat as it speaks, with a gentle vibrato once it's sounding. */
 function recorder(note, rand) {
@@ -321,6 +340,36 @@ function heart(note) {
   });
 }
 
+/** A goblet drum's deep stroke (doum), struck in its middle. */
+function doum(note, rand) {
+  const lp = new Biquad('lowpass', 300, 0.7);
+  let ph = 0;
+  return hit(note, 0.8, (t) => {
+    ph += (68 + 40 * Math.exp(-t / 0.025)) / SR;
+    return Math.sin(TAU * ph) * Math.exp(-t / 0.28) + lp.run(rand() * 2 - 1) * 0.25 * Math.exp(-t / 0.03);
+  });
+}
+
+/** Its sharp stroke (tak), at the rim: a crack and a ring. */
+function tak(note, rand) {
+  const bp = new Biquad('bandpass', 2800, 1.2);
+  let ph = 0;
+  return hit(note, 0.25, (t) => {
+    ph += 660 / SR;
+    return bp.run(rand() * 2 - 1) * 1.5 * Math.exp(-t / 0.018) + Math.sin(TAU * ph) * 0.35 * Math.exp(-t / 0.05);
+  });
+}
+
+/** Finger cymbals, touched together: high, ringing partials, out of tune with each other. */
+function zill(note) {
+  const f = hz(note.midi), parts = [[1, 1, 1.4], [1.48, 0.6, 0.9], [2.27, 0.4, 0.6], [2.84, 0.25, 0.4]];
+  return hit(note, 2, (t) => {
+    let s = 0;
+    for (const [r, g, d] of parts) s += Math.sin(TAU * f * r * t) * g * Math.exp(-t / d);
+    return s * 0.4 * clamp01(t / 0.002);
+  });
+}
+
 /** A kettledrum: its few partials sagging a hair in pitch, and its head's thud. A `short` stroke dies quickly (a roll). */
 function timpani(note, rand) {
   const f = hz(note.midi), k = note.short ? 0.35 : 1, flt = new Biquad('lowpass', 900, 0.7);
@@ -346,7 +395,10 @@ function cymbal(note, rand) {
   });
 }
 
-export const INSTRUMENTS = { harp, lute, recorder, fiddle, bass, horn, serpent, choir, drone, bell, thump, slap, tek, heart, timpani, cymbal };
+export const INSTRUMENTS = {
+  harp, lute, oud, kanun, tanpura, recorder, fiddle, bass, horn, serpent, choir, drone, bell, thump, slap, tek, heart, doum, tak, zill,
+  timpani, cymbal,
+};
 
 // --- The hall ---
 
@@ -387,11 +439,11 @@ function reverb(input, { room = 0.86, damp = 0.3, spread = 23 } = {}) {
 /**
  * Renders a piece: `notes` ({ inst, t (seconds), and what its instrument plays: see INSTRUMENTS }), each instrument
  * mixed in by `channels` ({ gain, pan (-1 left to 1 right), send (how much of it the hall's reverb gets) }), `loop`
- * seconds long. What rings on past the loop's end (for up to `tail` seconds) is laid over its start, so it loops
+ * seconds long, in a `hall` (see reverb: a big one, by default). What rings on past the loop's end (for up to `tail` seconds) is laid over its start, so it loops
  * seamlessly, its echoes and all. It's brought up so its loudest moments peak near full, gently limited above that.
  * Returns { L, R, sampleRate, loop, levels } (`levels`: each instrument's loudness, while it plays, in decibels).
  */
-export function render(notes, channels, { loop, tail = 6, seed = 1 }) {
+export function render(notes, channels, { loop, tail = 6, seed = 1, hall = {} }) {
   const rand = seeded(seed), loopN = Math.round(loop * SR), n = loopN + Math.round(tail * SR);
   const L = new Float32Array(n), R = new Float32Array(n), send = new Float32Array(n);
   const energy = {};
@@ -409,7 +461,7 @@ export function render(notes, channels, { loop, tail = 6, seed = 1 }) {
     }
     e.count += buf.length;
   }
-  const [wl, wr] = reverb(send);
+  const [wl, wr] = reverb(send, hall);
   for (let i = 0; i < n; i++) {
     L[i] += wl[i];
     R[i] += wr[i];
