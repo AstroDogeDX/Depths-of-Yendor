@@ -67,7 +67,7 @@ export const STATUSES = {
     start: ['The cold bites deep, and you slow.', 'warn'], end: 'The chill leaves you.',
   },
   poisoned: {
-    label: 'Poisoned', color: '#9ee070', harm: true, resist: 'poison',
+    label: 'Poisoned', color: '#c27ae8', harm: true, resist: 'poison',
     dot: { type: 'poison', source: 'poison', ...poisonDose },
     start: ['You feel very sick.', 'danger'], end: 'You feel less sick.',
   },

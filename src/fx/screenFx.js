@@ -8,7 +8,7 @@ import { SENSED_LAYER } from '../monsters/models.js';
 //                embers rising, and the air shimmering low down
 //   chilled      the view cools and pales, frost creeps in from the edges, thickest in the corners, and snow drifts down
 //   frozen       the frost thickens and the view goes blue and grey, cracked across like a sheet of ice
-//   poisoned     a sickly green round the edges, throbbing, the view swimming, bubbles rising up the sides
+//   poisoned     a sickly purple round the edges, throbbing, the view swimming, bubbles rising up the sides
 //   bleeding     red round the edges, beating with each second's loss, and blood running down from the top
 //   wet          drops of water by the edges, each a little lens on the view, sliding down
 //   oiled        a dark amber smear round the edges, with a sheen sliding over it
@@ -213,7 +213,7 @@ void main() {
     + uHunger * (0.2 + 0.4 * smoothstep(0.3, 1.2, rv)) + uWounds * (0.15 + 0.55 * smoothstep(0.2, 1.1, rv));
   col = mix(col, vec3(luma(col)), clamp(grey, 0.0, 0.85));
   col *= mix(vec3(1.0), vec3(0.84, 0.96, 1.14), 0.35 * uChill + 0.45 * uFrozen);
-  col *= mix(vec3(1.0), vec3(0.88, 1.06, 0.8), 0.3 * uPoison);
+  col *= mix(vec3(1.0), vec3(1.02, 0.84, 1.08), 0.3 * uPoison);
   col *= mix(vec3(1.0), vec3(0.92, 0.92, 1.1), 0.35 * uParalysed);
   col += (vec3(1.0, 0.72, 0.84) - col) * 0.07 * uCharmed;
   col += (vec3(0.85, 1.0, 0.75) - col) * 0.05 * uHealing;
@@ -225,7 +225,7 @@ void main() {
     col = mix(col, vec3(0.9, 0.28, 0.05), steps(v * flick * uBurn, 4.0) * 0.6);
   }
   if (cold > 0.001) col = rim(col, vec3(0.62, 0.84, 1.0), 0.6, 1.3, 0.5 * cold);
-  if (uPoison > 0.001) col = rim(col, vec3(0.3, 0.6, 0.12), 0.5, 1.35, 0.55 * (0.7 + 0.3 * sin(t * 2.1)) * uPoison);
+  if (uPoison > 0.001) col = rim(col, vec3(0.42, 0.12, 0.58), 0.5, 1.35, 0.55 * (0.7 + 0.3 * sin(t * 2.1)) * uPoison);
   if (uWet > 0.001) col = rim(col, vec3(0.2, 0.32, 0.45), 0.7, 1.35, 0.35 * uWet);
   if (uBleed > 0.001) col = rim(col, vec3(0.45, 0.0, 0.02), 0.55, 1.3, (0.4 + 0.25 * exp(-fract(t) * 5.0)) * uBleed);
   if (uOil > 0.001) {
@@ -312,8 +312,8 @@ void main() {
   if (uPoison > 0.001 && sprite(24.0, vec2(floor(sin(t * 1.4) * 2.0), floor(t * 18.0)), 0.18 * uPoison, 31.0, 0.33, d)) {
     vec2 e = d - 2.0;
     float r2 = dot(e, e);
-    if (e == vec2(-1.0, 1.0)) col = vec3(0.9, 1.0, 0.85);
-    else if (r2 >= 2.5 && r2 <= 5.5) col = vec3(0.55, 0.9, 0.35);
+    if (e == vec2(-1.0, 1.0)) col = vec3(0.98, 0.9, 1.0);
+    else if (r2 >= 2.5 && r2 <= 5.5) col = vec3(0.72, 0.42, 0.92);
   }
   // Bleeding: blood running down from the top.
   if (uBleed > 0.001) {

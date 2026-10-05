@@ -23,7 +23,7 @@ import { tickStatuses } from '../status.js';
 const N8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
 // Traps on the map: grey spikes, green gas, azure teleport, yellow alarm (as their models; see trapModels.js).
-export const TRAP_COLORS = { spike: 0xa0a0a0, poison: 0x40c040, teleport: 0x3aa0ff, alarm: 0xe0c020 };
+export const TRAP_COLORS = { spike: 0xa0a0a0, poison: 0xa050d8, teleport: 0x3aa0ff, alarm: 0xe0c020 };
 
 // Chests (see addChest): how far a lid swings open (radians) and how long it takes; how long things take to fly out of
 // one, and how far they land in front of it; how long a mimic's lick of its lips takes, and how long it waits between
@@ -143,9 +143,10 @@ export class Level {
     for (const t of data.traps) this.traps.push({ ...t, hidden: true, triggered: false, view: null });
 
     // Where the shop's wares rest: the counter, plinths and display tables hold its stock, and things the player sells
-    // go in any free spot but the plinths', filling the rug last.
+    // go on the rug, and once that's full, in any free spot but the plinths'.
     this.shopSpots = built.shopSlots;
     this.shopKept = built.shopKept;
+    this.shopResale = built.shopResale;
     this.resales = 0;
     this.shopkeeper = null;
     if (data.shop) {
@@ -525,8 +526,8 @@ export class Level {
 
   /**
    * Puts something the player sold on display, so they can buy it back at the shop's price. Potions, scrolls
-   * and food join a pile of the same kind the player already sold; anything else takes the first free spot (not a
-   * plinth's).
+   * and food join a pile of the same kind the player already sold; anything else takes the first free spot on the
+   * rug, or once that's full, the first free spot on the counter or a table (not a plinth's).
    * When there's none, the thing that has been on sale longest of those the player sold makes way.
    */
   displaySold(item) {
@@ -537,7 +538,8 @@ export class Level {
       return;
     }
     const taken = new Set(this.items.map((e) => e.spot));
-    let spot = this.shopSpots.findIndex((_, i) => !taken.has(i) && !this.shopKept.has(i));
+    const free = (i) => !taken.has(i) && !this.shopKept.has(i);
+    let spot = this.shopResale.find(free) ?? this.shopSpots.findIndex((_, i) => free(i));
     if (spot < 0) {
       const oldest = this.items.filter((e) => e.resale).sort((a, b) => a.resale - b.resale)[0];
       if (!oldest) return;

@@ -95,9 +95,9 @@ export function randomItem(rng, depth) {
 /** A bundle of plain arrows, `min` to `max` of them. */
 export const arrows = (rng, min, max) => makeItem('arrow', 'standard', { qty: rng.int(min, max) });
 
-/** A pile of thrown weapons of a kind at random (by its `freq`), as many as its `pile` says, `mult` times over. */
-export function thrownPile(rng, mult = 1) {
-  const type = rng.weighted(freqTable(THROWN)), [min, max] = THROWN[type].pile;
+/** A pile of thrown weapons of `type` (or a kind at random, by its `freq`), as many as its `pile` says, `mult` times over. */
+export function thrownPile(rng, mult = 1, type = rng.weighted(freqTable(THROWN))) {
+  const [min, max] = THROWN[type].pile;
   return makeItem('thrown', type, { qty: rng.int(min, max) * mult });
 }
 
@@ -226,30 +226,51 @@ export function shopPrice(item, depth) {
   return v < 10 ? Math.max(1, Math.round(v)) : Math.round(v / 5) * 5;
 }
 
+// What the things on the shop's table of gear are (see shopStock), each by these odds: shields and bows share an
+// off-hand thing's.
+const SHOP_GEAR = { weapon: 2, armor: 2, shield: 1, bow: 1, ring: 2, wand: 2 };
+
 /**
  * Wares for a shop on this floor, in the order of its display slots (see layoutShop): [{ item, price }], or null for a
  * slot left empty. Never cursed.
- *   the counter        a ration (or a bundle of arrows: always, when there's a bow on the tables), a potion and a scroll
+ *   the counter        a ration, a potion of healing and a scroll of identify
  *   the two plinths    `wares.container` (a pack expansion), and `wares.artefact` or, without one, a prize: a piece of
  *                      equipment you can see is fine work (identified, +2 or better and often enchanted), dearly priced
- *   the six tables     three pieces of equipment (a weapon, an armour, and a weapon, armour, shield or bow, or a pile of
- *                      thrown weapons twice the size of one found, sold by the pile), and three wands and rings
+ *   the four tables    three kinds of scroll (never upgrade); three kinds of potion (never strength or experience); a
+ *                      bundle of arrows and two kinds of thing to throw, in piles twice the size of those found, each
+ *                      sold by the pile; and three different pieces of gear: weapons, armour, shields, bows, rings or
+ *                      wands (SHOP_GEAR), from a little deeper than the floor
  */
 export function shopStock(rng, depth, wares = {}) {
-  const gear = (kind) => kind === 'thrown' ? thrownPile(rng, 2)
-    : makeItem(kind, pickTiered(rng, DEFS[kind], depth + 3), { hitsToId: GEAR_HITS_TO_ID[kind], plus: rng.chance(0.3) ? 1 : 0 });
-  const trinket = (kind) => kind === 'wand' ? randomWand(rng)
-    : makeItem('ring', rng.weighted({ ...freqTable(RINGS), teleportation: 0 }), { wornTime: 0, plus: rng.int(1, 2) });
   const priced = (item) => item && { item, price: shopPrice(item, depth) };
-  const third = rng.pick(['weapon', 'armor', 'shield', 'bow', 'thrown']);
+  /** `n` different types from `defs`, but for those `not` to be had here, at random by their `freq`. */
+  const types = (defs, n, not = []) => {
+    const table = freqTable(defs);
+    for (const t of not) delete table[t];
+    return Array.from({ length: n }, () => {
+      const t = rng.weighted(table);
+      delete table[t];
+      return t;
+    });
+  };
+  const gear = (kind) => kind === 'wand' ? randomWand(rng)
+    : kind === 'ring' ? makeItem('ring', rng.weighted({ ...freqTable(RINGS), teleportation: 0 }), { wornTime: 0, plus: rng.int(1, 2) })
+    : makeItem(kind, pickTiered(rng, DEFS[kind], depth + 3), { hitsToId: GEAR_HITS_TO_ID[kind], plus: rng.chance(0.3) ? 1 : 0 });
+  // (No two alike, if a few more draws can help it.)
+  const kit = [];
+  for (let tries = 0; kit.length < 3; tries++) {
+    const item = gear(rng.weighted(SHOP_GEAR));
+    if (tries >= 20 || !kit.some((k) => k.kind === item.kind && k.type === item.type)) kit.push(item);
+  }
   return [
-    priced(third === 'bow' || rng.chance(0.3) ? arrows(rng, 15, 25) : makeItem('food', 'ration')),
-    priced(makeItem('potion', rng.chance(0.5) ? 'healing' : rng.weighted(freqTable(POTIONS)))),
-    priced(makeItem('scroll', rng.chance(0.4) ? 'identify' : rng.weighted(freqTable(SCROLLS)))),
+    priced(makeItem('food', 'ration')), priced(makeItem('potion', 'healing')), priced(makeItem('scroll', 'identify')),
     priced(wares.container && makeItem('container', wares.container)),
     wares.artefact ? priced(makeItem('artefact', wares.artefact)) : prize(rng, depth),
-    ...['weapon', 'armor', third].map((k) => priced(gear(k))),
-    ...['wand', 'ring', rng.chance(0.5) ? 'wand' : 'ring'].map((k) => priced(trinket(k))),
+    ...types(SCROLLS, 3, ['upgrade']).map((t) => priced(makeItem('scroll', t))),
+    ...types(POTIONS, 3, ['strength', 'experience']).map((t) => priced(makeItem('potion', t))),
+    priced(arrows(rng, 15, 25)),
+    ...types(THROWN, 2).map((t) => priced(thrownPile(rng, 2, t))),
+    ...kit.map(priced),
   ];
 }
 

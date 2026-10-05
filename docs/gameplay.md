@@ -58,7 +58,7 @@ What's in the pack is a grid of tiles, one for each of its 20 slots. It keeps th
 | --- | --- |
 | Top left | a weapon's, armour's, shield's, bow's, ring's or wand's +, or **?** until you know it (a cursed ring's as the minus it gives you) |
 | Top right | how many there are, or a wand's charges (**?** until you know the wand) |
-| Bottom right | a mark for what it does: its element or enchantment (a long sword of flames, a wand of firebolt, a potion of liquid flame), or what a potion, scroll, wand or ring you know does (a map for magic mapping), as a small icon of its own (see [Item icons](icons.md#marks)). The hotbar shows the same marks |
+| Bottom right | a mark for what it does: its element or enchantment (a long sword of flames, a wand of firebolt, a potion of liquid flame), or what a potion, scroll, wand or ring you know does (a map for magic mapping, a green cross for healing), as a small icon of its own (see [Item icons](icons.md#marks)). The hotbar shows the same marks |
 | Bottom left | nothing yet |
 
 Point at a tile, or at a slot on the doll or the hotbar, and a tooltip names what's there at once, with a note if there's more to say (a weapon *in both hands*, a hotbar slot with none left): `UI.showTip`, from what `setTip` in `ui/ui.js` put on each.
@@ -90,7 +90,7 @@ A shield is held in your off hand, in place of the lantern (hang the lantern on 
 
 ## Bows and arrows
 
-A bow is held in your off hand, like a shield, and shoots the **arrows** in your quiver: the **Arrows** slot on the paper doll, by the shoulder (`Player.equip.arrows`). Put a stack of arrows there from the pack (**Put in quiver**, or drag it there) and it stays there whether you've a bow in hand or not, out of the pack and taking no slot in it. Arrows you pick up go straight into an empty quiver, or join the stack in it if they're its kind. Bows are found like other gear (now and then on the floor and in chests, in locked chests and on the shop's tables), and arrows in bundles of 6 to 14 on the floor and in chests, on the shop's counter by the pile (always, when there's a bow on its tables), and in what goblin archers leave behind. Bows work by their numbers in `BOWS` in `items/defs.js`, arrows by theirs in `ARROWS`, and everything about how any of them behaves is in `bow.js`, so a new one is just an entry there. The **wooden bow** and plain **arrows** are the first.
+A bow is held in your off hand, like a shield, and shoots the **arrows** in your quiver: the **Arrows** slot on the paper doll, by the shoulder (`Player.equip.arrows`). Put a stack of arrows there from the pack (**Put in quiver**, or drag it there) and it stays there whether you've a bow in hand or not, out of the pack and taking no slot in it. Arrows you pick up go straight into an empty quiver, or join the stack in it if they're its kind. Bows are found like other gear (now and then on the floor and in chests, in locked chests and on the shop's tables), and arrows in bundles of 6 to 14 on the floor and in chests, always on one of the shop's tables, by the pile, and in what goblin archers leave behind. Bows work by their numbers in `BOWS` in `items/defs.js`, arrows by theirs in `ARROWS`, and everything about how any of them behaves is in `bow.js`, so a new one is just an entry there. The **wooden bow** and plain **arrows** are the first.
 
 - **In hand, a bow lowers your weapon**, and your main hand takes an arrow from your quiver in its place. **F** slings the bow over your shoulder and brings your weapon back up, in both hands, and again takes the bow back up: so F changes between your bow and your weapon, as the hotbar does between your bow and your shield or lantern.
 - **Hold right-click to nock an arrow:** the bow comes up before you, and an arrow goes to the string (0.35 s for the wooden bow). Then **hold click as well to draw it**: your right hand brings the string back toward your shoulder over its draw (0.9 s), and the bow comes over to the right of your view with it, the arrow still pointing at the crosshair, filling the attack meter, and you slow to 60% of your speed (you can't sprint with an arrow nocked). **Let go of click to loose it**, once it's drawn past a fifth of the way (less, and the string eases back, the arrow still nocked). Drawn further, it flies faster and drops less, and hits harder, as a swing does with the meter: from under half its damage, barely drawn, to all of it at full draw, which for the wooden bow is 3–8 stab. While you hold right-click, another arrow is nocked after each shot.
@@ -150,7 +150,7 @@ Every source of damage has a type (`damage.js`), physical or magical. Only starv
 | Poison | being poisoned (potions, gas traps, oozes) | being immune to poison means you can't be poisoned |
 | Holy | nothing yet | holy light, for use against the undead and the cursed |
 
-A wand's description says which type it deals. Magical damage numbers take the type's colour: violet magic, orange fire, blue ice, yellow lightning, green poison, and white holy light with a golden glow.
+A wand's description says which type it deals. Magical damage numbers take the type's colour: violet magic, orange fire, blue ice, yellow lightning, purple poison, and white holy light with a golden glow.
 
 **Resistances.** Monsters, armour and artefacts can resist a type or be weak to it. `resist` in a monster's entry in `monsters/defs.js`, or an armour's or artefact's in `items/defs.js`, maps types to multipliers on the damage that gets through (after armour's defense has taken its share). For example, `{ slash: 0.5, fire: 1.5 }` takes half from blades and half as much again from fire, and 0 makes it immune. A resisted hit always does at least 1 unless it's immune. Your resistances multiply together from your armour and the artefacts you're attuned to: Emberheart's `{ fire: 0 }` is how it makes fire harmless. A weapon's type is its `dmgType` in `items/defs.js`, as is a wand's. A monster's is its `dmgType` in `monsters/defs.js`, and its `ranged` attack has its own.
 
@@ -221,7 +221,7 @@ Statuses afflict you and monsters alike, by one set of rules (`status.js`): what
   - **Wet, bleeding, oiled:** water, blood or oil drips off it.
   - **Burning:** flames lick up off it, flaring up and dying down from spot to spot, with embers and smoke rising, and it glows with the fire.
   - **Chilled:** frost glitters about it, drifting down. **Frozen:** thicker frost, and it's tinted blue.
-  - **Poisoned:** green bubbles rise off its head and burst.
+  - **Poisoned:** purple bubbles rise off its head and burst.
   - **Charmed or smitten:** hearts circle its head. **Heartbroken:** now and then a cracked heart sinks from it.
   - **Confused:** stars whirl round its head. **Blind:** murk swirls round its eyes. **Feared:** sweat flies off its head. **Weakened:** red chevrons sink down it as its strength drains.
   - **Paralysed:** it strains against its locked limbs, shaking in fits.
@@ -229,7 +229,7 @@ Statuses afflict you and monsters alike, by one set of rules (`status.js`): what
 - **Yours show over your view** too (`fx/screenFx.js`), in the same chunky pixels, fading in and out, as well as under your health:
   - **Burning:** a fiery glow round the edges, flames licking up from the bottom (higher at the sides), embers, and the air shimmering low down.
   - **Chilled:** frost creeps in from the edges and corners, snow drifts down, and the view cools. **Frozen:** thick frost, the view grey-blue and cracked across like ice.
-  - **Poisoned:** a throbbing sickly green round the edges, the view swimming, bubbles rising up the sides. **Bleeding:** red round the edges, beating, with blood running down from the top.
+  - **Poisoned:** a throbbing sickly purple round the edges, the view swimming, bubbles rising up the sides. **Bleeding:** red round the edges, beating, with blood running down from the top.
   - **Wet:** drops of water by the edges, each a little lens on the view, sliding down. **Oiled:** a dark amber smear with an oily sheen.
   - **Weakened:** the colour drains, the edges darken. **Confused:** the view swims and doubles. **Paralysed:** grey and blue, with static crackling at the edges and the view jolting as you strain.
   - **Charmed:** a rosy glow, hearts floating up the sides. **Heartbroken:** a cold grey edge. **Healing:** a warm green glow round the edges, swelling and ebbing, and green crosses rising up the sides.

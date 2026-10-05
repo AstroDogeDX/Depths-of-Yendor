@@ -155,7 +155,7 @@ body.blind #dark { opacity: 0.95; }
 }
 .popup small { display: block; margin-top: 0.15em; font-size: 0.42em; letter-spacing: 0.12em; }
 .popup.crit { color: #ffd040; font-size: 1.35em; }
-.popup.dot { color: #9ee070; font-size: 0.7em; }
+.popup.dot { color: #ff5060; font-size: 0.7em; }
 .popup.miss { color: #d0c8b8; font-size: 0.65em; font-style: italic; font-weight: bold; }
 .popup.immune { color: #b8c4d0; font-size: 0.7em; letter-spacing: 0.08em; }
 .popup.hurt { color: #ff4a3a; font-size: 1.05em; }
@@ -174,7 +174,7 @@ body.blind #dark { opacity: 0.95; }
 .popup.el-fire { color: #ff6a2a; }
 .popup.el-ice { color: #7fd4ff; }
 .popup.el-lightning { color: #f6f060; }
-.popup.el-poison { color: #9ee070; }
+.popup.el-poison { color: #c27ae8; }
 .popup.el-holy { color: #fffbe8; filter: drop-shadow(0 0 0.2em rgba(255, 214, 90, 0.9)); }
 /* A status taking hold of a monster, or fire and cold meeting on it (see status.js). */
 .popup.status { font-size: 0.55em; letter-spacing: 0.1em; color: #e0e0e0; }

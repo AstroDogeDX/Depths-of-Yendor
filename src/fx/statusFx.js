@@ -9,7 +9,7 @@ import { Flame } from './flame.js';
 //                and smoke rising off it (it glows a little too: see STATUSES)
 //   chilled      frost glittering about it, drifting down
 //   frozen       the same, thicker, and it's tinted blue (see STATUSES)
-//   poisoned     green bubbles rising off its head and bursting
+//   poisoned     purple bubbles rising off its head and bursting
 //   charmed      hearts circling its head (smitten too)
 //   heartbroken  now and then a cracked heart, sinking from its head
 //   confused     stars whirling round its head
@@ -46,7 +46,7 @@ const FRAME = Object.fromEntries(Object.keys(SPRITES).map((k, i) => [k, i]));
 
 // Colours (display colours, like the flames').
 const COLORS = {
-  water: 0x8cc4ff, blood: 0xc81a24, oil: 0xa8822a, sweat: 0xe0f2ff, frost: 0xd8f2ff, poison: 0x86e85a, heart: 0xff5aa6,
+  water: 0x8cc4ff, blood: 0xc81a24, oil: 0xa8822a, sweat: 0xe0f2ff, frost: 0xd8f2ff, poison: 0xb46ee8, heart: 0xff5aa6,
   broken: 0xc07898, star: 0xffe27a, starAlt: 0xe0a8ff, murk: 0x7c7694, weak: 0xc8603c, ember: 0xffd040, cinder: 0xa02008,
   smoke: 0x3a3532, heal: 0x8cf08a, healGlint: 0xfff0a8, sparkle: 0xfff0b8,
 };

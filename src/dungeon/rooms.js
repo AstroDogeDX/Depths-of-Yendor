@@ -8,6 +8,8 @@ import { makeItem, shopStock } from '../items/generate.js';
  * usually as a branch, e.g. `{ type: 'library' }` or `{ type: 'treasury', locked: true }`.
  *
  *   size(rng, depth)   interior width/height in tiles
+ *   centred            a room put beside another (see placeBeside in generator.js) has its door in the middle of its
+ *                      wall: its `w` runs along that wall, an odd number of tiles, and its `h` back from it
  *   doors              'arch' (open doorway), 'door', or 'mixed' (a coin flip per room)
  *   branchable         whether other rooms may hang off this one
  *   monsters, items    whether the general population pass may put things in it
@@ -79,10 +81,12 @@ export const ROOM_TYPES = {
   },
 
   // A merchant's shop, off the entrance room on the first floor of each theme after the first. A hooded
-  // shopkeeper stands behind a counter of wares, between two plinths for its finest, with more on display tables
-  // down each side. Monsters never spawn or wander in; only one already chasing you will follow you through the door.
+  // shopkeeper stands behind a counter of wares, between two plinths for its finest, straight ahead as you come in,
+  // with more on display tables down each side. Monsters never spawn or wander in; only one already chasing you will
+  // follow you through the door.
   shop: {
-    size: (rng) => ({ w: rng.int(7, 8), h: rng.int(7, 8) }),
+    size: () => ({ w: 7, h: 6 }),
+    centred: true,
     doors: 'door', branchable: false, monsters: false, items: false, traps: false,
     furnish(ctx, room) {
       ctx.shop = layoutShop(ctx.rng, ctx.depth, room, ctx.wares);
@@ -91,15 +95,21 @@ export const ROOM_TYPES = {
 };
 
 /** The props a shop is furnished with. */
-export const SHOP_PROPS = ['shop_counter', 'display_plinth', 'display_table', 'shelf', 'barrel', 'crates', 'rug'];
+export const SHOP_PROPS = ['shop_counter', 'display_plinth', 'display_table', 'shelf', 'barrel', 'crates', 'rug', 'tapestry', 'weapon_rack', 'sacks'];
+
+// How far from the side walls the middle of a display table stands (its back just off the wall), and how far from the
+// door's wall the middles of the tables nearer it and further from it are, in tiles.
+const TABLE_IN = 0.27, TABLE_NEAR = 1.75, TABLE_FAR = 3.55;
 
 /**
- * Lays the shop out relative to its door, in local coordinates: u runs along the back wall and v from the
- * back wall toward the door, both in tiles. Returns positions in (fractional) grid tiles; yaw 0 faces +z.
+ * Lays the shop out relative to its door, in local coordinates: u runs along the back wall (left to right as you come
+ * in) and v from the back wall toward the door, both in tiles; the door is in the middle of its wall (see `centred`),
+ * so you come in facing the shopkeeper. Returns positions in (fractional) grid tiles; yaw 0 faces +z.
  *   keeper    where the shopkeeper stands, and which way it faces
  *   props     furniture: { type, x, y, yaw, solid, round, resale }; props with display slots hold the wares: the
- *             counter, the two plinths either side of it and the tables down the sides, then the rug, where things
- *             the player sells go once those are full (never on the plinths: `resale: false`)
+ *             counter, the two plinths either side of it and the four tables down the sides, then the rug, where
+ *             things the player sells go first (`resale: true`), and then any free spot but the plinths'
+ *             (`resale: false`)
  *   stock     [{ item, price } or null], set out in the props' slots in order (see shopStock)
  *   sconces   spots on the side walls for blue-flamed sconces: { x, z (world), ry }
  */
@@ -119,20 +129,28 @@ function layoutShop(rng, depth, room, wares) {
     return { type, x, y, yaw: facing + turn, solid: true, ...opts };
   };
   const mid = U / 2;
-  // Three tables down each side, from beside the counter to a clear strip inside the door's wall.
-  const rows = [0, 1, 2].map((i) => 2.3 + (i * (V - 4)) / 2);
+  // Two tables down each side, their backs to the wall, between the counter's end of the room and a clear strip inside
+  // the door's wall. On your left as you come in, the scrolls' by the door and the potions' toward the counter; on your
+  // right, the arrows and things to throw by the door, and the gear toward the counter (in that order in shopStock).
+  const left = Math.PI / 2, right = -Math.PI / 2; // (turns a prop on that side to face into the room)
   const props = [
     prop('shop_counter', mid, 1.0),
     prop('display_plinth', mid - 1.5, 1.0, 0, { round: true, resale: false }),
     prop('display_plinth', mid + 1.5, 1.0, 0, { round: true, resale: false }),
-    ...rows.map((v) => prop('display_table', 1.15, v, 0, { round: true })),
-    ...rows.map((v) => prop('display_table', U - 1.15, v, 0, { round: true })),
+    prop('display_table', TABLE_IN, V - TABLE_NEAR, left),
+    prop('display_table', TABLE_IN, V - TABLE_FAR, left),
+    prop('display_table', U - TABLE_IN, V - TABLE_NEAR, right),
+    prop('display_table', U - TABLE_IN, V - TABLE_FAR, right),
+    // The merchant's hanging on the wall behind the counter, shelves of oddments in the back corners with a barrel and
+    // crates before them, a rack of weapons by the door and sacks of stores across from it.
+    prop('tapestry', mid, 0, 0, { solid: false }),
     prop('shelf', 0.55, 0.22),
     prop('shelf', U - 0.55, 0.22),
-    prop('barrel', 0.38, 1.25, rng.range(0, 6), { round: true }),
-    prop('barrel', 0.42, 1.85, rng.range(0, 6), { round: true }),
-    prop('crates', U - 0.45, 1.6, Math.PI / 2),
-    prop('rug', mid, (rows[0] + rows[2]) / 2, 0, { solid: false }),
+    prop('barrel', 0.4, 1.3, rng.range(0, 6), { round: true }),
+    prop('crates', U - 0.45, 1.35, Math.PI / 2),
+    prop('weapon_rack', 0, V - 0.7, left),
+    prop('sacks', U - 0.55, V - 0.6, rng.range(-0.4, 0.4)),
+    prop('rug', mid, (V + 1.2) / 2, 0, { solid: false, resale: true }),
   ];
   const [kx, ky] = at(mid, 0.6);
   const sconce = (u, turn) => {

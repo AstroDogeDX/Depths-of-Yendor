@@ -220,22 +220,29 @@ function attemptLevel(rng, depth, opts, stream) {
 
   /**
    * Puts a room of `type` right beside `parent`, sharing a wall with it, and joins them by one doorway in that wall: no
-   * corridor between. The rooms share at least three tiles of wall, and the doorway goes in the middle of that stretch,
-   * so there's wall either side of it (see shopSigns). The doorway is in both rooms' `doorways`, each with the side of
-   * the room it's on, and once in the floor's. Returns the room, or null if there's no room for it beside the parent.
+   * corridor between. The rooms share at least three tiles of wall, and the doorway goes in that stretch, with wall
+   * either side of it (see shopSigns): anywhere along it, or for a `centred` room type, in the middle of the room's own
+   * wall. The doorway is in both rooms' `doorways`, each with the side of the room it's on, and once in the floor's.
+   * Returns the room, or null if there's no room for it beside the parent.
    */
   const placeBeside = (type, parent) => {
     const def = ROOM_TYPES[type], flip = { N: 'S', S: 'N', E: 'W', W: 'E' };
     for (let tries = 0; tries < 12; tries++) {
-      const { w, h } = def.size(rng, depth);
+      const size = def.size(rng, depth);
       for (const side of rng.shuffle(['N', 'S', 'E', 'W'])) {
-        const horiz = side === 'E' || side === 'W', len = horiz ? h : w, plen = horiz ? parent.h : parent.w;
-        const off = rng.int(3 - len, plen - 3); // where it starts along the shared wall, from where the parent does
+        const horiz = side === 'E' || side === 'W';
+        // (A centred room's `w` runs along the wall its door's in.)
+        const { w, h } = def.centred && horiz ? { w: size.h, h: size.w } : size;
+        const len = horiz ? h : w, plen = horiz ? parent.h : parent.w, half = (len - 1) >> 1;
+        // Where it starts along the shared wall, from where the parent does: so they share three tiles of it, or a
+        // centred room's middle tile and one either side.
+        const off = def.centred ? rng.int(1 - half, plen - 2 - half) : rng.int(3 - len, plen - 3);
         const x = side === 'E' ? parent.x + parent.w + 1 : side === 'W' ? parent.x - 1 - w : parent.x + off;
         const y = side === 'S' ? parent.y + parent.h + 1 : side === 'N' ? parent.y - 1 - h : parent.y + off;
         if (!fits(x, y, w, h, parent)) continue;
         const a = Math.max(horiz ? parent.y : parent.x, horiz ? y : x), b = Math.min(horiz ? parent.y + parent.h : parent.x + parent.w, horiz ? y + h : x + w) - 1;
-        const at = rng.int(a + 1, b - 1), wall = { E: parent.x + parent.w, W: parent.x - 1, S: parent.y + parent.h, N: parent.y - 1 }[side];
+        const at = def.centred ? (horiz ? y : x) + half : rng.int(a + 1, b - 1);
+        const wall = { E: parent.x + parent.w, W: parent.x - 1, S: parent.y + parent.h, N: parent.y - 1 }[side];
         const [dx, dy] = horiz ? [wall, at] : [at, wall];
         if (parent.doorways.some((d) => Math.abs(d.x - dx) + Math.abs(d.y - dy) < 3)) continue;
         const r = makeRoom(type, x, y, w, h, { onLoop: false, locked: false, parent: parent.id });

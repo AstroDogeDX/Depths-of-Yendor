@@ -1,14 +1,14 @@
 // Traps: a model for each kind, seen once a trap has been found. Each has three states, groups the game shows
 // one at a time: "armed" (waiting to go off), "active" (going off, the game moving its parts) and "used" (spent:
 // set off, or disarmed). Parts outside them always show. The kinds are told apart at a glance by shape and
-// colour: a square iron grate (spikes), a round vent in a green stain (poison), a glowing azure glyph
+// colour: a square iron grate (spikes), a round vent in a purple stain (poison), a glowing azure glyph
 // (teleport), a brass bell on a post (alarm). Origin on the floor at the middle of the trap's tile.
 import { defineModel, revolve, tube, noise3, rand, fract, ramp } from './lib.mjs';
 import { MAT, PAL, P, patches, bevel } from './materials.mjs';
 import { runeAt, segDist } from './underworld.mjs';
 
 const TP = {
-  green: P('#0c1a06', '#1a3a0c', '#2c5a14', '#48801e', '#6aa82c', '#9cd04a'),
+  purple: P('#12061c', '#240c38', '#3a1458', '#56207e', '#7834a6', '#9e52cc'),
   stone: P('#1e1c1a', '#2c2926', '#3b3733', '#4b4642', '#5c5752', '#6e6863'),
   azure: P('#041428', '#0a2a50', '#124a86', '#2276c0', '#4aa6ee', '#a8dcff'),
   char: P('#050505', '#0e0d0c', '#1a1816', '#26231f'),
@@ -54,21 +54,21 @@ const MATS = {
     const d = Math.min(segDist(x, z, [-22, -8], [-6, 2]), segDist(x, z, [-6, 2], [4, -4]), segDist(x, z, [4, -4], [18, 10]), segDist(x, z, [-6, 2], [-10, 18]));
     return d < 0.6 ? ramp(TP.void, 0.4, c.ax, c.ay) : clear;
   },
-  // Green residue splashed round the vent, ragged at its edge (cut out).
+  // Purple residue splashed round the vent, ragged at its edge (cut out).
   stain(c) {
     const { x, z } = c.p, r = Math.hypot(x, z), n = noise3(x * 0.14, z * 0.14, 0, 4010);
     if (r > 26 + 16 * noise3(Math.cos(Math.atan2(z, x)) * 2, Math.sin(Math.atan2(z, x)) * 2, 1, 4011) || n < 0.3) return clear;
-    return ramp(TP.green, 0.15 + 0.35 * n - (r / 42) * 0.1, c.ax, c.ay);
+    return ramp(TP.purple, 0.15 + 0.35 * n - (r / 42) * 0.1, c.ax, c.ay);
   },
-  // The vent's stone lip, its hole dark and tinged green.
+  // The vent's stone lip, its hole dark and tinged purple.
   vent(c) {
-    if (c.n.y > 0.5 && Math.hypot(c.p.x, c.p.z) < 13.2) return ramp(TP.green, 0.08, c.ax, c.ay);
+    if (c.n.y > 0.5 && Math.hypot(c.p.x, c.p.z) < 13.2) return ramp(TP.purple, 0.08, c.ax, c.ay);
     return ramp(TP.stone, 0.45 + 0.14 * patches(c.p, 4012, 0.4) + bevel(c, 0.15), c.ax, c.ay);
   },
-  // The vent's cap: a brass dome with slots round it, green in the dark behind them.
+  // The vent's cap: a brass dome with slots round it, purple in the dark behind them.
   grille(c) {
     const { p } = c, r = Math.hypot(p.x - c.info.cx, p.z - c.info.cz), a = Math.atan2(p.z - c.info.cz, p.x - c.info.cx);
-    if (c.n.y > 0.3 && r > 3.5 && r < 11.5 && fract((a / (Math.PI * 2)) * 10) < 0.35) return ramp(TP.green, 0.35, c.ax, c.ay);
+    if (c.n.y > 0.3 && r > 3.5 && r < 11.5 && fract((a / (Math.PI * 2)) * 10) < 0.35) return ramp(TP.purple, 0.35, c.ax, c.ay);
     return MAT.brass(c);
   },
   // Stone, a groove cut round near its edge.
@@ -141,7 +141,7 @@ export const traps = {
   }, { density: 1 }),
 
   trap_poison: defineModel('trap_poison', MATS, (m) => {
-    // A round vent in the floor, a green stain splashed about it. Armed: its grille cap sits over it, green in
+    // A round vent in the floor, a purple stain splashed about it. Armed: its grille cap sits over it, purple in
     // the dark behind the slots. Active: the cap blows up off it in a cloud of gas (the game throws it and makes
     // the cloud). Used: the cap lies where it fell, the vent open.
     m.cube('stain', [-44, 0.12, -44], [44, 0.25, 44], { mat: 'stain', faces: ['up'] });

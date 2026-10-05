@@ -1054,8 +1054,8 @@ export class Game {
       case 'poison':
         this.log('A cloud of green gas billows up around you!', 'danger');
         this.audio.hiss();
-        ring(level, x, z, 0x40c040, 3, 1);
-        gasCloud(level, x, z, 0x6ac03a);
+        ring(level, x, z, 0xa050d8, 3, 1);
+        gasCloud(level, x, z, 0x9a52d0);
         p.addStatus('poisoned', 8, this);
         break;
       case 'teleport':

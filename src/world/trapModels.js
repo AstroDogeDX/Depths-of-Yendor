@@ -54,7 +54,7 @@ const KINDS = {
   },
   poison: {
     active: 0.9,
-    glow: [0x60c030, 0.9, 0.22],
+    glow: [0x9a40d8, 0.9, 0.22],
     animate(parts, t) {
       // The cap blown up off the vent, tumbling over as it falls away to one side.
       const cap = parts.active, rest = cap.userData.rest, k = t / 0.9;

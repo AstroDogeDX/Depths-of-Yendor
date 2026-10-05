@@ -363,14 +363,16 @@ export function buildLevelMeshes(data) {
   }
 
   // The shop's furniture. Items for sale rest in the slots of the counter, plinths and display tables, in order; the
-  // plinths' are kept for the shop's own wares (see layoutShop).
-  const shopSlots = [], shopKept = new Set();
+  // plinths' are kept for the shop's own wares, and the rug's are where what the player sells goes first (see
+  // layoutShop).
+  const shopSlots = [], shopKept = new Set(), shopResale = [];
   for (const p of data.shop?.props ?? []) {
     const prop = placeProp(p);
     group.add(prop.mesh);
     if (prop.obstacle) obstacles.push(prop.obstacle);
     for (const slot of prop.slots) {
       if (p.resale === false) shopKept.add(shopSlots.length);
+      if (p.resale === true) shopResale.push(shopSlots.length);
       shopSlots.push(slot);
     }
   }
@@ -540,7 +542,7 @@ export function buildLevelMeshes(data) {
     group.add(built.group);
     return built;
   });
-  return { group, flames, lights, share, obstacles, openStairs, doors, shopSlots, shopKept, water, haze, rough, sunlight: daylight, drips: dripSources(data, rng, drips) };
+  return { group, flames, lights, share, obstacles, openStairs, doors, shopSlots, shopKept, shopResale, water, haze, rough, sunlight: daylight, drips: dripSources(data, rng, drips) };
 }
 
 /**
