@@ -4,6 +4,7 @@ import { rand } from '../rng.js';
 import { PLAYER_RADIUS, TILE, POOL, WADE_SPEED, danger } from '../config.js';
 import { spawnProjectile } from '../fx/projectiles.js';
 import { burst } from '../fx/particles.js';
+import { strain } from '../fx/statusFx.js';
 import { round2 } from '../save.js';
 import { DAMAGE_TYPES, damageType, damageMult, isPhysical } from '../damage.js';
 import {
@@ -235,6 +236,7 @@ export class Monster {
       strike: a.phase === 'strike' ? Math.min(1, a.t / STRIKE_TIME) : -1,
       reveal: this.revealT ?? -1,
     });
+    strain(this);
     this.updateTint(dt);
 
     if (this.state === 'sleep') {
@@ -755,6 +757,7 @@ export class Monster {
   die(game, killer = null) {
     this.dead = true;
     this.deathT = 0;
+    this.mesh.rotation.z = 0; // (no longer straining: see strain)
     this.attack.phase = 'none';
     burst(game.level, this.x, this.baseY + this.height * 0.5, this.z, BLOOD[this.type], 16, 3.5, 0.9);
     game.onMonsterKilled(this, killer);

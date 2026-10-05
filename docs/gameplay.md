@@ -199,7 +199,14 @@ The scrolls:
 
 Statuses afflict you and monsters alike, by one set of rules (`status.js`): what each does, what wards it off, and how they meet.
 
-- **Showing them.** Yours show under your health, with the seconds left. The monster you're facing lists its own beside its name. Some also show as a colour on the monster, and a word pops up over it as they take hold.
+- **Showing them.** Yours show under your health, with the seconds left. The monster you're facing lists its own beside its name, a word pops up over it as some take hold, and what afflicts a monster shows on it (`fx/statusFx.js`), on any near you in sight:
+  - **Wet, bleeding, oiled:** water, blood or oil drips off it.
+  - **Burning:** flames lick up off it, flaring up and dying down from spot to spot, with embers and smoke rising, and it glows with the fire.
+  - **Chilled:** frost glitters about it, drifting down. **Frozen:** thicker frost, and it's tinted blue.
+  - **Poisoned:** green bubbles rise off its head and burst.
+  - **Charmed or smitten:** hearts circle its head. **Heartbroken:** now and then a cracked heart sinks from it.
+  - **Confused:** stars whirl round its head. **Blind:** murk swirls round its eyes. **Feared:** sweat flies off its head. **Weakened:** red chevrons sink down it as its strength drains.
+  - **Paralysed:** it strains against its locked limbs, shaking in fits.
 - **Bosses** take any hostile status for half as long.
 - **Floors you've left** stand still, since only the one you're on runs. When you come back, its monsters' statuses have worn down by the time you were away, without doing their damage.
 

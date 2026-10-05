@@ -15,6 +15,7 @@ import { rand } from '../rng.js';
 import { glowSprite } from '../fx/glow.js';
 import { Drips } from '../fx/drips.js';
 import { Ripples } from '../fx/ripples.js';
+import { StatusFx } from '../fx/statusFx.js';
 import { Shopkeeper } from './shopkeeper.js';
 import { fingerprint, packBits, unpackBits, round2 } from '../save.js';
 import { tickStatuses } from '../status.js';
@@ -102,6 +103,7 @@ export class Level {
     this.waterT = 0;
     this.drips = built.drips.length ? new Drips(this.group, built.drips) : null;
     this.ripples = this.theme.pools ? new Ripples(this.group, this.theme.pools.water[3]) : null; // round anything wading
+    this.statusFx = new StatusFx(this.group); // what's afflicting its monsters, shown on them
 
     // Doors: open when something walks into them, shut again once the doorway has been clear a while. `amt` is how
     // far open (0..1), `swing` which way a swinging door turns (see openDoor).
@@ -905,6 +907,7 @@ export class Level {
         this.monsters.splice(i, 1);
       }
     }
+    this.statusFx.update(dt, game, this);
 
     updateProjectiles(dt, game, this);
     updateParticles(dt, this);

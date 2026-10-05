@@ -7,7 +7,8 @@ import { danger, WADE_WET } from './config.js';
 //
 // Each status in STATUSES may give:
 //   label, color     how the HUD and the target bar name it
-//   tint             a monster's glow while it has it (the first in this list that it has wins)
+//   tint             a monster's glow while it has it (the first in this list that it has wins). Kept for a few:
+//                    what afflicts a monster shows on it as sprites and flames (see fx/statusFx.js)
 //   harm             a hostile one: bosses take it for BOSS_STATUS as long
 //   stack: 'add'     a new dose adds its time (haste). Otherwise a new dose tops it up to the longer of the two.
 //   permanent        it never wears off (it's 1 while in effect), only ends when something ends it
@@ -48,25 +49,25 @@ export const STATUSES = {
     onEnd: (game, who) => afflict(game, who, 'chilled', FROZEN_THAW_CHILL, { show: false, thaw: true }),
   },
   burning: {
-    label: 'Burning', color: '#ff7a3a', tint: 0x802000, harm: true, resist: 'fire',
+    label: 'Burning', color: '#ff7a3a', tint: 0x5a1600, harm: true, resist: 'fire',
     dot: { type: 'fire', source: 'flames', player: () => rand.int(1, 3), monster: () => rand.int(2, 4) },
     start: ['You are on fire!', 'danger'], end: 'The flames go out.',
   },
   paralysed: {
-    label: 'Paralysed', color: '#8fb0ff', tint: 0x103060, harm: true,
+    label: 'Paralysed', color: '#8fb0ff', harm: true,
     start: ['Your limbs lock rigid!', 'danger'], end: 'You can move again.',
   },
   chilled: {
-    label: 'Chilled', color: '#8fd8ff', tint: 0x203a58, harm: true, resist: 'ice', mark: 'CHILLED',
+    label: 'Chilled', color: '#8fd8ff', harm: true, resist: 'ice', mark: 'CHILLED',
     start: ['The cold bites deep, and you slow.', 'warn'], end: 'The chill leaves you.',
   },
   poisoned: {
-    label: 'Poisoned', color: '#9ee070', tint: 0x105010, harm: true, resist: 'poison',
+    label: 'Poisoned', color: '#9ee070', harm: true, resist: 'poison',
     dot: { type: 'poison', source: 'poison', ...poisonDose },
     start: ['You feel very sick.', 'danger'], end: 'You feel less sick.',
   },
   bleeding: {
-    label: 'Bleeding', color: '#ff5060', tint: 0x500010, harm: true, mark: 'BLEEDING',
+    label: 'Bleeding', color: '#ff5060', harm: true, mark: 'BLEEDING',
     dot: { type: null, source: 'blood loss', ...poisonDose },
     immune: (who) => who.hasTrait('bloodless'),
     start: ['You are bleeding!', 'danger'], end: 'The bleeding stops.',
@@ -92,14 +93,14 @@ export const STATUSES = {
   // Bard, to come); on a boss it's an ordinary charm. Either leaves its target Heartbroken, and no charm takes on the
   // heartbroken.
   charmed: {
-    label: 'Charmed', color: '#ff8ac8', tint: 0x7a2050, harm: true, mark: 'CHARMED',
+    label: 'Charmed', color: '#ff8ac8', harm: true, mark: 'CHARMED',
     immune: (who) => who.status.heartbroken > 0 || who.status.smitten > 0,
     start: ["You are charmed! You can't bring yourself to fight.", 'warn'], end: 'The charm on you breaks.',
     onStart: (game, who) => who.charm?.(game),
     onEnd: charmEnds,
   },
   smitten: {
-    label: 'Smitten', color: '#ff8ac8', tint: 0x7a2050, permanent: true, player: false, mark: 'SMITTEN',
+    label: 'Smitten', color: '#ff8ac8', permanent: true, player: false, mark: 'SMITTEN',
     immune: (who) => who.status.heartbroken > 0,
     onStart: (game, who) => who.charm?.(game),
     onEnd: charmEnds,
