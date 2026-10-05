@@ -10,7 +10,7 @@ import { Monster } from '../monsters/monster.js';
 import { buildMonsterModel } from '../monsters/models.js';
 import { spawnTable } from '../monsters/defs.js';
 import { updateProjectiles } from '../fx/projectiles.js';
-import { updateParticles, burst } from '../fx/particles.js';
+import { updateParticles, burst, ring } from '../fx/particles.js';
 import { rand } from '../rng.js';
 import { glowSprite } from '../fx/glow.js';
 import { Drips } from '../fx/drips.js';
@@ -560,16 +560,22 @@ export class Level {
   }
 
   /** Shows a hidden trap, armed (or spent, if it has gone off): see world/trapModels.js. */
-  revealTrap(trap) {
-    if (!trap.hidden) return;
+  /**
+   * Shows a hidden trap. `found`: you've just found it (rather than set it off, or come back to it in a save): it fades
+   * into view, sparkling, a ring spreading across the floor round it, so you see where it is (the chime is the
+   * finder's: Sfx.trapFound). Returns whether it was hidden.
+   */
+  revealTrap(trap, { found = false } = {}) {
+    if (!trap.hidden) return false;
     trap.hidden = false;
-    this.showTrap(trap);
+    this.showTrap(trap, found);
+    return true;
   }
 
-  showTrap(trap) {
+  showTrap(trap, found = false) {
     // (The models download as the game starts; one found in the first moments shows once they're here.)
     if (!trapsLoaded()) {
-      loadTraps().then(() => this.showTrap(trap), () => {});
+      loadTraps().then(() => this.showTrap(trap, found), () => {});
       return;
     }
     const x = this.center(trap.x), z = this.center(trap.y);
@@ -577,6 +583,11 @@ export class Level {
     // On a rough floor, raised clear of the rock beneath it.
     if (this.rough) trap.view.root.position.y = Math.max(0, ...[[0, 0], [-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]].map(([dx, dz]) => this.rough.offset([x + dx, 0, z + dz], [0, 1, 0])));
     if (trap.triggered) trap.view.set('used');
+    if (found) {
+      trap.view.fadeIn();
+      this.statusFx.sparkle(x, trap.view.root.position.y, z);
+      ring(this, x, z, 0xffe6a0, 1, 0.7);
+    }
     this.group.add(trap.view.root);
   }
 
@@ -918,14 +929,16 @@ export class Level {
       this.searchT = 0.5;
       const eye = p.hasArtefact('eye');
       const ptx = this.toTile(p.x), pty = this.toTile(p.z);
+      let found = false;
       for (const tr of this.traps) {
         if (!tr.hidden) continue;
         const d = Math.max(Math.abs(tr.x - ptx), Math.abs(tr.y - pty));
         if (eye ? this.visible[this.idx(tr.x, tr.y)] : d <= 2 && rand.chance(0.18)) {
-          this.revealTrap(tr);
+          found = this.revealTrap(tr, { found: true });
           if (!eye) game.log('You notice a hidden trap.', 'warn');
         }
       }
+      if (found) game.audio.trapFound(); // (once, for however many)
     }
 
     // The dungeon restocks itself. Carrying the Amulet makes it furious.

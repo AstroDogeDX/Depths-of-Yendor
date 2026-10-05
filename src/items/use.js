@@ -243,7 +243,7 @@ export function readScroll(game, item) {
       return true;
     case 'mapping':
       level.revealAll();
-      for (const t of level.traps) level.revealTrap(t);
+      if (level.traps.filter((t) => level.revealTrap(t, { found: true })).length) game.audio.trapFound();
       game.log('An image of your surroundings forms in your mind!', 'good');
       announce();
       return false;

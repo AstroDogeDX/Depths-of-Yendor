@@ -19,7 +19,8 @@ import { Flame } from './flame.js';
 //   paralysed    it strains against its own limbs, shaking in fits (see strain)
 //   healing      green crosses rising off it, and glints of gold
 // Only monsters near you and in sight show them. A floor's sprites are all one THREE.Points (StatusFx), each sprite a
-// cell of one small atlas (SPRITES) drawn in its particle's colour; the flames are the torches' (fx/flame.js).
+// cell of one small atlas (SPRITES) drawn in its particle's colour; the flames are the torches' (fx/flame.js). The floor
+// sparkles with them too, where you find something hidden (see sparkle).
 
 const MAX = 480; // sprites at once on a floor
 const RANGE = 20; // metres from you within which monsters show their statuses
@@ -47,7 +48,7 @@ const FRAME = Object.fromEntries(Object.keys(SPRITES).map((k, i) => [k, i]));
 const COLORS = {
   water: 0x8cc4ff, blood: 0xc81a24, oil: 0xa8822a, sweat: 0xe0f2ff, frost: 0xd8f2ff, poison: 0x86e85a, heart: 0xff5aa6,
   broken: 0xc07898, star: 0xffe27a, starAlt: 0xe0a8ff, murk: 0x7c7694, weak: 0xc8603c, ember: 0xffd040, cinder: 0xa02008,
-  smoke: 0x3a3532, heal: 0x8cf08a, healGlint: 0xfff0a8,
+  smoke: 0x3a3532, heal: 0x8cf08a, healGlint: 0xfff0a8, sparkle: 0xfff0b8,
 };
 const rgb = (hex) => [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
 const C = Object.fromEntries(Object.entries(COLORS).map(([k, v]) => [k, rgb(v)]));
@@ -379,6 +380,21 @@ export class StatusFx {
     });
   }
 
+  /**
+   * A sparkle on the floor at (x, y, z): glints and stars twinkling up off the tile there, one after another, where
+   * you've found something hidden (a trap: see Level.showTrap). (A sprite with a negative age waits that long.)
+   */
+  sparkle(x, y, z) {
+    for (let i = 0; i < 12; i++) {
+      const star = Math.random() < 0.5;
+      this.add({
+        x: x + rnd(-0.45, 0.45), y: y + rnd(0.03, 0.2), z: z + rnd(-0.45, 0.45), vy: rnd(0.2, 0.45), age: -rnd(0, 0.7),
+        frame: star ? FRAME.star : FRAME.glint, alt: star ? FRAME.glint : FRAME.star, twinkle: rnd(6, 10),
+        size: rnd(0.08, 0.12), color: C.sparkle, life: rnd(0.7, 1.1), fadeIn: 0.12, fadeOut: 0.35,
+      });
+    }
+  }
+
   /** Its wounds mending: a green cross rising off it, or a glint of gold. */
   mend(m) {
     if (!this.bodyPoint(m, P)) return;
@@ -504,7 +520,7 @@ export class StatusFx {
       this.size[i] = (q.size + (q.size1 - q.size) * k) * (popping ? 1.3 : 1);
       this.frame[i] = popping ? FRAME.pop : q.twinkle && Math.floor(q.age * q.twinkle + q.ph) % 2 ? q.alt : q.frame;
       for (let j = 0; j < 3; j++) this.col[i * 4 + j] = q.c1 ? q.color[j] + (q.c1[j] - q.color[j]) * k : q.color[j];
-      this.col[i * 4 + 3] = q.alpha * Math.min(1, q.age / q.fadeIn, left / q.fadeOut);
+      this.col[i * 4 + 3] = q.alpha * Math.max(0, Math.min(1, q.age / q.fadeIn, left / q.fadeOut)); // (none yet if it's waiting)
     }
     const geo = this.points.geometry;
     geo.setDrawRange(0, ps.length);

@@ -201,6 +201,11 @@ export class Sfx {
   }
   levelUp() { [523, 659, 784, 1046].forEach((f, i) => this.tone({ f, dur: 0.18, type: 'triangle', vol: 0.14, delay: i * 0.1 })); }
   trap() { this.tone({ f: 90, f2: 420, dur: 0.22, type: 'square', vol: 0.2 }); }
+  /** A hidden trap found: a soft, bright chime rising, and a shimmer. */
+  trapFound() {
+    [1175, 1568, 2349].forEach((f, i) => this.tone({ f, dur: 0.16 + i * 0.05, type: 'triangle', vol: 0.07, delay: i * 0.07 }));
+    this.noise({ dur: 0.35, vol: 0.03, freq: 7000, type: 'highpass', q: 0.6, delay: 0.1 });
+  }
   // Traps going off, after the click of the plate (trap()): spikes shearing up, gas hissing out, an alarm bell.
   spikes() {
     this.noise({ dur: 0.2, vol: 0.28, freq: 3200, freq2: 1400, q: 2.5 });
