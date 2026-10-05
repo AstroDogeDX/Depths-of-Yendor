@@ -9,7 +9,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "models": "node tools/modelgen/build.mjs"
+    "models": "node tools/modelgen/build.mjs",
+    "music": "node tools/music.mjs"
   },
   "dependencies": {
     "three": "^0.169.0"

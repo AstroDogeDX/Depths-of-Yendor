@@ -14,6 +14,7 @@ import { ScreenFx } from './fx/screenFx.js';
 import { playerPopupPos } from './combat.js';
 import { Input, GAME_KEYS } from './input.js';
 import { Sfx } from './audio.js';
+import { Music } from './music/music.js';
 import { useSlot, slotItem, useHeldSlot, useHeld, HELD } from './hotbar.js';
 import { disposeGroup, propsForTheme } from './dungeon/levelBuilder.js';
 import { loadProps } from './dungeon/props.js';
@@ -64,6 +65,8 @@ export class Game {
     this.title = new TitleScene(this.renderer); // the walk through the dungeon behind the title screen
     this.input = new Input(canvas);
     this.audio = new Sfx();
+    this.music = new Music(this.audio); // the title theme
+    this.music.setTitle(true);
     this.ui = ui;
 
     this.resIdx = 0;
@@ -118,6 +121,7 @@ export class Game {
   /** What a new run and a continued one both start with: the seed's dungeon, cleared of any last run. */
   beginRun(seed, name) {
     this.title.stop();
+    this.music.setTitle(false);
     this.screenFx.reset();
     this.seed = seed;
     this.playerName = name;
@@ -231,6 +235,7 @@ export class Game {
     this.paused = false;
     this.input.unlock();
     this.title.start();
+    this.music.setTitle(true);
     this.ui.showTitle();
   }
 

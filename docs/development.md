@@ -29,6 +29,12 @@ For testing by hand, press **`** (the key left of 1) during a run to open the de
 - **Statuses:** give yourself, or the monster you're facing, any status for 15 s, as it would happen in play (immunities and how statuses meet included).
 - **Icons:** **Show every icon** lays out every item icon as big as the game shows them, each tinted one in every colour it comes in, the scroll with every rune, and the marks (see [Item icons](icons.md)).
 
+## Music
+
+The title theme is made the way the sound effects are, with no audio files: `music/theme.js` is its score, written out note by note (the leitmotif and its darker forms, its arrangement through the descent, and the mix), and `music/synth.js` the instruments it's played on, synthesized in plain JavaScript (plucked strings by Karplus-Strong, a recorder, a fiddle, brass, voices, a drone, a bell, drums and kettledrums), with a hall's reverb. The leitmotif's triumphant form, in the major (`TRIUMPHANT` in `theme.js`), waits for a theme for the run's end. It's rendered once as the game starts, in a worker (a few seconds), and loops on the title screen, fading in once it's ready and you've clicked or pressed a key (browsers allow no sound before that), and out as a run starts. What rings on past its end is laid over its start, so it loops without a seam. The Music toggle on the title screen turns it off.
+
+To work on it, `npm run music` renders it to `dist/title-theme.wav` (or `npm run music -- <file>`) with the same code, and says how loud each instrument came out.
+
 ## Code map
 
 ```
@@ -44,6 +50,8 @@ src/
   shield.js            shields: raising one, what it blocks (in front raised, behind on your back) and what that costs, the bash
   bow.js               bows and arrows: nocking, drawing and loosing, the jab, where an arrow lands and what it does there
   input.js / audio.js  pointer-lock input; WebAudio synth sfx + ambient drone
+  music/               the title theme: its score (theme.js), the synthesizer it's played on (synth.js), and its playing
+                       on the title screen (music.js), rendered in a worker as the game starts (worker.js)
   save.js              the saved run in local storage, and the helpers floors are saved with
   dungeon/generator.js pure data: plans the loop and branches, lays out rooms, routes corridors, populates (seeded)
   dungeon/rooms.js     room types (entrance, exit, standard, vault, shrine, shop): sizes, door style, furnishing
@@ -85,6 +93,7 @@ src/
   ui/devTools.js       the dev tools panel (the ` key): travel, stats, items and monsters for testing
 assets/models/         Blockbench models: monsters/, npcs/, weapons/, items/, props/, the hand lantern and the wall sconce
 tools/modelgen/        builds those models from code (npm run models)
+tools/music.mjs        renders the title theme to dist/title-theme.wav, to listen to as it's worked on (npm run music)
 public/                copied into the build as it is: the favicon, and the picture a shared link shows
 docs/                  these docs
 ```

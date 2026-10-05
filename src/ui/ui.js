@@ -183,6 +183,8 @@ export class UI {
       });
     }
     $('pause-fs').addEventListener('click', (e) => e.stopPropagation());
+    $('music-in').checked = game.music.on;
+    $('music-in').addEventListener('change', () => game.music.setOn($('music-in').checked));
     $('quit-btn').addEventListener('click', (e) => {
       e.stopPropagation(); // (not a click to resume)
       game.saveAndQuit();
