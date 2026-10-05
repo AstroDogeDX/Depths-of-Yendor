@@ -14,7 +14,7 @@ The models load with the game, and their textures a moment after; icons show onc
 
 `POSES` in `icons.js` says how each thing is posed for its picture, by `<kind>:<type>`, else by kind, else the `default`: seen from the front and a little above (`tilt`), turned toward the light (`turn`), and for a few, rolled in the picture first (`roll`), like the wand and the key, which lie on the diagonal.
 
-Weapons, bows and arrows are `diagonal`: seen from the side, their edge or striking face toward the bottom right, then laid on the diagonal, blade or head up to the right. They're made `thick` times as thick across their length, or a blade or a haft would be a hairline at this size.
+Weapons, bows, arrows, darts and throwing knives are `diagonal`: seen from the side, their edge or striking face toward the bottom right, then laid on the diagonal, blade or head up to the right. They're made `thick` times as thick across their length, or a blade or a haft would be a hairline at this size.
 
 ## What changes from run to run
 

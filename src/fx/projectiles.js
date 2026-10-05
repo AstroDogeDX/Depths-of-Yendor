@@ -10,7 +10,8 @@ const ORB_GEO = new THREE.IcosahedronGeometry(1, 0);
  * o: { x, y, z, vx, vy, vz, owner: 'monster'|'player'|'ally', attacker (the monster that shot it), dmg, kind, color,
  *      size, source,
  *      type? (its damage type, see damage.js: fire sets what it hits burning), harmless? (a spell that does no harm:
- *      teleport other), gravity?, life?, mesh? (a model of its own: an arrow's points +z, the way it flies),
+ *      teleport other), gravity?, life?, mesh? (a model of its own: an arrow's or a thrown weapon's faces +z, the way
+ *      it flies), spin? (a thrown weapon's mesh's first child turns end over end, about x, this many radians a second),
  *      onImpact?(game, pr, target) }
  * A shot stops at a shut chest. One of yours strikes it (see Game.hitChest), and if that wakes a mimic, the shot hits
  * the mimic; `pr.chest` is the chest it hit.
@@ -73,8 +74,9 @@ export function updateProjectiles(dt, game, level) {
       if (!done && (pr.chest = level.chestAt(pr.x, pr.y, pr.z))) done = true;
     }
     pr.mesh.position.set(pr.x, pr.y, pr.z);
-    if (pr.kind === 'arrow') pr.mesh.lookAt(pr.x + pr.vx, pr.y + pr.vy, pr.z + pr.vz);
+    if (pr.kind === 'arrow' || pr.kind === 'thrown') pr.mesh.lookAt(pr.x + pr.vx, pr.y + pr.vy, pr.z + pr.vz);
     else pr.mesh.rotation.y += dt * 8;
+    if (pr.spin) pr.mesh.children[0].rotation.x += pr.spin * dt;
 
     if (done) {
       // (A potion is the splash's business: see potionSplash.)

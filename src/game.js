@@ -456,9 +456,10 @@ export class Game {
    * on yourself: again, for another, while you still hold the key (after HOLD_USE). A click while it's on its way up
    * waits for it. Meanwhile the mouse does nothing else: no swing, nothing from your off hand. Let go and it goes back
    * down, the weapon back up. Having to raise each one in turn is what keeps a hotbar of wands from being played like
-   * piano keys. `hold`: { i (the slot), readyAt (this.time), queued (a click waiting: 'left' | 'right') } while a key
-   * is held; or, quaffing a potion with Q (see quickHeal), { i: -1, item, readyAt, queued: 'right', until }, which
-   * lets go by itself once it's drunk (`until`).
+   * piano keys. A thrown weapon is wound up with right-click held, and thrown with a click, instead (see updateThrow in
+   * thrown.js, which takes the click kept for it here). `hold`: { i (the slot), readyAt (this.time), queued (a click
+   * waiting: 'left' | 'right') } while a key is held; or, quaffing a potion with Q (see quickHeal), { i: -1, item,
+   * readyAt, queued: 'right', until }, which lets go by itself once it's drunk (`until`).
    */
   holdSlot(inp) {
     const down = (i) => inp.down(`Digit${i + 1}`) || inp.down(`Numpad${i + 1}`);
@@ -477,8 +478,9 @@ export class Game {
     inp.pressed.delete('Mouse0');
     inp.pressed.delete('Mouse2');
     inp.mouseDown = false;
-    if (click && !h.item) h.queued = click; // (quaffing, a click does nothing)
-    if (h.queued && this.time >= h.readyAt) {
+    const wind = !h.item && HELD[slotItem(this.player, h.i)?.kind]?.wind;
+    if (click && !h.item && !(wind && click === 'right')) h.queued = click; // (quaffing, a click does nothing)
+    if (h.queued && this.time >= h.readyAt && !wind) {
       if (h.item) {
         useHeld(this, h.item, h.queued);
         h.until = this.time + actTime('drink');
@@ -551,7 +553,7 @@ export class Game {
     this.viewmodel.update(dt, {
       moving: p.moving, bob: p.bob, charge: p.charge, time: this.time, yaw: p.yaw, sprint: p.moving && p.mode === 'sprint',
       lightLevel: p.status.blind > 0 ? 0.1 : 1, carriedLight: p.carriedLight(),
-      offhand: p.equip.offhand, guard: p.guard, twoHanded: p.twoHanded, held: this.heldItem(),
+      offhand: p.equip.offhand, guard: p.guard, twoHanded: p.twoHanded, held: this.heldItem(), windup: p.windup,
       nock: p.nock, draw: p.draw, quiver: quiverOf(p)?.type ?? null,
     });
     this.screenFx.update(dt, this);
@@ -749,6 +751,7 @@ export class Game {
       this.log(`${ARTEFACTS[item.type].name}: ${ARTEFACTS[item.type].desc} Put it on from your pack.`, 'good');
     }
     this.noteContainer(item);
+    this.noteThrown(item);
     if (item.kind === 'amulet' && !this.amuletTaken) {
       this.amuletTaken = true;
       this.audio.victory();
@@ -763,6 +766,13 @@ export class Game {
     if (item.kind !== 'container') return;
     const c = CONTAINERS[item.type];
     this.log(`You fasten the ${c.name} to your pack. Your ${c.what} go in it now, on a tab of their own.`, 'good');
+  }
+
+  /** The first time you get some thrown weapons (and they aren't on your hotbar already), says how to throw them (see thrown.js). */
+  noteThrown(item) {
+    if (item.kind !== 'thrown' || this.toldThrow || this.player.onHotbar(item)) return;
+    this.toldThrow = true;
+    this.log('Put them on your hotbar to throw them: hold the slot\'s key to take one up, hold right-click to draw back, and click to throw.', 'info');
   }
 
   /** Buys an item from the shop: gold for goods, no haggling, no refunds. */
@@ -786,6 +796,7 @@ export class Game {
     this.audio.coins();
     this.log(`You buy ${this.knowledge.name(one, { article: true })} for ${entry.price * n} gold.`, 'good');
     this.noteContainer(one);
+    this.noteThrown(one);
     level.shopkeeper?.sold(this, level);
   }
 

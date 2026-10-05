@@ -9,6 +9,7 @@ import { spawnTable } from '../monsters/defs.js';
 import { sellPrice, refusedAsCursed } from './generate.js';
 import { cure, HEALING } from '../status.js';
 import { lookDir } from '../combat.js';
+import { toss } from '../thrown.js';
 
 // --- Inventory actions shown in the pack screen ---
 
@@ -39,6 +40,8 @@ export function itemActions(game, item) {
       acts.push({ label: 'Zap', fn: () => zapWand(game, item) });
       acts.push({ label: 'Zap yourself', fn: () => zapSelf(game, item) });
       break;
+    // (Thrown properly from the hotbar, wound up: see thrown.js. From here, a toss.)
+    case 'thrown': acts.push({ label: 'Throw', fn: () => toss(game, item) }); break;
     case 'weapon': case 'offhand': case 'shield': case 'bow': case 'arrow': case 'armor': case 'ring': case 'artefact': {
       const [on, off] = EQUIP_LABELS[item.kind];
       acts.push(equipped ? { label: off, fn: () => putAway(game, item) } : { label: on, fn: () => equipItem(game, item) });

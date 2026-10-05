@@ -13,6 +13,7 @@ import { weapons } from './weapons.mjs';
 import { handLantern } from './lantern.mjs';
 import { woodenShield } from './shields.mjs';
 import { woodenBow, arrow } from './bows.mjs';
+import { throwingStone, dart, throwingKnife } from './thrown.mjs';
 import { sconce } from './sconce.mjs';
 import { items } from './items.mjs';
 import { armors } from './armor.mjs';
@@ -35,6 +36,9 @@ const MODELS = {
   wooden_shield: { file: 'wooden_shield.bbmodel', build: woodenShield },
   wooden_bow: { file: 'wooden_bow.bbmodel', build: woodenBow },
   arrow: { file: 'arrow.bbmodel', build: arrow },
+  throwing_stone: { file: 'throwing_stone.bbmodel', build: throwingStone },
+  dart: { file: 'dart.bbmodel', build: dart },
+  throwing_knife: { file: 'throwing_knife.bbmodel', build: throwingKnife },
   sconce: { file: 'sconce.bbmodel', build: sconce },
   ...Object.fromEntries(Object.entries({ ...monsters, mimic }).map(([name, build]) => [name, { file: `monsters/${name}.bbmodel`, build }])),
   ...Object.fromEntries(Object.entries({ ...props, ...chests, ...sewers, ...catacombs, ...caves, ...dwarven, ...underworld }).map(([name, build]) => [name, { file: `props/${name}.bbmodel`, build }])),

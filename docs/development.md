@@ -45,12 +45,13 @@ src/
   build.js             which build this is (stamped in by vite.config.js), for the title screen and saves
   game.js              run lifecycle, level transitions, rendering, interaction, traps, endings
   player.js            movement, attack meter, stats, grip, the light you carry, statuses, hunger/regen, inventory
-  combat.js            player melee resolution
+  combat.js            player melee resolution, and your missiles (arrows, thrown weapons) striking and where they land
   damage.js            damage types (physical, magic and the elements) and the resistances to them
   status.js            statuses for the player and monsters alike: what they do, what wards them off, how they meet
   hotbar.js            hotbar bindings and what each slot does when pressed (swapping a weapon, lantern, shield or bow into your hand)
   shield.js            shields: raising one, what it blocks (in front raised, behind on your back) and what that costs, the bash
-  bow.js               bows and arrows: nocking, drawing and loosing, the jab, where an arrow lands and what it does there
+  bow.js               bows and arrows: nocking, drawing and loosing, the jab, and what an arrow does when it strikes
+  thrown.js            thrown weapons (stones, darts, throwing knives): drawing back, charging and throwing from the hotbar
   input.js / audio.js  pointer-lock input; WebAudio synth sfx + ambient drone
   music/               the music: the title theme's score (title.js) and the shop's (shop.js), written with notes.js; the
                        synthesizer they're played on (synth.js); and their playing (music.js), rendered in a worker as
@@ -109,5 +110,5 @@ Balance numbers live in `monsters/defs.js`, `items/defs.js` and `config.js`. `wi
 - More furniture for other room types
 - More level shapes: caves via cellular automata, chasms that drop you a floor, rooms designed round their pools (a flooded crypt, a cistern, a bathhouse)
 - Splitting oozes, invisible stalkers, thieves who steal and teleport away
-- Alchemy or crafting for spare potions, and more kinds of arrow, and thrown weapons, for the bullet pouch
+- Alchemy or crafting for spare potions, and more kinds of arrow and thrown weapon
 - Music, and positional audio for monsters you can hear but not see

@@ -67,6 +67,32 @@ export const ARROWS = {
               desc: 'A shaft of ash with an iron bodkin point, fletched with goose feathers.' },
 };
 
+// Thrown weapons (kind 'thrown'), a stack to a type, thrown from the hotbar (see thrown.js) and kept in the bullet pouch.
+// Nothing about one is hidden: no +, no curse, no enchantment. How one is thrown is in thrown.js, and a new one is an
+// entry here.
+//   dmg        what one does thrown as hard as you can (its `dmgType`: see damage.js); thrown less hard, it does less
+//   draw       seconds to charge a throw all the way, once your arm's drawn back
+//   speed      how fast one flies thrown as hard as you can, in m/s: thrown less hard, it flies slower and drops sooner
+//   spin       how fast it turns end over end as it flies, in radians a second (a dart flies point first)
+//   size       how near it must pass something to strike it, in metres
+//   breaks     the chance one breaks when it strikes a monster (else it falls there, to be picked up again)
+//   stuff      what it's made of, for how it sounds and what it breaks into: 'stone', 'wood' or 'steel'
+//   pile       how many lie together where some are found, and `freq` how often it's the kind found
+//   heap       on the floor they lie in a little heap, where the rest lie side by side
+//   model      its Blockbench model in assets/models/ (see tools/modelgen/thrown.mjs)
+// `value` is for one.
+export const THROWN = {
+  stone: { name: 'stone', dmg: [1, 4], dmgType: 'bash', draw: 0.7, speed: 14, spin: 9, size: 0.08, breaks: 0.1, stuff: 'stone',
+           pile: [4, 9], freq: 40, value: 2, heap: true, model: 'throwing_stone',
+           desc: 'A smooth river stone the size of an egg, heavy in the hand.' },
+  dart:  { name: 'dart', dmg: [2, 5], dmgType: 'stab', draw: 0.55, speed: 19, spin: 0, size: 0.05, breaks: 0.3, stuff: 'wood',
+           pile: [3, 7], freq: 34, value: 4, model: 'dart',
+           desc: 'A short ash dart with an iron point and goose-feather flights, weighted behind its head to fly true.' },
+  knife: { name: 'throwing knife', plural: 'throwing knives', dmg: [3, 6], dmgType: 'slash', draw: 0.8, speed: 16, spin: 18,
+           size: 0.07, breaks: 0.12, stuff: 'steel', pile: [2, 5], freq: 26, value: 9, model: 'throwing_knife',
+           desc: 'A slim blade with no guard and a ring at its end, balanced to turn in the air and strike edge first.' },
+};
+
 // resist: how much of each kind of blow gets through the armour (see damage.js). Each turns some kinds of blow
 // better than others.
 export const ARMORS = {
@@ -187,7 +213,6 @@ export const CONTAINERS = {
                       desc: 'A leather belt worn across the chest, with padded loops for flasks. It holds ten kinds of potion, in their own slots, apart from your pack.' },
   wand_holster:     { name: 'wand holster', tab: 'Wands', what: 'wands', holds: ['wand'], shop: true, value: 300,
                       desc: 'A sheath of oiled leather worn at the hip, with a sleeve for each wand. It holds ten wands, in their own slots, apart from your pack.' },
-  // (Thrown weapons, kind 'thrown', are still to come: until then it has nothing to hold.)
   bullet_pouch:     { name: 'bullet pouch', tab: 'Pouch', what: 'things to throw', holds: ['thrown'], shop: true, value: 300,
                       desc: 'A drawstring pouch of thick hide for things to throw. It holds ten piles of them, in their own slots, apart from your pack.' },
 };
@@ -223,6 +248,6 @@ export const RING_GEMS = [
 ];
 
 export const KIND_GLYPH = {
-  weapon: ')', offhand: '(', shield: ']', bow: '}', arrow: '|', armor: '[', potion: '!', scroll: '?', wand: '/', ring: '=', food: '%',
+  weapon: ')', offhand: '(', shield: ']', bow: '}', arrow: '|', thrown: '`', armor: '[', potion: '!', scroll: '?', wand: '/', ring: '=', food: '%',
   artefact: '*', amulet: '"', gold: '$', key: '-', container: '&',
 };

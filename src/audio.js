@@ -199,6 +199,30 @@ export class Sfx {
     this.noise({ dur: 0.07, vol: 0.18, freq: 1400, q: 2 });
     this.tone({ f: 260, f2: 160, dur: 0.08, type: 'triangle', vol: 0.08 });
   }
+  // A thrown weapon (see thrown.js): your arm drawn back, the throw's rush of air, and one striking a wall or breaking,
+  // by what it's made of ('stone', 'wood' or 'steel').
+  windUp() { this.noise({ dur: 0.22, vol: 0.05, freq: 450, freq2: 950, q: 1.4 }); }
+  hurl() { this.noise({ dur: 0.2, vol: 0.2, freq: 900, freq2: 3200, q: 1.1 }); }
+  clatter(stuff) {
+    if (stuff === 'stone') {
+      // A clack, and a smaller one as it bounces.
+      for (const [delay, vol] of [[0, 1], [0.11, 0.45]]) {
+        this.tone({ f: 620, f2: 380, dur: 0.05, type: 'triangle', vol: 0.12 * vol, delay });
+        this.noise({ dur: 0.06, vol: 0.2 * vol, freq: 2200, q: 1.5, delay });
+      }
+    } else if (stuff === 'steel') {
+      this.tone({ f: 2900, f2: 2650, dur: 0.22, type: 'triangle', vol: 0.06 });
+      this.tone({ f: 4300, dur: 0.12, type: 'sine', vol: 0.03 });
+      this.noise({ dur: 0.05, vol: 0.14, freq: 4000, q: 2 });
+    } else this.thunk();
+  }
+  crack(stuff) {
+    if (stuff === 'stone') this.noise({ dur: 0.16, vol: 0.18, freq: 900, freq2: 400, q: 0.8 });
+    else if (stuff === 'steel') {
+      this.tone({ f: 3400, f2: 2200, dur: 0.08, type: 'triangle', vol: 0.06 });
+      this.noise({ dur: 0.06, vol: 0.12, freq: 5000, type: 'highpass', q: 0.8 });
+    } else this.noise({ dur: 0.05, vol: 0.12, freq: 2400, q: 3 });
+  }
   levelUp() { [523, 659, 784, 1046].forEach((f, i) => this.tone({ f, dur: 0.18, type: 'triangle', vol: 0.14, delay: i * 0.1 })); }
   trap() { this.tone({ f: 90, f2: 420, dur: 0.22, type: 'square', vol: 0.2 }); }
   /** A hidden trap found: a soft, bright chime rising, and a shimmer. */

@@ -21,7 +21,8 @@ const PAL = {
   dyed: P('#2a0806', '#46100c', '#661a12', '#88261a', '#a83624', '#c44c32'),
 };
 
-const mats = {
+// (The arrow's ash and feathers fletch the darts in thrown.mjs too.)
+export const mats = {
   ...MAT,
   // A yew stave, the grain running along it: sapwood on the back (+z), heartwood elsewhere, and a pin knot here and
   // there.

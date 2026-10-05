@@ -1,7 +1,10 @@
 import { rand } from './rng.js';
 import { damageMult } from './damage.js';
+import { burst } from './fx/particles.js';
 
 const CONE = Math.cos(0.75); // ~43° either side of the crosshair
+const PILE = 0.8; // a missile of yours that falls this near a pile of its kind joins it
+const HEARD = 6; // monsters this near where a missile of yours clatters may come to look
 
 /** Which way you're looking, as a unit vector. */
 export function lookDir(p) {
@@ -86,6 +89,71 @@ export function playerStrike(game, power, w = game.player.weaponStats(), jab = f
     game.log(`You are now familiar enough with your weapon to know it: ${game.knowledge.name(weapon)}.`, 'info');
   }
   return true;
+}
+
+/**
+ * A missile of yours (`pr`: an arrow, a thrown weapon) striking a monster: it may dodge one it's ready for (as it would
+ * a blow, less your `accuracy`), or else takes `dmg` (rolled) times how hard it was shot or thrown (`pr.power`) and
+ * `mult`, double if it was unaware of you, less a roll up to its defense. `what` names it for the log. Returns what got
+ * through (see Monster.takeDamage), or -1 if it dodged.
+ */
+export function missileHit(game, pr, m, { dmg, type, accuracy = 0, mult = 1, what }) {
+  const sneak = m.state !== 'hunt' || !m.seen || m.held();
+  if (!sneak && rand.chance(m.def.dodge - accuracy)) {
+    game.popup(m.headPos(), 'dodge', 'miss');
+    game.audio.whiff();
+    m.notice(game);
+    return -1;
+  }
+  let n = Math.round(dmg * pr.power * mult);
+  if (sneak) n *= 2;
+  n = Math.max(1, n - rand.int(0, m.def.def));
+  if (sneak) game.log(`Your ${what} takes the unsuspecting ${m.name}!`, 'good');
+  const dealt = m.takeDamage(game, n, { type, sneak, knockback: { x: pr.vx / 40, z: pr.vz / 40 } });
+  const k = damageMult(m.def, type);
+  if (dealt > 0) game.audio.hit(k > 1 ? 'weak' : k < 1 ? 'resist' : null);
+  return dealt;
+}
+
+/**
+ * A missile of yours (an arrow, a thrown weapon: `pr.item`) comes down: in a monster (`target`), which `hit` resolves
+ * (returning whether it struck), or against a wall, a chest or the floor. One that strikes may break (`breaks`), into
+ * bits of `chips` (with `crack`, if it makes a sound); otherwise it falls where it struck, onto any pile of its kind
+ * there, to be picked up again. One that strikes a wall clatters (`clatter`), and monsters near where it fell that
+ * aren't hunting you may come to look into it.
+ */
+export function missileLands(game, pr, target, { hit, breaks, chips, clatter, crack = null }) {
+  const level = game.level;
+  const struck = !!target && target !== 'player' && hit(game, pr, target);
+  if (struck && rand.chance(breaks)) {
+    burst(level, pr.x, pr.y, pr.z, chips, 5, 1.6, 0.35);
+    crack?.();
+    return;
+  }
+  if (target && target !== 'player') {
+    dropPile(game, pr.item, target.x, target.z);
+    return;
+  }
+  // It clatters off what it struck, and falls back from it.
+  burst(level, pr.x, pr.y, pr.z, chips, 4, 1.4, 0.3);
+  clatter();
+  for (const m of level.monsters) {
+    if (m.dead || m.state === 'hunt' || Math.hypot(m.x - pr.x, m.z - pr.z) > HEARD) continue;
+    if (rand.chance(m.state === 'sleep' ? 0.25 : 0.6)) m.hear(game, level, pr.x, pr.z);
+  }
+  const sp = Math.hypot(pr.vx, pr.vz) || 1;
+  dropPile(game, pr.item, pr.x - (pr.vx / sp) * 0.4, pr.z - (pr.vz / sp) * 0.4);
+}
+
+/** Lays a stack (arrows, thrown weapons) on the floor near (x, z), on the pile of its kind there if there's one. */
+export function dropPile(game, item, x, z) {
+  const level = game.level, at = level.landSpot(x, z);
+  level.collide(at, 0.2);
+  const pile = level.items.find((e) => !e.price && e.item.kind === item.kind && e.item.type === item.type && Math.hypot(e.x - at.x, e.z - at.z) < PILE);
+  if (pile) {
+    level.removeItem(pile);
+    level.addItem({ ...pile.item, qty: pile.item.qty + item.qty }, pile.x, pile.z);
+  } else level.addItem(item, at.x, at.z);
 }
 
 /** Point just in front of the player's face, used for popups about the player. */

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { iconItemModel } from '../items/models.js';
 import { texturesLoaded } from '../items/bbmodel.js';
 import {
-  WEAPONS, OFFHANDS, SHIELDS, BOWS, ARROWS, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, CONTAINERS,
+  WEAPONS, OFFHANDS, SHIELDS, BOWS, ARROWS, THROWN, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, CONTAINERS,
   POTION_COLORS, WAND_MATERIALS, RING_GEMS,
 } from '../items/defs.js';
 import { PALETTE, OUTLINE, RUNES, RUNE_INK, MARK_ICONS } from './iconArt.js';
@@ -22,14 +22,16 @@ const COVER = 0.4; // how much of its block the item must cover for a pixel to b
 
 // How each thing is posed (by `<kind>:<type>`, else its kind, over `default`): turned about the vertical (`turn`,
 // radians, toward the light at the top left), tipped toward you to be seen from above (`tilt`), and rolled in the
-// picture (`roll`, about the line of sight, before the rest). A `diagonal` thing (a weapon, a bow, an arrow) is seen
-// from the side instead, its edge to the right and its tip up, `turn` toward you, and laid on the diagonal, tip up to
-// the right; and it's made `thick` times as thick across, or its blade or haft would be a hairline at this size.
+// picture (`roll`, about the line of sight, before the rest). A `diagonal` thing (a weapon, a bow, an arrow, a dart) is
+// seen from the side instead, its edge to the right and its tip up, `turn` toward you, and laid on the diagonal, tip up
+// to the right; and it's made `thick` times as thick across, or its blade or haft would be a hairline at this size.
 const POSES = {
   default: { turn: 0.6, tilt: 0.45 },
   weapon: { diagonal: true, turn: 0.35, thick: 1.6 },
   bow: { diagonal: true, turn: 0.35, thick: 1.6 },
   arrow: { diagonal: true, turn: 0.35, thick: 1.6 },
+  thrown: { diagonal: true, turn: 0.35, thick: 1.6 },
+  'thrown:stone': { diagonal: false },
   shield: { turn: 0.35, tilt: 0.15 },
   offhand: { tilt: 0.22 },
   scroll: { turn: 0.25, tilt: 0.12 },
@@ -83,7 +85,7 @@ export function everyIcon() {
   const out = [];
   const add = (kind, type, label = `${kind}: ${type}`, look = {}) => out.push({ label, item: { kind, type }, color: 0xffffff, rune: null, ...look });
   for (const [kind, defs] of [['weapon', WEAPONS], ['offhand', OFFHANDS], ['shield', SHIELDS], ['bow', BOWS], ['arrow', ARROWS],
-    ['armor', ARMORS], ['artefact', ARTEFACTS], ['food', FOOD], ['container', CONTAINERS]]) {
+    ['thrown', THROWN], ['armor', ARMORS], ['artefact', ARTEFACTS], ['food', FOOD], ['container', CONTAINERS]]) {
     for (const type of Object.keys(defs)) add(kind, type);
   }
   for (const [kind, defs, looks] of [['potion', POTIONS, POTION_COLORS], ['wand', WANDS, WAND_MATERIALS], ['ring', RINGS, RING_GEMS]]) {

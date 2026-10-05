@@ -14,7 +14,7 @@ import { stackable } from './items/generate.js';
 export const HAND_KINDS = new Set(['weapon', 'offhand', 'shield', 'bow']);
 
 export function canHotbar(item) {
-  return item.kind === 'potion' || item.kind === 'scroll' || item.kind === 'food' || item.kind === 'wand' ||
+  return item.kind === 'potion' || item.kind === 'scroll' || item.kind === 'food' || item.kind === 'wand' || item.kind === 'thrown' ||
     (item.kind === 'artefact' && !!ARTEFACTS[item.type].active) || HAND_KINDS.has(item.kind);
 }
 
@@ -66,12 +66,14 @@ export function moveSlot(player, from, to) {
 
 /**
  * What holding a slot's key lets you do with what's in it, by kind: raised in place of your weapon, click for `left`
- * and right-click for `right`, which is always on yourself (see Game.holdSlot and useHeldSlot). Anything else is used
- * the moment its key is pressed.
+ * and right-click for `right`, which is always on yourself (see Game.holdSlot and useHeldSlot). A thrown weapon
+ * (`wind`) is wound up instead, while right-click is held, and thrown with a click (see thrown.js). Anything else is
+ * used the moment its key is pressed.
  */
 export const HELD = {
   potion: { left: 'Throw', right: 'Drink' },
   wand: { left: 'Zap', right: 'Zap yourself' },
+  thrown: { left: 'Throw', right: 'Draw back', wind: true },
 };
 
 /** What pressing the slot does: for what's HELD, 'hold' (you choose, holding its key); for what you hold, 'swap'. */
@@ -139,9 +141,12 @@ export function useHeldSlot(game, i, button) {
   return useHeld(game, slotItem(game.player, i), button);
 }
 
-/** Uses `item`, held up in place of your weapon (from the hotbar, or a healing potion quaffed with Q), as useHeldSlot. */
+/**
+ * Uses `item`, held up in place of your weapon (from the hotbar, or a healing potion quaffed with Q), as useHeldSlot.
+ * (Not a thrown weapon, which is thrown as it's wound up: see updateThrow.)
+ */
 export function useHeld(game, item, button) {
-  if (!item || !HELD[item.kind] || !game.canAct() || !game.player.inventory.includes(item)) return false;
+  if (!item || !HELD[item.kind] || HELD[item.kind].wind || !game.canAct() || !game.player.inventory.includes(item)) return false;
   const last = item.qty <= 1 && item.kind === 'potion'; // (a wand stays, spent or not)
   let did, act;
   if (item.kind === 'potion') {

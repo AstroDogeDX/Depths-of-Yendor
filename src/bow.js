@@ -3,9 +3,7 @@ import { BOWS, ARROWS } from './items/defs.js';
 import { enchantOf, baneOf } from './items/enchant.js';
 import { heldModel } from './items/models.js';
 import { spawnProjectile } from './fx/projectiles.js';
-import { burst } from './fx/particles.js';
-import { lookDir } from './combat.js';
-import { damageMult } from './damage.js';
+import { lookDir, missileHit, missileLands } from './combat.js';
 import { rand } from './rng.js';
 
 // Bows (kind 'bow', BOWS in items/defs.js) and the arrows they shoot (kind 'arrow', ARROWS): what a bow in your off hand
@@ -24,15 +22,14 @@ import { rand } from './rng.js';
 //               While right-click is held another arrow is nocked after each shot.
 //   On your back  gripping your weapon in both hands (F) slings it over your shoulder, and your weapon comes back up.
 // An arrow that strikes a monster may break (its `breaks`); otherwise it falls where it struck, to be picked up again,
-// and one that strikes a wall clatters, which monsters nearby may come to look into. A monster unaware of you takes
-// double damage, as from any blow, and a dodgy one may dodge an arrow it sees coming.
+// and one that strikes a wall clatters, which monsters nearby may come to look into (see missileLands in combat.js). A
+// monster unaware of you takes double damage, as from any blow, and a dodgy one may dodge an arrow it sees coming.
 
 export const MIN_DRAW = 0.2; // drawn less than this, letting go of click looses nothing
 export const JAB = 0.3; // a jab does this share of what the arrow would do shot at full draw
 const JAB_REACH = 1.5, JAB_RECHARGE = 0.6;
 const GRAVITY = 4; // m/s² an arrow drops
-const PILE = 0.8; // an arrow that falls this near a pile of its kind joins it
-const HEARD = 6; // monsters this near where an arrow clatters may come to look
+const SPLINTERS = 0xb09070; // an arrow breaking, or clattering off a wall
 
 /** The bow in your off hand, or null. */
 export const bowOf = (p) => (p.equip.offhand?.kind === 'bow' ? p.equip.offhand : null);
@@ -124,8 +121,10 @@ function loose(game, p, bow, quiver) {
     x: p.x + d.x * 0.3, y: p.eyeHeight() - 0.06 + d.y * 0.3, z: p.z + d.z * 0.3,
     vx: d.x * speed, vy: d.y * speed, vz: d.z * speed, gravity: GRAVITY,
     owner: 'player', kind: 'arrow', mesh: flyingArrow(type), size: 0.06, life: 4, type: ARROWS[type].dmgType,
-    arrow: one, bow, stats: s, power: 0.3 + 0.7 * draw,
-    onImpact: arrowLands,
+    item: one, bow, stats: s, power: 0.3 + 0.7 * draw,
+    onImpact: (g, pr, target) => missileLands(g, pr, target, {
+      hit: arrowHit, breaks: ARROWS[type].breaks, chips: SPLINTERS, clatter: () => g.audio.thunk(),
+    }),
   });
   p.nock = 0;
   p.charge = 0;
@@ -142,50 +141,17 @@ function veer(d, spread) {
   return { x: x / len, y: y / len, z: z / len };
 }
 
-/** An arrow shot from your bow comes down: in a monster (`target`), or against a wall, a chest or the floor. */
-function arrowLands(game, pr, target) {
-  const level = game.level;
-  const struck = !!target && target !== 'player' && arrowHit(game, pr, target);
-  if (struck && rand.chance(ARROWS[pr.arrow.type].breaks)) {
-    burst(level, pr.x, pr.y, pr.z, 0xb09070, 5, 1.6, 0.35); // splinters
-    return;
-  }
-  if (target && target !== 'player') {
-    dropArrow(game, pr.arrow, target.x, target.z);
-    return;
-  }
-  // It clatters off what it struck, and falls back from it.
-  burst(level, pr.x, pr.y, pr.z, 0xb09070, 4, 1.4, 0.3);
-  game.audio.thunk();
-  for (const m of level.monsters) {
-    if (m.dead || m.state === 'hunt' || Math.hypot(m.x - pr.x, m.z - pr.z) > HEARD) continue;
-    if (rand.chance(m.state === 'sleep' ? 0.25 : 0.6)) m.hear(game, level, pr.x, pr.z);
-  }
-  const sp = Math.hypot(pr.vx, pr.vz) || 1;
-  dropArrow(game, pr.arrow, pr.x - (pr.vx / sp) * 0.4, pr.z - (pr.vz / sp) * 0.4);
-}
-
 /**
  * An arrow strikes a monster: it may dodge one it's ready for (as it would a blow, less your bow's aim), or else takes
- * the arrow's damage, by how far it was drawn, double if it was unaware of you, and whatever the bow and the arrow bring
- * (see items/enchant.js). Hits teach you the bow. Returns whether it struck.
+ * the arrow's damage, by how far it was drawn, double if it was unaware of you (see missileHit), and whatever the bow
+ * and the arrow bring (see items/enchant.js). Hits teach you the bow. Returns whether it struck.
  */
 function arrowHit(game, pr, m) {
-  const s = pr.stats, a = ARROWS[pr.arrow.type];
-  const sneak = m.state !== 'hunt' || !m.seen || m.held();
-  if (!sneak && rand.chance(m.def.dodge - s.accuracy)) {
-    game.popup(m.headPos(), 'dodge', 'miss');
-    game.audio.whiff();
-    m.notice(game);
-    return false;
-  }
-  let dmg = Math.round((rand.int(s.dmg[0], s.dmg[1]) + s.plus + a.dmg) * pr.power * s.dmgMult);
-  if (sneak) dmg *= 2;
-  dmg = Math.max(1, dmg - rand.int(0, m.def.def));
-  if (sneak) game.log(`Your arrow takes the unsuspecting ${m.name}!`, 'good');
-  const dealt = m.takeDamage(game, dmg, { type: a.dmgType, sneak, knockback: { x: pr.vx / 40, z: pr.vz / 40 } });
-  const mult = damageMult(m.def, a.dmgType);
-  if (dealt > 0) game.audio.hit(mult > 1 ? 'weak' : mult < 1 ? 'resist' : null);
+  const s = pr.stats, a = ARROWS[pr.item.type];
+  const dealt = missileHit(game, pr, m, {
+    dmg: rand.int(s.dmg[0], s.dmg[1]) + s.plus + a.dmg, type: a.dmgType, accuracy: s.accuracy, mult: s.dmgMult, what: 'arrow',
+  });
+  if (dealt < 0) return false;
   for (const fx of [s.onHit, a.onHit]) {
     if (!fx || dealt <= 0 || m.dead) continue;
     if (fx.ignite) m.afflict(game, 'burning', fx.ignite, false);
@@ -198,17 +164,6 @@ function arrowHit(game, pr, m) {
     game.log(`You've put enough arrows home to know your bow: ${game.knowledge.name(bow)}.`, 'info');
   }
   return true;
-}
-
-/** Lays an arrow on the floor near (x, z), on the pile of its kind there if there's one. */
-export function dropArrow(game, item, x, z) {
-  const level = game.level, at = level.landSpot(x, z);
-  level.collide(at, 0.2);
-  const pile = level.items.find((e) => !e.price && e.item.kind === 'arrow' && e.item.type === item.type && Math.hypot(e.x - at.x, e.z - at.z) < PILE);
-  if (pile) {
-    level.removeItem(pile);
-    level.addItem({ ...pile.item, qty: pile.item.qty + item.qty }, pile.x, pile.z);
-  } else level.addItem(item, at.x, at.z);
 }
 
 /** An arrow of `type` as it flies: its point at its origin, and pointing +z (which Object3D.lookAt turns where it goes). */

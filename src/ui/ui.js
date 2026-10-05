@@ -20,7 +20,8 @@ const $ = (id) => document.getElementById(id);
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const KIND_COLOR = {
-  weapon: '#c8ccd4', offhand: '#ffa050', shield: '#b08050', bow: '#c09060', arrow: '#d8c8a0', armor: '#c0a880', scroll: '#e8dcb0',
+  weapon: '#c8ccd4', offhand: '#ffa050', shield: '#b08050', bow: '#c09060', arrow: '#d8c8a0', thrown: '#b8bcc4', armor: '#c0a880',
+  scroll: '#e8dcb0',
   wand: '#a0c8ff', ring: '#e0a0ff',
   food: '#c09060', artefact: '#ffb040', amulet: '#ffd040', gold: '#ffd040',
 };
@@ -401,10 +402,12 @@ export class UI {
     });
     this.setHtml('gear', gear.join(''));
 
-    // Holding a hotbar key for something held up, what the mouse does with it (see Game.holdSlot).
+    // Holding a hotbar key for something held up, what the mouse does with it (see Game.holdSlot): a thrown weapon's,
+    // what's next, drawing your arm back or throwing.
     const held = g.hold && slotItem(p, g.hold.i), how = held && HELD[held.kind];
-    const prompt = g.menu ? '' : how ? `${g.knowledge.name(held)}: [Click] ${how.left} · [Right-click] ${how.right}`
-      : g.interaction ? `[E] ${g.interaction.label}` : '';
+    const use = !how ? '' : !how.wind ? `[Click] ${how.left} · [Right-click] ${how.right}`
+      : p.windup > 0 ? `[Click] ${how.left} · let go of right-click to keep it` : `[Hold right-click] ${how.right}, then [Click] ${how.left}`;
+    const prompt = g.menu ? '' : how ? `${g.knowledge.name(held)}: ${use}` : g.interaction ? `[E] ${g.interaction.label}` : '';
     this.set('prompt', prompt);
 
     const t = g.target;
@@ -1042,8 +1045,8 @@ export class UI {
       const it = this.selected();
       if (it) this.activate(g.actionsFor(it).length - 1);
     } else if (e.code === 'KeyT' && !this.selectMode) {
-      const it = this.selected();
-      if (it && it.kind === 'potion') this.activate(1);
+      const it = this.selected(), i = it ? g.actionsFor(it).findIndex((a) => a.label === 'Throw') : -1;
+      if (i >= 0) this.activate(i);
     }
   }
 
@@ -1159,7 +1162,7 @@ export class UI {
     if (this.selectMode || !it) return;
     if (!canHotbar(it)) {
       this.packNote(it.kind === 'artefact' ? 'That artefact has no power to invoke.'
-        : 'Only potions, scrolls, food, wands, artefact powers and things you hold in your hands go on the hotbar.');
+        : 'Only potions, scrolls, food, wands, thrown weapons, artefact powers and things you hold in your hands go on the hotbar.');
       return;
     }
     this.perform(it, () => this.toHotbar(i, it));

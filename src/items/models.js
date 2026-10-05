@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WEAPONS, OFFHANDS, SHIELDS, BOWS, ARROWS } from './defs.js';
+import { WEAPONS, OFFHANDS, SHIELDS, BOWS, ARROWS, THROWN } from './defs.js';
 import { buildBBModel } from './bbmodel.js';
 import { MODEL_PX, ITEM_MIN_SIZE } from '../config.js';
 
@@ -56,7 +56,8 @@ const ITEM_BASE = -0.16;
 export function buildItemModel(item, color, { floor = false } = {}) {
   const g = new THREE.Group();
   const model = item.kind === 'weapon' ? lyingWeapon(item) : OFFHAND_DEFS[item.kind] ? lyingOffhand(item)
-    : item.kind === 'arrow' ? lyingArrows(item) : itemModel(item, color);
+    : item.kind === 'arrow' ? lyingPile(item, ARROWS[item.type].model)
+    : item.kind === 'thrown' ? lyingPile(item, THROWN[item.type].model, THROWN[item.type].heap) : itemModel(item, color);
   if (floor) {
     const bounds = new THREE.Box3().setFromObject(model);
     const longest = Math.max(...bounds.getSize(new THREE.Vector3()).toArray());
@@ -81,8 +82,8 @@ function lyingWeapon(item) {
 // What you hold in your off hand (items/defs.js OFFHANDS, SHIELDS and BOWS) has the one model, in your hand (see
 // ViewModel) or on the floor: the lantern is assets/models/hand_lantern.bbmodel, the wooden shield wooden_shield.bbmodel,
 // the wooden bow wooden_bow.bbmodel. On the floor an off-hand thing lies on its side, like a weapon, unless it `stands`;
-// a shield lies flat, face up. Arrows (ARROWS) are models of their own there too (arrow.bbmodel), as they are nocked and
-// in flight.
+// a shield lies flat, face up. Arrows (ARROWS) and thrown weapons (THROWN) are models of their own there too
+// (arrow.bbmodel, dart.bbmodel...), as they are in your hand and in flight.
 const HELD_FILES = import.meta.glob('../../assets/models/*.bbmodel', { import: 'default', eager: true });
 const OFFHAND_DEFS = { offhand: OFFHANDS, shield: SHIELDS, bow: BOWS };
 
@@ -109,29 +110,46 @@ function lyingOffhand(item) {
   return m;
 }
 
-/** A pile of arrows on the floor: one, two or three of them (as many as there are, to three), side by side. */
-function lyingArrows(item) {
+// Where each of a heap of stones lies (x, y, z in metres), and how it's turned (about x, y and z): two side by side and
+// one on top of them.
+const HEAP = [[-0.034, 0, 0.016, 0, 0.3, 0], [0.036, 0, -0.012, 0.1, 2.1, 0.08], [0.002, 0.024, 0.004, -0.2, 1.2, 0.18]];
+
+/**
+ * A pile of arrows or thrown weapons on the floor (assets/models/<name>.bbmodel): one, two or three of them (as many as
+ * there are, to three), side by side, or `heaped` (stones) in a little heap.
+ */
+function lyingPile(item, name, heaped = false) {
   const g = new THREE.Group(), n = Math.min(3, item.qty);
   for (let i = 0; i < n; i++) {
-    const m = heldModel(ARROWS[item.type].model);
-    m.rotation.set(0, (i - (n - 1) / 2) * 0.12, -Math.PI / 2);
-    m.position.z = (i - (n - 1) / 2) * 0.05;
+    const m = heldModel(name);
+    if (heaped) {
+      const [x, y, z, rx, ry, rz] = HEAP[i];
+      m.position.set(x, y, z);
+      m.rotation.set(rx, ry, rz);
+    } else {
+      m.rotation.set(0, (i - (n - 1) / 2) * 0.12, -Math.PI / 2);
+      m.position.z = (i - (n - 1) / 2) * 0.05;
+    }
     g.add(m);
   }
   const mid = new THREE.Box3().setFromObject(g).getCenter(new THREE.Vector3());
-  for (const m of g.children) m.position.x -= mid.x;
+  for (const m of g.children) {
+    m.position.x -= mid.x;
+    if (heaped) m.position.z -= mid.z;
+  }
   return g;
 }
 
 /**
- * Model for an item's icon (see ui/icons.js): as it's held or stands rather than lying on the floor, a weapon or an
- * arrow point up, an off-hand thing in your hand's frame, and a scroll open (scroll_open.bbmodel), its rune to be
- * painted on.
+ * Model for an item's icon (see ui/icons.js): as it's held or stands rather than lying on the floor, a weapon, an
+ * arrow or a thrown weapon point up, one of them, an off-hand thing in your hand's frame, and a scroll open
+ * (scroll_open.bbmodel), its rune to be painted on.
  */
 export function iconItemModel(item, color) {
   if (item.kind === 'weapon') return buildWeaponMesh(WEAPONS[item.type].model);
   if (OFFHAND_DEFS[item.kind]) return heldModel(OFFHAND_DEFS[item.kind][item.type].model);
   if (item.kind === 'arrow') return heldModel(ARROWS[item.type].model);
+  if (item.kind === 'thrown') return heldModel(THROWN[item.type].model);
   return itemModel(item, color, item.kind === 'scroll' ? 'scroll_open' : itemModelName(item));
 }
 

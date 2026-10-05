@@ -1,5 +1,5 @@
 import {
-  WEAPONS, ARMORS, SHIELDS, BOWS, ARROWS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS, CONTAINERS,
+  WEAPONS, ARMORS, SHIELDS, BOWS, ARROWS, THROWN, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS, CONTAINERS,
   POTION_COLORS, SCROLL_SYLLABLES, SCROLL_RUNES, WAND_MATERIALS, RING_GEMS,
 } from './defs.js';
 import { RNG } from '../rng.js';
@@ -138,6 +138,7 @@ export class Knowledge {
       case 'shield': return 0x9a6a3a;
       case 'bow': return 0x8a5a2a;
       case 'arrow': return 0xb0a080;
+      case 'thrown': return 0xa8adb4;
       case 'armor': return ARMORS[item.type].color;
       case 'artefact': return ARTEFACTS[item.type].color;
       case 'food': return 0x8a5a2a;
@@ -204,6 +205,10 @@ export class Knowledge {
         return plural ? `${q} ${base}s` : base;
       }
       case 'arrow': return plural ? `${q} ${ARROWS[item.type].name}s` : ARROWS[item.type].name;
+      case 'thrown': {
+        const d = THROWN[item.type];
+        return plural ? `${q} ${d.plural ?? `${d.name}s`}` : d.name;
+      }
       case 'offhand': return OFFHANDS[item.type].name;
       case 'artefact': return ARTEFACTS[item.type].name;
       case 'amulet': return 'the Amulet of Yendor';
@@ -261,6 +266,13 @@ export class Knowledge {
       case 'arrow': {
         const a = ARROWS[item.type];
         return [a.desc, `Shot from a bow in your quiver.${a.dmg ? ` It adds ${a.dmg} to the bow's damage.` : ''} One that strikes something may break; ` +
+          'the rest fall where they strike, to be picked up again.'].join('\n\n');
+      }
+      case 'thrown': {
+        const d = THROWN[item.type];
+        return [d.desc, 'Thrown from the hotbar: hold its key to take one up, hold right-click to draw your arm back, and click to ' +
+          `throw it. Thrown as hard as you can (charged for ${d.draw.toFixed(2)}s), one does ${d.dmg[0]}–${d.dmg[1]} ` +
+          `(${DAMAGE_TYPES[d.dmgType].name}); less hard, it flies slower and does less. One that strikes something may break; ` +
           'the rest fall where they strike, to be picked up again.'].join('\n\n');
       }
       case 'potion': return known ? POTIONS[item.type].desc
