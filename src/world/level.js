@@ -10,11 +10,12 @@ import { Monster } from '../monsters/monster.js';
 import { buildMonsterModel } from '../monsters/models.js';
 import { spawnTable } from '../monsters/defs.js';
 import { updateProjectiles } from '../fx/projectiles.js';
-import { updateParticles, burst } from '../fx/particles.js';
+import { updateParticles, burst, ring } from '../fx/particles.js';
 import { rand } from '../rng.js';
 import { glowSprite } from '../fx/glow.js';
 import { Drips } from '../fx/drips.js';
 import { Ripples } from '../fx/ripples.js';
+import { StatusFx } from '../fx/statusFx.js';
 import { Shopkeeper } from './shopkeeper.js';
 import { fingerprint, packBits, unpackBits, round2 } from '../save.js';
 import { tickStatuses } from '../status.js';
@@ -22,7 +23,7 @@ import { tickStatuses } from '../status.js';
 const N8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
 // Traps on the map: grey spikes, green gas, azure teleport, yellow alarm (as their models; see trapModels.js).
-export const TRAP_COLORS = { spike: 0xa0a0a0, poison: 0x40c040, teleport: 0x3aa0ff, alarm: 0xe0c020 };
+export const TRAP_COLORS = { spike: 0xa0a0a0, poison: 0xa050d8, teleport: 0x3aa0ff, alarm: 0xe0c020 };
 
 // Chests (see addChest): how far a lid swings open (radians) and how long it takes; how long things take to fly out of
 // one, and how far they land in front of it; how long a mimic's lick of its lips takes, and how long it waits between
@@ -102,6 +103,7 @@ export class Level {
     this.waterT = 0;
     this.drips = built.drips.length ? new Drips(this.group, built.drips) : null;
     this.ripples = this.theme.pools ? new Ripples(this.group, this.theme.pools.water[3]) : null; // round anything wading
+    this.statusFx = new StatusFx(this.group); // what's afflicting its monsters, shown on them
 
     // Doors: open when something walks into them, shut again once the doorway has been clear a while. `amt` is how
     // far open (0..1), `swing` which way a swinging door turns (see openDoor).
@@ -141,9 +143,10 @@ export class Level {
     for (const t of data.traps) this.traps.push({ ...t, hidden: true, triggered: false, view: null });
 
     // Where the shop's wares rest: the counter, plinths and display tables hold its stock, and things the player sells
-    // go in any free spot but the plinths', filling the rug last.
+    // go on the rug, and once that's full, in any free spot but the plinths'.
     this.shopSpots = built.shopSlots;
     this.shopKept = built.shopKept;
+    this.shopResale = built.shopResale;
     this.resales = 0;
     this.shopkeeper = null;
     if (data.shop) {
@@ -523,8 +526,8 @@ export class Level {
 
   /**
    * Puts something the player sold on display, so they can buy it back at the shop's price. Potions, scrolls
-   * and food join a pile of the same kind the player already sold; anything else takes the first free spot (not a
-   * plinth's).
+   * and food join a pile of the same kind the player already sold; anything else takes the first free spot on the
+   * rug, or once that's full, the first free spot on the counter or a table (not a plinth's).
    * When there's none, the thing that has been on sale longest of those the player sold makes way.
    */
   displaySold(item) {
@@ -535,7 +538,8 @@ export class Level {
       return;
     }
     const taken = new Set(this.items.map((e) => e.spot));
-    let spot = this.shopSpots.findIndex((_, i) => !taken.has(i) && !this.shopKept.has(i));
+    const free = (i) => !taken.has(i) && !this.shopKept.has(i);
+    let spot = this.shopResale.find(free) ?? this.shopSpots.findIndex((_, i) => free(i));
     if (spot < 0) {
       const oldest = this.items.filter((e) => e.resale).sort((a, b) => a.resale - b.resale)[0];
       if (!oldest) return;
@@ -558,16 +562,22 @@ export class Level {
   }
 
   /** Shows a hidden trap, armed (or spent, if it has gone off): see world/trapModels.js. */
-  revealTrap(trap) {
-    if (!trap.hidden) return;
+  /**
+   * Shows a hidden trap. `found`: you've just found it (rather than set it off, or come back to it in a save): it fades
+   * into view, sparkling, a ring spreading across the floor round it, so you see where it is (the chime is the
+   * finder's: Sfx.trapFound). Returns whether it was hidden.
+   */
+  revealTrap(trap, { found = false } = {}) {
+    if (!trap.hidden) return false;
     trap.hidden = false;
-    this.showTrap(trap);
+    this.showTrap(trap, found);
+    return true;
   }
 
-  showTrap(trap) {
+  showTrap(trap, found = false) {
     // (The models download as the game starts; one found in the first moments shows once they're here.)
     if (!trapsLoaded()) {
-      loadTraps().then(() => this.showTrap(trap), () => {});
+      loadTraps().then(() => this.showTrap(trap, found), () => {});
       return;
     }
     const x = this.center(trap.x), z = this.center(trap.y);
@@ -575,6 +585,11 @@ export class Level {
     // On a rough floor, raised clear of the rock beneath it.
     if (this.rough) trap.view.root.position.y = Math.max(0, ...[[0, 0], [-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]].map(([dx, dz]) => this.rough.offset([x + dx, 0, z + dz], [0, 1, 0])));
     if (trap.triggered) trap.view.set('used');
+    if (found) {
+      trap.view.fadeIn();
+      this.statusFx.sparkle(x, trap.view.root.position.y, z);
+      ring(this, x, z, 0xffe6a0, 1, 0.7);
+    }
     this.group.add(trap.view.root);
   }
 
@@ -905,6 +920,7 @@ export class Level {
         this.monsters.splice(i, 1);
       }
     }
+    this.statusFx.update(dt, game, this);
 
     updateProjectiles(dt, game, this);
     updateParticles(dt, this);
@@ -915,14 +931,16 @@ export class Level {
       this.searchT = 0.5;
       const eye = p.hasArtefact('eye');
       const ptx = this.toTile(p.x), pty = this.toTile(p.z);
+      let found = false;
       for (const tr of this.traps) {
         if (!tr.hidden) continue;
         const d = Math.max(Math.abs(tr.x - ptx), Math.abs(tr.y - pty));
         if (eye ? this.visible[this.idx(tr.x, tr.y)] : d <= 2 && rand.chance(0.18)) {
-          this.revealTrap(tr);
+          found = this.revealTrap(tr, { found: true });
           if (!eye) game.log('You notice a hidden trap.', 'warn');
         }
       }
+      if (found) game.audio.trapFound(); // (once, for however many)
     }
 
     // The dungeon restocks itself. Carrying the Amulet makes it furious.

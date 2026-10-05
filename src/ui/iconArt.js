@@ -42,9 +42,12 @@ export const MARK_ICONS = {
   fire: { map: ['.........', '....c....', '...cb....', '...cbc...', '..cbabc..', '..cbaac..', '..cbaac..', '...ccc...', '.........'] },
   ice: { map: ['.........', '....i....', '..i.i.i..', '...iji...', '.iijWjii.', '...iji...', '..i.i.i..', '....i....', '.........'], colors: { i: '#9fdcff', j: '#e2f6ff' } },
   lightning: { map: ['.........', '.....yy..', '....yy...', '...yyyy..', '....yy...', '...yy....', '...y.....', '..y......', '.........'], colors: { y: '#ffe04a' } },
-  poison: { map: ['.........', '....g....', '...ggg...', '..gghgg..', '..gWggg..', '..ggggh..', '..gghhh..', '...hhh...', '.........'], colors: { g: '#6ad850', h: '#2f8a2a' } },
+  poison: { map: ['.........', '....g....', '...ggg...', '..gghgg..', '..gWggg..', '..ggggh..', '..gghhh..', '...hhh...', '.........'], colors: { g: '#b466e8', h: '#6a2a98' } },
   magic: { map: ['.........', '....v....', '....v....', '...vwv...', '.vvwWwvv.', '...vwv...', '....v....', '....v....', '.........'], colors: { v: '#9a5cff', w: '#d8b8ff' } },
-  heal: { map: ['.........', '..rr.rr..', '.rPrrrrr.', '.rrrrrrq.', '.rrrrrrq.', '..rrrrq..', '...rrq...', '....q....', '.........'], colors: { r: '#e8364a', q: '#9c1a2a' } },
+  // (Healing's green cross, as you see it rise up your view as you heal: see fx/screenFx.js.)
+  heal: { map: ['.........', '...ggh...', '...gWh...', '.ggggggh.', '.ggggggh.', '.hhggghh.', '...ggh...', '...hhh...', '.........'], colors: { g: '#99f28c', h: '#4fa046' } },
+  // (A heart, for a charm: nothing has it yet.)
+  charm: { map: ['.........', '..rr.rr..', '.rPrrrrr.', '.rrrrrrq.', '.rrrrrrq.', '..rrrrq..', '...rrq...', '....q....', '.........'], colors: { r: '#e8364a', q: '#9c1a2a' } },
   strength: { map: ['.........', '..oooo...', '.opopopo.', '.opopopo.', '.ooooooo.', '.oppppq..', '.ooopq...', '..oooq...', '.........'], colors: { o: '#f0a848', p: '#b86a22', q: '#8a4a14' } },
   experience: { map: ['.........', '....y....', '...yky...', '.yyykyyy.', '..yyyyy..', '..yyzyy..', '.yyz.zyy.', '.yz...zy.', '.........'], colors: { y: '#f4c440', k: '#fff2b0', z: '#b4841c' } },
   haste: { map: ['.........', '.t..t....', '..t..t...', '...t..t..', '....t..t.', '...t..t..', '..t..t...', '.t..t....', '.........'], colors: { t: '#5ee0d0' } },

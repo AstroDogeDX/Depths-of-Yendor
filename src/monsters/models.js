@@ -7,13 +7,34 @@ import { MODEL_PX } from '../config.js';
 // leg_left/right on bipeds, plus wing_*, tail, leg_front_*/leg_back_*, blob, and the mimic's lid, tongue and eye
 // on the others. A model's origin is at its feet and it faces +z.
 //
-// buildMonsterModel returns { root, animate(s), materials, height }. animate(s) receives { t, walk, windup,
-// strike, reveal } where windup/strike are 0..1 progress or -1, and reveal the seconds since it gave itself away
+// buildMonsterModel returns { root, animate(s), materials, height, meshes, crown(out) }. animate(s) receives { t, walk,
+// windup, strike, reveal } where windup/strike are 0..1 progress or -1, and reveal the seconds since it gave itself away
 // (a mimic waking) or -1; a mimic passing for a chest gets { dormant: true, lick } instead (see Level.addChest).
-// materials are the monster's own lit materials, so it can be tinted (hurt, burning...) on its own.
+// materials are the monster's own lit materials, so it can be tinted (hurt, burning...) on its own. meshes are its
+// meshes, and crown(out) sets `out` to the top of its head in the world, as it stands now: for what shows on it and
+// over its head (see fx/statusFx.js).
 
 const FILES = import.meta.glob('../../assets/models/monsters/*.bbmodel', { import: 'default', eager: true });
+// The render layer a living monster's meshes are on as well as the usual one, so mind vision can find them to outline
+// through walls (see fx/screenFx.js). A mimic passing for a chest is on it too: it has a mind all the same.
+export const SENSED_LAYER = 1;
 const templates = new Map();
+const crowns = new Map();
+// Where the crown of a monster with no `head` is: the top of the whole model, this far from its middle toward its front
+// (a share of the way), for one whose head is out in front (the rat's).
+const CROWN_FORWARD = { rat: 0.6 };
+
+/** The top of a monster's head, in its `head` bone's frame, or if it has none, in the model's. */
+function crownOf(type, template) {
+  template.updateMatrixWorld(true);
+  let head = null;
+  template.traverse((o) => { if (o.isGroup && o.name === 'head') head = o; });
+  if (head && new THREE.Box3().setFromObject(head).isEmpty()) head = null;
+  const box = new THREE.Box3().setFromObject(head ?? template);
+  const mid = box.getCenter(new THREE.Vector3());
+  const top = new THREE.Vector3(mid.x, box.max.y, mid.z + (box.max.z - mid.z) * (CROWN_FORWARD[type] ?? 0));
+  return { bone: head ? 'head' : null, at: head ? head.worldToLocal(top) : top };
+}
 
 const easeOut = (x) => 1 - (1 - x) * (1 - x);
 
@@ -151,11 +172,17 @@ export function buildMonsterModel(type) {
     const src = FILES[`../../assets/models/monsters/${type}.bbmodel`];
     if (!src) throw new Error(`No model for monster ${type}`);
     templates.set(type, buildBBModel(src, MODEL_PX, { rig: true }));
+    crowns.set(type, crownOf(type, templates.get(type)));
   }
   const root = templates.get(type).clone();
   const own = new Map();
   const bones = {};
+  const meshes = [];
   root.traverse((o) => {
+    if (o.isMesh) {
+      meshes.push(o);
+      o.layers.enable(SENSED_LAYER);
+    }
     if (o.isMesh && o.material.isMeshLambertMaterial) {
       if (!own.has(o.material)) {
         const m = o.material.clone();
@@ -169,5 +196,9 @@ export function buildMonsterModel(type) {
     }
   });
   const height = new THREE.Box3().setFromObject(root).max.y;
-  return { root, animate: ANIMATE[type](bones, root), materials: [...own.values()], height };
+  const crown = crowns.get(type), crownOn = crown.bone ? bones[crown.bone] : root;
+  return {
+    root, animate: ANIMATE[type](bones, root), materials: [...own.values()], height, meshes,
+    crown: (out) => out.copy(crown.at).applyMatrix4(crownOn.matrixWorld),
+  };
 }

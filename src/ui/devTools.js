@@ -1,7 +1,7 @@
 import { THEMES, FLOORS_PER_THEME, TILE, HUNGER_MAX, isBossDepth, isShopDepth } from '../config.js';
 import {
-  WEAPONS, ARMORS, SHIELDS, SHIELD_HITS_TO_ID, BOWS, BOW_HITS_TO_ID, ARROWS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, OFFHANDS,
-  CONTAINERS, WAND_ZAPS_TO_ID,
+  WEAPONS, ARMORS, SHIELDS, SHIELD_HITS_TO_ID, BOWS, BOW_HITS_TO_ID, ARROWS, THROWN, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD,
+  OFFHANDS, CONTAINERS, WAND_ZAPS_TO_ID,
 } from '../items/defs.js';
 import { makeItem, stackable, chestLoot } from '../items/generate.js';
 import { MONSTERS } from '../monsters/defs.js';
@@ -25,7 +25,7 @@ import './devTools.css';
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, as stairs' `dir`
 const KINDS = [
   ['weapon', 'Weapons', WEAPONS], ['offhand', 'Off hand', OFFHANDS], ['shield', 'Shields', SHIELDS], ['bow', 'Bows', BOWS],
-  ['arrow', 'Arrows', ARROWS], ['armor', 'Armour', ARMORS], ['potion', 'Potions', POTIONS],
+  ['arrow', 'Arrows', ARROWS], ['thrown', 'Thrown', THROWN], ['armor', 'Armour', ARMORS], ['potion', 'Potions', POTIONS],
   ['scroll', 'Scrolls', SCROLLS], ['wand', 'Wands', WANDS], ['ring', 'Rings', RINGS], ['artefact', 'Artefacts', ARTEFACTS],
   ['food', 'Food', FOOD], ['container', 'Pack expansions', CONTAINERS],
   ['special', 'Other', { amulet: { name: 'Amulet of Yendor' }, key: { name: 'iron key (this floor)' }, goldkey: { name: 'gold key (this floor)' } }],

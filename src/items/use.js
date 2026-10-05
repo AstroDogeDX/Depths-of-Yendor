@@ -7,8 +7,9 @@ import { spawnProjectile } from '../fx/projectiles.js';
 import { burst, ring, transient, lightningMesh } from '../fx/particles.js';
 import { spawnTable } from '../monsters/defs.js';
 import { sellPrice, refusedAsCursed } from './generate.js';
-import { cure } from '../status.js';
+import { cure, HEALING } from '../status.js';
 import { lookDir } from '../combat.js';
+import { toss } from '../thrown.js';
 
 // --- Inventory actions shown in the pack screen ---
 
@@ -39,6 +40,8 @@ export function itemActions(game, item) {
       acts.push({ label: 'Zap', fn: () => zapWand(game, item) });
       acts.push({ label: 'Zap yourself', fn: () => zapSelf(game, item) });
       break;
+    // (Thrown properly from the hotbar, wound up: see thrown.js. From here, a toss.)
+    case 'thrown': acts.push({ label: 'Throw', fn: () => toss(game, item) }); break;
     case 'weapon': case 'offhand': case 'shield': case 'bow': case 'arrow': case 'armor': case 'ring': case 'artefact': {
       const [on, off] = EQUIP_LABELS[item.kind];
       acts.push(equipped ? { label: off, fn: () => putAway(game, item) } : { label: on, fn: () => equipItem(game, item) });
@@ -78,9 +81,10 @@ export function drinkPotion(game, item) {
   p.charge = 0;
   switch (one.type) {
     case 'healing':
-      p.heal(Math.max(12, Math.round(p.maxHp * 0.75)));
+      // Your wounds mend over a few seconds (see HEALING), and what ails you is purged at once.
+      p.addStatus('healing', HEALING.secs, game);
       for (const key of ['poisoned', 'bleeding', 'blind', 'confused']) cure(game, p, key, { quiet: true });
-      game.log('You feel much better.', 'good');
+      game.log('Warmth spreads through you, and your wounds begin to close.', 'good');
       break;
     case 'strength':
       p.baseStr++;
@@ -134,7 +138,7 @@ export function potionSplash(game, type, x, z, thrown = true) {
   let obvious = hit.length > 0;
   for (const m of hit) {
     switch (type) {
-      case 'healing': m.hp = Math.min(m.maxHp, m.hp + m.maxHp * 0.5); game.log(`The ${m.name} looks healthier.`, 'warn'); break;
+      case 'healing': m.afflict(game, 'healing', HEALING.secs); game.log(`The ${m.name}'s wounds begin to close.`, 'warn'); break;
       case 'poison': m.afflict(game, 'poisoned', 10); break;
       case 'confusion': m.afflict(game, 'confused', 10); break;
       case 'blindness':
@@ -242,7 +246,7 @@ export function readScroll(game, item) {
       return true;
     case 'mapping':
       level.revealAll();
-      for (const t of level.traps) level.revealTrap(t);
+      if (level.traps.filter((t) => level.revealTrap(t, { found: true })).length) game.audio.trapFound();
       game.log('An image of your surroundings forms in your mind!', 'good');
       announce();
       return false;

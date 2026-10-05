@@ -36,6 +36,8 @@ function template(type) {
 }
 
 const easeOut = (x) => 1 - (1 - Math.min(1, x)) ** 3;
+const smooth = (x) => x * x * (3 - 2 * x);
+const FADE_IN = 1; // seconds a trap you've just found takes to fade into view (see fadeIn)
 
 // Per kind: how many seconds it's active; `shows`, the group shown while active if not its own "active";
 // `glow`, a soft light about it while armed ([colour, size, opacity]); `idle(parts, time)`, how it moves
@@ -52,7 +54,7 @@ const KINDS = {
   },
   poison: {
     active: 0.9,
-    glow: [0x60c030, 0.9, 0.22],
+    glow: [0x9a40d8, 0.9, 0.22],
     animate(parts, t) {
       // The cap blown up off the vent, tumbling over as it falls away to one side.
       const cap = parts.active, rest = cap.userData.rest, k = t / 0.9;
@@ -120,11 +122,34 @@ export class TrapView {
     }
   }
 
+  /**
+   * Fades the trap into view from nothing, over FADE_IN seconds: you've just found it (see Level.showTrap). Its
+   * materials become its own for it, see-through until it's in full view.
+   */
+  fadeIn() {
+    this.fade = 0;
+    this.fading = [];
+    this.root.traverse((o) => {
+      if (!o.isMesh) return;
+      o.material = o.material.clone();
+      this.fading.push({ m: o.material, alphaTest: o.material.alphaTest, transparent: o.material.transparent });
+      // (Its cut-out texels stay cut out, but it isn't cut out whole while it's faint.)
+      o.material.alphaTest = Math.min(o.material.alphaTest, 0.01);
+      o.material.transparent = true;
+      o.material.opacity = 0;
+    });
+  }
+
   update(dt, time) {
     this.t += dt;
+    if (this.fade < 1) {
+      this.fade = Math.min(1, this.fade + dt / FADE_IN);
+      for (const f of this.fading) f.m.opacity = smooth(this.fade);
+      if (this.fade === 1) for (const f of this.fading) Object.assign(f.m, { alphaTest: f.alphaTest, transparent: f.transparent, opacity: 1 });
+    }
     if (this.state === 'armed') {
       this.kind.idle?.(this.parts, time);
-      if (this.halo) this.halo.material.opacity = this.kind.glow[2] * (0.75 + 0.25 * Math.sin(time * 2.6));
+      if (this.halo) this.halo.material.opacity = this.kind.glow[2] * (0.75 + 0.25 * Math.sin(time * 2.6)) * smooth(this.fade ?? 1);
     } else if (this.state === 'active') {
       this.kind.animate?.(this.parts, this.t, this);
       if (this.t >= this.kind.active) this.set('used');

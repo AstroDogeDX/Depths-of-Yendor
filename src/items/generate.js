@@ -1,6 +1,6 @@
 import {
-  WEAPONS, ARMORS, SHIELDS, SHIELD_HITS_TO_ID, BOWS, BOW_HITS_TO_ID, ARROWS, POTIONS, SCROLLS, WANDS, RINGS, FOOD, OFFHANDS, CONTAINERS,
-  WAND_ZAPS_TO_ID,
+  WEAPONS, ARMORS, SHIELDS, SHIELD_HITS_TO_ID, BOWS, BOW_HITS_TO_ID, ARROWS, THROWN, POTIONS, SCROLLS, WANDS, RINGS, FOOD, OFFHANDS,
+  CONTAINERS, WAND_ZAPS_TO_ID,
 } from './defs.js';
 import { randomBane, randomEnchant } from './enchant.js';
 import { danger } from '../config.js';
@@ -25,7 +25,7 @@ export function makeItem(kind, type, extra = {}) {
     qty: 1,
     plus: 0,
     curse: 0,
-    identified: ['food', 'offhand', 'arrow', 'artefact', 'amulet', 'gold', 'key', 'container'].includes(kind),
+    identified: ['food', 'offhand', 'arrow', 'thrown', 'artefact', 'amulet', 'gold', 'key', 'container'].includes(kind),
     curseKnown: false,
     ...extra,
   };
@@ -53,7 +53,7 @@ function pickTiered(rng, defs, depth) {
 }
 
 export function randomItem(rng, depth) {
-  const kind = rng.weighted({ potion: 30, scroll: 30, weapon: 8, armor: 7, shield: 4, bow: 3, arrow: 6, wand: 6, ring: 5, food: 8 });
+  const kind = rng.weighted({ potion: 30, scroll: 30, weapon: 8, armor: 7, shield: 4, bow: 3, arrow: 6, thrown: 6, wand: 6, ring: 5, food: 8 });
   switch (kind) {
     case 'potion': return makeItem('potion', rng.weighted(freqTable(POTIONS)));
     case 'scroll': return makeItem('scroll', rng.weighted(freqTable(SCROLLS)));
@@ -73,6 +73,7 @@ export function randomItem(rng, depth) {
       return it;
     }
     case 'arrow': return arrows(rng, 6, 14);
+    case 'thrown': return thrownPile(rng);
     case 'wand': return randomWand(rng, depth);
     case 'ring': {
       const type = rng.weighted(freqTable(RINGS));
@@ -93,6 +94,12 @@ export function randomItem(rng, depth) {
 
 /** A bundle of plain arrows, `min` to `max` of them. */
 export const arrows = (rng, min, max) => makeItem('arrow', 'standard', { qty: rng.int(min, max) });
+
+/** A pile of thrown weapons of `type` (or a kind at random, by its `freq`), as many as its `pile` says, `mult` times over. */
+export function thrownPile(rng, mult = 1, type = rng.weighted(freqTable(THROWN))) {
+  const [min, max] = THROWN[type].pile;
+  return makeItem('thrown', type, { qty: rng.int(min, max) * mult });
+}
 
 /** A pile of gold, as one lies about a floor of this depth: `mult` times as much in a locked chest. */
 export function goldPile(rng, depth, mult = 1) {
@@ -147,14 +154,14 @@ function treasure(rng, depth) {
 }
 
 // What the shop charges never depends on what's hidden about a thing, so a price can't give it away: potions,
-// scrolls, wands and rings are one price a kind, and weapons, armour, shields, bows, arrows and off-hand things (whose
-// kind you can always see) go by their `value` in items/defs.js, as do pack expansions. An artefact is very dear. What the shopkeeper pays
-// depends on what you know of a thing (see worth).
+// scrolls, wands and rings are one price a kind, and weapons, armour, shields, bows, arrows, thrown weapons and
+// off-hand things (whose kind you can always see) go by their `value` in items/defs.js, as do pack expansions. An
+// artefact is very dear. What the shopkeeper pays depends on what you know of a thing (see worth).
 const BUY = { food: 15, potion: 35, scroll: 30, wand: 110, ring: 130, artefact: 1500 };
 const ARTEFACT_WORTH = 400; // what the shopkeeper counts an artefact worth, buying one from you
 const DEFS = {
-  weapon: WEAPONS, armor: ARMORS, shield: SHIELDS, bow: BOWS, arrow: ARROWS, potion: POTIONS, scroll: SCROLLS, wand: WANDS,
-  ring: RINGS, food: FOOD, offhand: OFFHANDS, container: CONTAINERS,
+  weapon: WEAPONS, armor: ARMORS, shield: SHIELDS, bow: BOWS, arrow: ARROWS, thrown: THROWN, potion: POTIONS, scroll: SCROLLS,
+  wand: WANDS, ring: RINGS, food: FOOD, offhand: OFFHANDS, container: CONTAINERS,
 };
 // How many hits a found weapon (dealt), armour (taken), shield (taken on it) or bow (its arrows dealt) needs before you
 // know it.
@@ -168,7 +175,7 @@ const SELL_RATE = 0.4; // the shopkeeper pays 40% of what a thing is worth
 const markup = (depth) => 1 + Math.max(0, danger(depth) - 3) * 0.1; // deeper merchants charge (and pay) more
 
 function buyBase(item) {
-  return ['weapon', 'armor', 'shield', 'bow', 'arrow', 'offhand', 'container'].includes(item.kind) ? DEFS[item.kind][item.type].value : BUY[item.kind];
+  return ['weapon', 'armor', 'shield', 'bow', 'arrow', 'thrown', 'offhand', 'container'].includes(item.kind) ? DEFS[item.kind][item.type].value : BUY[item.kind];
 }
 
 /**
@@ -182,7 +189,7 @@ function buyBase(item) {
 export function worth(item, k) {
   switch (item.kind) {
     case 'potion': case 'scroll': return k.isKnown(item) ? DEFS[item.kind][item.type].value : UNKNOWN[item.kind];
-    case 'food': case 'offhand': case 'arrow': return DEFS[item.kind][item.type].value;
+    case 'food': case 'offhand': case 'arrow': case 'thrown': return DEFS[item.kind][item.type].value;
     case 'artefact': return ARTEFACT_WORTH;
     case 'weapon': case 'armor': case 'shield': case 'bow': case 'wand': case 'ring': {
       if (item.curseKnown && item.curse >= 2) return 0;
@@ -202,10 +209,10 @@ export function worth(item, k) {
 export const refusedAsCursed = (item) => item.curseKnown && item.curse >= 2 && ['weapon', 'armor', 'shield', 'bow', 'wand', 'ring'].includes(item.kind);
 
 /**
- * Whether the shop sells a pile of this all at once (as many as you can pay for), rather than one at a time: arrows.
- * Its price is still each one's (see Game.buy).
+ * Whether the shop sells a pile of this all at once (as many as you can pay for), rather than one at a time: arrows
+ * and thrown weapons. Its price is still each one's (see Game.buy).
  */
-export const soldByThePile = (item) => item.kind === 'arrow';
+export const soldByThePile = (item) => item.kind === 'arrow' || item.kind === 'thrown';
 
 /** What the shopkeeper here pays for one of this item (see worth), or 0 if it won't buy it. */
 export function sellPrice(item, depth, k) {
@@ -213,34 +220,57 @@ export function sellPrice(item, depth, k) {
   return v ? Math.max(1, Math.round(v * markup(depth) * SELL_RATE)) : 0;
 }
 
-/** What the shop on this floor charges for an item. */
+/** What the shop on this floor charges for an item: in fives, or for anything under 10 gold (a stone), to the coin. */
 export function shopPrice(item, depth) {
-  return Math.round((buyBase(item) * markup(depth)) / 5) * 5;
+  const v = buyBase(item) * markup(depth);
+  return v < 10 ? Math.max(1, Math.round(v)) : Math.round(v / 5) * 5;
 }
+
+// What the things on the shop's table of gear are (see shopStock), each by these odds: shields and bows share an
+// off-hand thing's.
+const SHOP_GEAR = { weapon: 2, armor: 2, shield: 1, bow: 1, ring: 2, wand: 2 };
 
 /**
  * Wares for a shop on this floor, in the order of its display slots (see layoutShop): [{ item, price }], or null for a
  * slot left empty. Never cursed.
- *   the counter        a ration (or a bundle of arrows: always, when there's a bow on the tables), a potion and a scroll
+ *   the counter        a ration, a potion of healing and a scroll of identify
  *   the two plinths    `wares.container` (a pack expansion), and `wares.artefact` or, without one, a prize: a piece of
  *                      equipment you can see is fine work (identified, +2 or better and often enchanted), dearly priced
- *   the six tables     three pieces of equipment (a weapon, an armour, and a weapon, armour, shield or bow), and
- *                      three wands and rings
+ *   the four tables    three kinds of scroll (never upgrade); three kinds of potion (never strength or experience); a
+ *                      bundle of arrows and two kinds of thing to throw, in piles twice the size of those found, each
+ *                      sold by the pile; and three different pieces of gear: weapons, armour, shields, bows, rings or
+ *                      wands (SHOP_GEAR), from a little deeper than the floor
  */
 export function shopStock(rng, depth, wares = {}) {
-  const gear = (kind) => makeItem(kind, pickTiered(rng, DEFS[kind], depth + 3), { hitsToId: GEAR_HITS_TO_ID[kind], plus: rng.chance(0.3) ? 1 : 0 });
-  const trinket = (kind) => kind === 'wand' ? randomWand(rng)
-    : makeItem('ring', rng.weighted({ ...freqTable(RINGS), teleportation: 0 }), { wornTime: 0, plus: rng.int(1, 2) });
   const priced = (item) => item && { item, price: shopPrice(item, depth) };
-  const third = rng.pick(['weapon', 'armor', 'shield', 'bow']);
+  /** `n` different types from `defs`, but for those `not` to be had here, at random by their `freq`. */
+  const types = (defs, n, not = []) => {
+    const table = freqTable(defs);
+    for (const t of not) delete table[t];
+    return Array.from({ length: n }, () => {
+      const t = rng.weighted(table);
+      delete table[t];
+      return t;
+    });
+  };
+  const gear = (kind) => kind === 'wand' ? randomWand(rng)
+    : kind === 'ring' ? makeItem('ring', rng.weighted({ ...freqTable(RINGS), teleportation: 0 }), { wornTime: 0, plus: rng.int(1, 2) })
+    : makeItem(kind, pickTiered(rng, DEFS[kind], depth + 3), { hitsToId: GEAR_HITS_TO_ID[kind], plus: rng.chance(0.3) ? 1 : 0 });
+  // (No two alike, if a few more draws can help it.)
+  const kit = [];
+  for (let tries = 0; kit.length < 3; tries++) {
+    const item = gear(rng.weighted(SHOP_GEAR));
+    if (tries >= 20 || !kit.some((k) => k.kind === item.kind && k.type === item.type)) kit.push(item);
+  }
   return [
-    priced(third === 'bow' || rng.chance(0.3) ? arrows(rng, 15, 25) : makeItem('food', 'ration')),
-    priced(makeItem('potion', rng.chance(0.5) ? 'healing' : rng.weighted(freqTable(POTIONS)))),
-    priced(makeItem('scroll', rng.chance(0.4) ? 'identify' : rng.weighted(freqTable(SCROLLS)))),
+    priced(makeItem('food', 'ration')), priced(makeItem('potion', 'healing')), priced(makeItem('scroll', 'identify')),
     priced(wares.container && makeItem('container', wares.container)),
     wares.artefact ? priced(makeItem('artefact', wares.artefact)) : prize(rng, depth),
-    ...['weapon', 'armor', third].map((k) => priced(gear(k))),
-    ...['wand', 'ring', rng.chance(0.5) ? 'wand' : 'ring'].map((k) => priced(trinket(k))),
+    ...types(SCROLLS, 3, ['upgrade']).map((t) => priced(makeItem('scroll', t))),
+    ...types(POTIONS, 3, ['strength', 'experience']).map((t) => priced(makeItem('potion', t))),
+    priced(arrows(rng, 15, 25)),
+    ...types(THROWN, 2).map((t) => priced(thrownPile(rng, 2, t))),
+    ...kit.map(priced),
   ];
 }
 
@@ -277,7 +307,7 @@ function randomWand(rng, depth) {
 }
 
 export function stackable(item) {
-  return item.kind === 'potion' || item.kind === 'scroll' || item.kind === 'food' || item.kind === 'arrow';
+  return item.kind === 'potion' || item.kind === 'scroll' || item.kind === 'food' || item.kind === 'arrow' || item.kind === 'thrown';
 }
 
 export function isEquipment(item) {

@@ -29,6 +29,14 @@ For testing by hand, press **`** (the key left of 1) during a run to open the de
 - **Statuses:** give yourself, or the monster you're facing, any status for 15 s, as it would happen in play (immunities and how statuses meet included).
 - **Icons:** **Show every icon** lays out every item icon as big as the game shows them, each tinted one in every colour it comes in, the scroll with every rune, and the marks (see [Item icons](icons.md)).
 
+## Music
+
+There are two pieces: the title theme, on the title screen, and the shop's, while you're in the shop. The floors themselves have only their ambience (the theme's drone, water, wind...). The music is made the way the sound effects are, with no audio files: each piece's score is written out note by note, the title theme's in `music/title.js` (its leitmotif and its darker forms, its arrangement through the descent, and the mix) and the shop's in `music/shop.js` (in D Hijaz, on an oud, a kanun, a tanpura's drone, a goblet drum and finger cymbals), and `music/synth.js` has the instruments they're played on, synthesized in plain JavaScript (plucked strings by Karplus-Strong, a recorder, a fiddle, brass, voices, a drone, a bell, drums and kettledrums...), with a hall's reverb (a smaller room for the shop). The title theme's leitmotif in its triumphant form, in the major (`TRIUMPHANT` in `title.js`), waits for a theme for the run's end.
+
+Both are rendered as the game starts, in a worker (a few seconds each), and loop, fading in once they're ready and you've clicked or pressed a key (browsers allow no sound before that), and out as you leave them (`music/music.js`): the title theme as a run starts, the shop's as you step out of the shop. The shop's picks up where it left off; the title theme starts from its beginning. What rings on past a piece's end is laid over its start, so it loops without a seam. The Music toggle, on the title screen and the pause panel, turns it all off.
+
+To work on them, `npm run music` renders them to `dist/` (`title-theme.wav`, `shop-theme.wav`; or `npm run music -- shop` for one) with the same code, and says how loud each instrument came out.
+
 ## Code map
 
 ```
@@ -37,13 +45,17 @@ src/
   build.js             which build this is (stamped in by vite.config.js), for the title screen and saves
   game.js              run lifecycle, level transitions, rendering, interaction, traps, endings
   player.js            movement, attack meter, stats, grip, the light you carry, statuses, hunger/regen, inventory
-  combat.js            player melee resolution
+  combat.js            player melee resolution, and your missiles (arrows, thrown weapons) striking and where they land
   damage.js            damage types (physical, magic and the elements) and the resistances to them
   status.js            statuses for the player and monsters alike: what they do, what wards them off, how they meet
   hotbar.js            hotbar bindings and what each slot does when pressed (swapping a weapon, lantern, shield or bow into your hand)
   shield.js            shields: raising one, what it blocks (in front raised, behind on your back) and what that costs, the bash
-  bow.js               bows and arrows: nocking, drawing and loosing, the jab, where an arrow lands and what it does there
+  bow.js               bows and arrows: nocking, drawing and loosing, the jab, and what an arrow does when it strikes
+  thrown.js            thrown weapons (stones, darts, throwing knives): drawing back, charging and throwing from the hotbar
   input.js / audio.js  pointer-lock input; WebAudio synth sfx + ambient drone
+  music/               the music: the title theme's score (title.js) and the shop's (shop.js), written with notes.js; the
+                       synthesizer they're played on (synth.js); and their playing (music.js), rendered in a worker as
+                       the game starts (worker.js)
   save.js              the saved run in local storage, and the helpers floors are saved with
   dungeon/generator.js pure data: plans the loop and branches, lays out rooms, routes corridors, populates (seeded)
   dungeon/rooms.js     room types (entrance, exit, standard, vault, shrine, shop): sizes, door style, furnishing
@@ -75,7 +87,7 @@ src/
   items/use.js         potions, scrolls, wands, equip/curses, grip and off-hand use, throwing, artefact powers
   items/models.js      loads the weapon and item models, tinting each item in its colour
   items/bbmodel.js     loads Blockbench .bbmodel projects (cubes, meshes, groups, textures) into three.js
-  fx/                  viewmodel (hands), pixel-art flames, projectiles, particles, drips, ripples round waders, haze over channels (the rifts' miasma, the lava's embers), glow sprites
+  fx/                  viewmodel (hands), pixel-art flames, projectiles, particles, drips, ripples round waders, haze over channels (the rifts' miasma, the lava's embers), glow sprites, statuses shown on monsters (statusFx.js) and over your view (screenFx.js)
   ui/ui.js             HUD, minimap, message log, floating text, pack (and its tooltip), dialogs, title and end screens
   ui/iconArt.js        the hand-drawn pixel art: the scrolls' runes and the pack's marks
   ui/icons.js          renders the item icons from their models (their poses, the tinted ones, the scrolls' runes), paints the marks
@@ -85,6 +97,7 @@ src/
   ui/devTools.js       the dev tools panel (the ` key): travel, stats, items and monsters for testing
 assets/models/         Blockbench models: monsters/, npcs/, weapons/, items/, props/, the hand lantern and the wall sconce
 tools/modelgen/        builds those models from code (npm run models)
+tools/music.mjs        renders the music to dist/ (title-theme.wav, shop-theme.wav), to listen to as it's worked on (npm run music)
 public/                copied into the build as it is: the favicon, and the picture a shared link shows
 docs/                  these docs
 ```
@@ -97,5 +110,5 @@ Balance numbers live in `monsters/defs.js`, `items/defs.js` and `config.js`. `wi
 - More furniture for other room types
 - More level shapes: caves via cellular automata, chasms that drop you a floor, rooms designed round their pools (a flooded crypt, a cistern, a bathhouse)
 - Splitting oozes, invisible stalkers, thieves who steal and teleport away
-- Alchemy or crafting for spare potions, and more kinds of arrow, and thrown weapons, for the bullet pouch
+- Alchemy or crafting for spare potions, and more kinds of arrow and thrown weapon
 - Music, and positional audio for monsters you can hear but not see

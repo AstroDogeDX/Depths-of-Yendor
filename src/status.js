@@ -7,13 +7,15 @@ import { danger, WADE_WET } from './config.js';
 //
 // Each status in STATUSES may give:
 //   label, color     how the HUD and the target bar name it
-//   tint             a monster's glow while it has it (the first in this list that it has wins)
+//   tint             a monster's glow while it has it (the first in this list that it has wins). Kept for a few:
+//                    what afflicts a monster shows on it as sprites and flames (see fx/statusFx.js)
 //   harm             a hostile one: bosses take it for BOSS_STATUS as long
 //   stack: 'add'     a new dose adds its time (haste). Otherwise a new dose tops it up to the longer of the two.
 //   permanent        it never wears off (it's 1 while in effect), only ends when something ends it
 //   hold(who)        while this is true it doesn't wear down (Wet, while wading)
 //   dot              hurts every second: { type (a damage type, see damage.js, or none), source (what killed you),
 //                    player(game), monster(game, m) (how much) }
+//   regen(who)       heals this much a second, little by little
 //   resist           the damage type whose immunity wards it off (fire for burning: nothing burns a fire imp)
 //   immune(who)      anything else that wards it off
 //   start, end       what the log says as it starts ([text, kind]) and ends, for the player
@@ -22,6 +24,7 @@ import { danger, WADE_WET } from './config.js';
 //   player, monster  false if it never afflicts one of them
 //
 // What the effects themselves do is in the code for the player and monsters (e.g. `held()` for paralysed or frozen).
+// How they look is in fx/statusFx.js (on monsters) and fx/screenFx.js (over your view).
 // Being Hunted isn't one of these: it's carrying the Amulet (see Game.hunted).
 //
 // `who` is the player or a monster, with: status, isPlayer, boss, resistMult(type), hasTrait(trait),
@@ -29,6 +32,9 @@ import { danger, WADE_WET } from './config.js';
 // (standing in a pool: see wade).
 
 export const BOSS_STATUS = 0.5;
+// A potion of healing's Healing (see drinkPotion and potionSplash in items/use.js): how long it lasts, and how much of
+// your health (or a monster's) it mends over that time. Another adds its time to what's left.
+export const HEALING = { secs: 8, share: { player: 0.75, monster: 0.5 } };
 const FROZEN_THAW_CHILL = 4; // seconds of Chilled a thaw leaves behind
 // How long a charm leaves its target heartbroken (immune to charms) once it ends, or is broken.
 export const HEARTBREAK = { player: 60, monster: 30 };
@@ -48,25 +54,25 @@ export const STATUSES = {
     onEnd: (game, who) => afflict(game, who, 'chilled', FROZEN_THAW_CHILL, { show: false, thaw: true }),
   },
   burning: {
-    label: 'Burning', color: '#ff7a3a', tint: 0x802000, harm: true, resist: 'fire',
+    label: 'Burning', color: '#ff7a3a', tint: 0x5a1600, harm: true, resist: 'fire',
     dot: { type: 'fire', source: 'flames', player: () => rand.int(1, 3), monster: () => rand.int(2, 4) },
     start: ['You are on fire!', 'danger'], end: 'The flames go out.',
   },
   paralysed: {
-    label: 'Paralysed', color: '#8fb0ff', tint: 0x103060, harm: true,
+    label: 'Paralysed', color: '#8fb0ff', harm: true,
     start: ['Your limbs lock rigid!', 'danger'], end: 'You can move again.',
   },
   chilled: {
-    label: 'Chilled', color: '#8fd8ff', tint: 0x203a58, harm: true, resist: 'ice', mark: 'CHILLED',
+    label: 'Chilled', color: '#8fd8ff', harm: true, resist: 'ice', mark: 'CHILLED',
     start: ['The cold bites deep, and you slow.', 'warn'], end: 'The chill leaves you.',
   },
   poisoned: {
-    label: 'Poisoned', color: '#9ee070', tint: 0x105010, harm: true, resist: 'poison',
+    label: 'Poisoned', color: '#c27ae8', harm: true, resist: 'poison',
     dot: { type: 'poison', source: 'poison', ...poisonDose },
     start: ['You feel very sick.', 'danger'], end: 'You feel less sick.',
   },
   bleeding: {
-    label: 'Bleeding', color: '#ff5060', tint: 0x500010, harm: true, mark: 'BLEEDING',
+    label: 'Bleeding', color: '#ff5060', harm: true, mark: 'BLEEDING',
     dot: { type: null, source: 'blood loss', ...poisonDose },
     immune: (who) => who.hasTrait('bloodless'),
     start: ['You are bleeding!', 'danger'], end: 'The bleeding stops.',
@@ -92,14 +98,14 @@ export const STATUSES = {
   // Bard, to come); on a boss it's an ordinary charm. Either leaves its target Heartbroken, and no charm takes on the
   // heartbroken.
   charmed: {
-    label: 'Charmed', color: '#ff8ac8', tint: 0x7a2050, harm: true, mark: 'CHARMED',
+    label: 'Charmed', color: '#ff8ac8', harm: true, mark: 'CHARMED',
     immune: (who) => who.status.heartbroken > 0 || who.status.smitten > 0,
     start: ["You are charmed! You can't bring yourself to fight.", 'warn'], end: 'The charm on you breaks.',
     onStart: (game, who) => who.charm?.(game),
     onEnd: charmEnds,
   },
   smitten: {
-    label: 'Smitten', color: '#ff8ac8', tint: 0x7a2050, permanent: true, player: false, mark: 'SMITTEN',
+    label: 'Smitten', color: '#ff8ac8', permanent: true, player: false, mark: 'SMITTEN',
     immune: (who) => who.status.heartbroken > 0,
     onStart: (game, who) => who.charm?.(game),
     onEnd: charmEnds,
@@ -124,6 +130,10 @@ export const STATUSES = {
   wet: {
     label: 'Wet', color: '#70b0ff', mark: 'WET', hold: (who) => !!who.wading,
     start: ['You are soaked through.', 'info'], end: 'You have dried off.',
+  },
+  healing: {
+    label: 'Healing', color: '#8cf08a', stack: 'add', mark: 'HEALING', end: 'The healing warmth fades.',
+    regen: (who) => (who.maxHp * HEALING.share[who.isPlayer ? 'player' : 'monster']) / HEALING.secs,
   },
   hasted: { label: 'Hasted', color: '#a8e890', stack: 'add', monster: false, end: 'You feel yourself slow down.' },
   mindvision: { label: 'Mind vision', color: '#a8e890', monster: false, end: "Your mind's eye closes." },
@@ -301,8 +311,9 @@ export function hitStatuses(game, who, type, { ignite = 0, chill = 0 } = {}) {
 }
 
 /**
- * Runs `who`'s statuses on by `dt` seconds: they wear down (and off, with what that does), and those that hurt,
- * hurt once a second. `damage: false` for catching a floor up on the time you were away (see Level.catchUp).
+ * Runs `who`'s statuses on by `dt` seconds: they wear down (and off, with what that does), those that heal, heal, and
+ * those that hurt, hurt once a second. `damage: false` for catching a floor up on the time you were away (see
+ * Level.catchUp): they only wear down.
  */
 export function tickStatuses(game, who, dt, { damage = true } = {}) {
   const s = who.status;
@@ -315,6 +326,7 @@ export function tickStatuses(game, who, dt, { damage = true } = {}) {
       who.statusNote(game, key, 'end');
     } else if (STATUSES[key].dot) hurting = true;
   }
+  if (damage && !who.dead) for (const key in s) if (s[key] > 0 && STATUSES[key].regen) who.heal(STATUSES[key].regen(who) * dt);
   if (!damage || !hurting) return;
   who.dotT = (who.dotT ?? 0) + dt;
   if (who.dotT < 1) return;

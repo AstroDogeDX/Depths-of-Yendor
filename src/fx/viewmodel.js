@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { buildWeaponMesh, buildItemModel, heldModel } from '../items/models.js';
-import { SHIELDS, BOWS, ARROWS } from '../items/defs.js';
+import { SHIELDS, BOWS, ARROWS, THROWN } from '../items/defs.js';
 import { buildBBModel } from '../items/bbmodel.js';
 import { MODEL_PX } from '../config.js';
 import { glowSprite } from './glow.js';
@@ -96,6 +96,22 @@ const ACTS = {
   zap: { dur: 0.3, pose: (k) => ({ p: [0, 0.02 * k, -0.16 * k], r: [0.15 * k, 0, 0] }) }, // jabbed at the crosshair
   self: { dur: 0.55, pose: (k) => ({ p: [-0.12 * k, 0.06 * k, 0.12 * k], r: [0, 2.4 * k, 0] }) }, // turned on yourself
 };
+
+// A thrown weapon held up (see thrown.js), by type: turned from its own frame (its point up, +y) to how it's held ready
+// to throw, and scaled; `back`, how far it tips back as you draw your arm back (radians). Drawn back, it goes up over
+// your shoulder (THROW_BACK, from where it's held up: its `p`, and `r` its roll), and further back as the throw charges
+// (THROW_PULL, at full charge). Thrown, your arm snaps forward to THROW_SNAP (by `at` of the way through), letting go of
+// it on the way (at `release`), and the next comes up from below into your hand (from `next`), over THROW_NEXT seconds
+// in all, after which you can draw back again.
+export const THROW_NEXT = 0.45;
+const THROW_GRIP = {
+  stone: { turn: [0.4, 0.6, 0], scale: 1, back: 0.5 },
+  dart: { turn: [-0.95, 0, 0.15], scale: 0.9, back: 0.25 },
+  knife: { turn: [-1.2, 0, 0.25], scale: 1, back: 1.2 },
+};
+const THROW_BACK = { p: [-0.02, 0.2, 0.2], r: -0.2 };
+const THROW_PULL = { p: [0.01, 0.02, 0.05], r: 0.15 };
+const THROW_SNAP = { p: [-0.14, 0.04, -0.32], r: [-0.7, 0, 0.1], at: 0.25, release: 0.12, next: 0.5 };
 
 // Where your off hand holds the lantern up, by the top of its bail, how big it looks, and how far it's turned to show
 // you a corner; it hangs below. And how it swings from there: a
@@ -258,6 +274,14 @@ export class ViewModel {
     this.actKind = null;
     this.actT = -1;
     this.actGone = false; // the last of them: it's gone from your hand once used
+    // A thrown weapon held up (see throwPose): `windShown` and `chargeShown` follow how far your arm's drawn back and the
+    // throw charged (Player.windup, and the attack meter), easing back when you let go; `hurlT` runs through a throw, or
+    // is -1, from where your arm was (`hurlFrom`), and `hurlGone` is whether that was the last of them.
+    this.windShown = 0;
+    this.chargeShown = 0;
+    this.hurlT = -1;
+    this.hurlFrom = { wind: 0, charge: 0 };
+    this.hurlGone = false;
   }
 
   /** Acts out using what's held up (see ACTS); `gone`: that was the last of it, which leaves your hand. */
@@ -267,16 +291,25 @@ export class ViewModel {
     this.actGone = gone;
   }
 
-  /** Puts `item` in the hand (or nothing), to be raised. */
+  /** A thrown weapon leaves your hand (see thrown.js): your arm snaps forward, and the next comes up, unless `gone`. */
+  hurl(gone) {
+    this.hurlT = 0;
+    this.hurlFrom = { wind: this.windShown, charge: this.chargeShown };
+    this.hurlGone = gone;
+    this.windShown = this.chargeShown = 0;
+  }
+
+  /** Puts `item` in the hand (or nothing), to be raised: one of a stack of thrown weapons as it's thrown. */
   showHeld(item, color) {
     if (this.heldModel) this.heldPivot.remove(this.heldModel);
     this.heldItem = item;
     this.heldModel = null;
-    this.actT = -1;
+    this.actT = this.hurlT = -1;
     if (!item) return;
-    const model = buildItemModel(item, color);
+    const thrown = item.kind === 'thrown';
+    const model = thrown ? heldModel(THROWN[item.type].model) : buildItemModel(item, color);
     const turn = new THREE.Group();
-    const how = HELD_KINDS[item.kind] ?? { turn: [0, 0, 0], scale: 1 };
+    const how = (thrown ? THROW_GRIP[item.type] : HELD_KINDS[item.kind]) ?? { turn: [0, 0, 0], scale: 1 };
     turn.rotation.set(...how.turn);
     turn.scale.setScalar(how.scale);
     turn.add(model);
@@ -374,11 +407,11 @@ export class ViewModel {
   /**
    * `offhand`: what's in your off hand (an item), or null; `guard`: how far a shield there is raised (Player.guard);
    * `twoHanded`: your weapon gripped in both hands, with it stowed; `carriedLight`: how brightly your lantern lights
-   * you (Player.carriedLight).
+   * you (Player.carriedLight); `windup`: how far your arm's drawn back to throw what's held up (Player.windup).
    */
   update(dt, {
     moving, bob, charge, time, lightLevel, carriedLight = 1, offhand = null, guard = 0, twoHanded = false, yaw = 0, sprint = false,
-    held = null, nock = 0, draw = 0, quiver = null,
+    held = null, windup = 0, nock = 0, draw = 0, quiver = null,
   }) {
     // What's held up from the hotbar: a new one waits for the last to go down (or, from the weapon, goes straight in).
     const want = held?.item ?? null;
@@ -447,7 +480,7 @@ export class ViewModel {
     this.weaponPlane.rotation.set(0, 0, pose.roll);
     this.weaponArc.rotation.set(pose.arc, 0, 0);
     this.weaponTwist.rotation.set(0, pose.twist, 0);
-    this.updateHeld(dt, raised, bx, by);
+    this.updateHeld(dt, raised, bx, by, { windup, charge, time });
     const down = 1 - this.lanternUp;
     this.lantern.position.set(LANTERN_AT[0] - bx, LANTERN_AT[1] + by - down * 0.75, LANTERN_AT[2]);
     this.lantern.visible = this.lanternUp > 0.01;
@@ -562,12 +595,16 @@ export class ViewModel {
     seg.scale.set(STRING_THICK, STRING_THICK, len);
   }
 
-  /** Poses what's held up: `raised` how far (0..1), and what using it looks like, if it's being used. */
-  updateHeld(dt, raised, bx, by) {
+  /**
+   * Poses what's held up: `raised` how far (0..1), and what using it looks like, if it's being used: a thrown weapon
+   * drawn back and thrown (see throwPose).
+   */
+  updateHeld(dt, raised, bx, by, { windup, charge, time }) {
     const h = this.heldPivot;
     h.visible = !!this.heldModel && raised > 0.01;
     let p = [0, 0, 0], r = [0, 0, 0];
-    if (this.actT >= 0) {
+    if (this.heldItem?.kind === 'thrown') ({ p, r } = this.throwPose(dt, windup, charge, time));
+    else if (this.actT >= 0) {
       const a = ACTS[this.actKind];
       this.actT += dt / a.dur;
       // The last one leaves your hand: thrown at the top of the throw, drunk at the end.
@@ -577,5 +614,43 @@ export class ViewModel {
     }
     h.position.set(HELD_AT[0] + p[0] + bx, HELD_AT[1] + p[1] + by - (1 - raised) * 0.6, HELD_AT[2] + p[2]);
     h.rotation.set(r[0] - (1 - raised) * 0.5, r[1], r[2]);
+  }
+
+  /**
+   * A thrown weapon in your hand (see THROW_GRIP): drawn back over your shoulder as your arm goes back (`windup`), and
+   * further as the throw charges (`charge`), trembling at full charge; thrown (see hurl), your arm snaps forward and lets
+   * go of it, and the next comes up from below, unless that was the last. Returns its pose, from where it's held up.
+   */
+  throwPose(dt, windup, charge, time) {
+    const tip = THROW_GRIP[this.heldItem.type].back;
+    this.windShown = windup >= this.windShown ? windup : Math.max(windup, this.windShown - dt / 0.18);
+    this.chargeShown = windup > 0 ? charge : Math.max(0, this.chargeShown - dt / 0.18);
+    const drawn = (wind, pull) => {
+      const k = smooth(wind);
+      return { p: THROW_BACK.p.map((v, j) => v * k + THROW_PULL.p[j] * pull), r: [tip * k + THROW_PULL.r * pull, 0, THROW_BACK.r * k] };
+    };
+    this.heldModel.visible = true;
+    if (this.hurlT < 0) {
+      const pose = drawn(this.windShown, this.chargeShown);
+      if (this.chargeShown >= 1) {
+        pose.p[0] += Math.sin(time * 23) * 0.002;
+        pose.p[1] += Math.sin(time * 37) * 0.0015;
+      }
+      return pose;
+    }
+    const t = (this.hurlT = Math.min(1, this.hurlT + dt / THROW_NEXT)), S = THROW_SNAP;
+    let pose;
+    if (t < S.at) {
+      // Your arm snaps forward from where it was drawn back to, letting go of it on the way.
+      const from = drawn(this.hurlFrom.wind, this.hurlFrom.charge), k = smooth(t / S.at);
+      pose = { p: from.p.map((v, j) => lerp(v, S.p[j], k)), r: from.r.map((v, j) => lerp(v, S.r[j], k)) };
+    } else {
+      // The next comes up from below into your hand.
+      const k = smooth(Math.max(0, (t - S.next) / (1 - S.next)));
+      pose = { p: [0, -0.4 * (1 - k), 0], r: [-0.6 * (1 - k), 0, 0] };
+    }
+    this.heldModel.visible = t < S.release || (!this.hurlGone && t >= S.next);
+    if (t >= 1) this.hurlT = -1;
+    return pose;
   }
 }

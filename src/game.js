@@ -10,9 +10,11 @@ import { makeItem, randomItem, nextItemUid, reserveUids, arrows, soldByThePile }
 import { itemActions, activateArtefact, toggleGrip, useOffhand } from './items/use.js';
 import { ViewModel, HOLD_RAISE, HOLD_USE, actTime } from './fx/viewmodel.js';
 import { burst, ring, gasCloud, lightColumn } from './fx/particles.js';
+import { ScreenFx } from './fx/screenFx.js';
 import { playerPopupPos } from './combat.js';
 import { Input, GAME_KEYS } from './input.js';
 import { Sfx } from './audio.js';
+import { Music } from './music/music.js';
 import { useSlot, slotItem, useHeldSlot, useHeld, HELD } from './hotbar.js';
 import { disposeGroup, propsForTheme } from './dungeon/levelBuilder.js';
 import { loadProps } from './dungeon/props.js';
@@ -59,9 +61,12 @@ export class Game {
     this.scene.add(this.ambient);
 
     this.viewmodel = new ViewModel();
+    this.screenFx = new ScreenFx(); // your statuses, over your view
     this.title = new TitleScene(this.renderer); // the walk through the dungeon behind the title screen
     this.input = new Input(canvas);
     this.audio = new Sfx();
+    this.music = new Music(this.audio); // the title theme, and the shop's
+    this.music.play('title');
     this.ui = ui;
 
     this.resIdx = 0;
@@ -116,6 +121,8 @@ export class Game {
   /** What a new run and a continued one both start with: the seed's dungeon, cleared of any last run. */
   beginRun(seed, name) {
     this.title.stop();
+    this.music.play(null);
+    this.screenFx.reset();
     this.seed = seed;
     this.playerName = name;
     const rng = new RNG(`${this.seed}:run`);
@@ -228,6 +235,7 @@ export class Game {
     this.paused = false;
     this.input.unlock();
     this.title.start();
+    this.music.play('title');
     this.ui.showTitle();
   }
 
@@ -448,9 +456,10 @@ export class Game {
    * on yourself: again, for another, while you still hold the key (after HOLD_USE). A click while it's on its way up
    * waits for it. Meanwhile the mouse does nothing else: no swing, nothing from your off hand. Let go and it goes back
    * down, the weapon back up. Having to raise each one in turn is what keeps a hotbar of wands from being played like
-   * piano keys. `hold`: { i (the slot), readyAt (this.time), queued (a click waiting: 'left' | 'right') } while a key
-   * is held; or, quaffing a potion with Q (see quickHeal), { i: -1, item, readyAt, queued: 'right', until }, which
-   * lets go by itself once it's drunk (`until`).
+   * piano keys. A thrown weapon is wound up with right-click held, and thrown with a click, instead (see updateThrow in
+   * thrown.js, which takes the click kept for it here). `hold`: { i (the slot), readyAt (this.time), queued (a click
+   * waiting: 'left' | 'right') } while a key is held; or, quaffing a potion with Q (see quickHeal), { i: -1, item,
+   * readyAt, queued: 'right', until }, which lets go by itself once it's drunk (`until`).
    */
   holdSlot(inp) {
     const down = (i) => inp.down(`Digit${i + 1}`) || inp.down(`Numpad${i + 1}`);
@@ -469,8 +478,9 @@ export class Game {
     inp.pressed.delete('Mouse0');
     inp.pressed.delete('Mouse2');
     inp.mouseDown = false;
-    if (click && !h.item) h.queued = click; // (quaffing, a click does nothing)
-    if (h.queued && this.time >= h.readyAt) {
+    const wind = !h.item && HELD[slotItem(this.player, h.i)?.kind]?.wind;
+    if (click && !h.item && !(wind && click === 'right')) h.queued = click; // (quaffing, a click does nothing)
+    if (h.queued && this.time >= h.readyAt && !wind) {
       if (h.item) {
         useHeld(this, h.item, h.queued);
         h.until = this.time + actTime('drink');
@@ -537,14 +547,16 @@ export class Game {
     this.player.update(dt, this, this.input);
     if (this.over) return;
     this.level.update(dt, this);
+    this.music.play(this.level.playerInShop ? 'shop' : null); // (the floors have only their ambience)
     this.updateCamera(dt);
     const p = this.player;
     this.viewmodel.update(dt, {
       moving: p.moving, bob: p.bob, charge: p.charge, time: this.time, yaw: p.yaw, sprint: p.moving && p.mode === 'sprint',
       lightLevel: p.status.blind > 0 ? 0.1 : 1, carriedLight: p.carriedLight(),
-      offhand: p.equip.offhand, guard: p.guard, twoHanded: p.twoHanded, held: this.heldItem(),
+      offhand: p.equip.offhand, guard: p.guard, twoHanded: p.twoHanded, held: this.heldItem(), windup: p.windup,
       nock: p.nock, draw: p.draw, quiver: quiverOf(p)?.type ?? null,
     });
+    this.screenFx.update(dt, this);
     this.interaction = this.findInteraction();
     this.target = this.findTarget();
   }
@@ -586,8 +598,10 @@ export class Game {
     r.clear();
     r.render(this.scene, this.camera);
     if (this.state === 'play' && !this.over) {
+      this.screenFx.beforeHands(r);
       r.clearDepth();
       r.render(this.viewmodel.scene, this.viewmodel.camera);
+      this.screenFx.render(r, this);
     }
   }
 
@@ -737,6 +751,7 @@ export class Game {
       this.log(`${ARTEFACTS[item.type].name}: ${ARTEFACTS[item.type].desc} Put it on from your pack.`, 'good');
     }
     this.noteContainer(item);
+    this.noteThrown(item);
     if (item.kind === 'amulet' && !this.amuletTaken) {
       this.amuletTaken = true;
       this.audio.victory();
@@ -751,6 +766,13 @@ export class Game {
     if (item.kind !== 'container') return;
     const c = CONTAINERS[item.type];
     this.log(`You fasten the ${c.name} to your pack. Your ${c.what} go in it now, on a tab of their own.`, 'good');
+  }
+
+  /** The first time you get some thrown weapons (and they aren't on your hotbar already), says how to throw them (see thrown.js). */
+  noteThrown(item) {
+    if (item.kind !== 'thrown' || this.toldThrow || this.player.onHotbar(item)) return;
+    this.toldThrow = true;
+    this.log('Put them on your hotbar to throw them: hold the slot\'s key to take one up, hold right-click to draw back, and click to throw.', 'info');
   }
 
   /** Buys an item from the shop: gold for goods, no haggling, no refunds. */
@@ -774,6 +796,7 @@ export class Game {
     this.audio.coins();
     this.log(`You buy ${this.knowledge.name(one, { article: true })} for ${entry.price * n} gold.`, 'good');
     this.noteContainer(one);
+    this.noteThrown(one);
     level.shopkeeper?.sold(this, level);
   }
 
@@ -1031,8 +1054,8 @@ export class Game {
       case 'poison':
         this.log('A cloud of green gas billows up around you!', 'danger');
         this.audio.hiss();
-        ring(level, x, z, 0x40c040, 3, 1);
-        gasCloud(level, x, z, 0x6ac03a);
+        ring(level, x, z, 0xa050d8, 3, 1);
+        gasCloud(level, x, z, 0x9a52d0);
         p.addStatus('poisoned', 8, this);
         break;
       case 'teleport':
@@ -1084,6 +1107,7 @@ export class Game {
 
   endRun(info) {
     this.state = 'over';
+    this.music.play(null);
     this.running = false;
     deleteSave(); // death is permanent, and a won run is done
     this.menu = null;

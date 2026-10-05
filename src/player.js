@@ -3,13 +3,14 @@ import {
   STAMINA_BASE, STAMINA_PER_LEVEL, STAMINA_DRAIN, STAMINA_REGEN, STAMINA_REGEN_DELAY, STAMINA_RECOVER, MODE_SPEED, NOISE,
   TWO_HAND_STR, EYE_H, CROUCH_DROP, POOL, WADE_SPEED,
 } from './config.js';
-import { WEAPONS, ARMORS, SHIELDS, BOWS, ARROWS, ARTEFACTS, OFFHANDS, FOOD, CONTAINERS, CONTAINER_SIZE, wandRecharge } from './items/defs.js';
+import { WEAPONS, ARMORS, SHIELDS, BOWS, ARROWS, THROWN, ARTEFACTS, OFFHANDS, FOOD, CONTAINERS, CONTAINER_SIZE, wandRecharge } from './items/defs.js';
 import { enchantOf, baneOf } from './items/enchant.js';
 import { stackable } from './items/generate.js';
 import { slotHolds } from './hotbar.js';
 import { playerStrike } from './combat.js';
 import { updateGuard, shieldBash, shieldOf, shieldStats } from './shield.js';
 import { archer, updateBow, jabStats, bowOf, bowStats, quiverOf } from './bow.js';
+import { updateThrow, THROW_SLOW } from './thrown.js';
 import { damageType, damageMult } from './damage.js';
 import { STATUSES, blankStatus, restoreStatus, saveStatus, afflict, tickStatuses, wade } from './status.js';
 import { rand } from './rng.js';
@@ -24,12 +25,13 @@ const SAVED = [
 ];
 
 // The pack keeps things of a kind together, in this order (anything else last), so you know roughly where to look.
-// Weapons, bows, arrows, armour, shields, off-hand things, artefacts and food, whose type you can always see, go by their
-// type in the order of their table in items/defs.js (weakest first); potions, scrolls, wands and rings in the order you got them,
-// since an order by type would give away what you don't know.
-const PACK_ORDER = ['weapon', 'bow', 'arrow', 'offhand', 'shield', 'armor', 'ring', 'artefact', 'wand', 'potion', 'scroll', 'food', 'amulet'];
+// Weapons, bows, arrows, thrown weapons, armour, shields, off-hand things, artefacts and food, whose type you can always
+// see, go by their type in the order of their table in items/defs.js (weakest first); potions, scrolls, wands and rings
+// in the order you got them, since an order by type would give away what you don't know.
+const PACK_ORDER = ['weapon', 'bow', 'arrow', 'thrown', 'offhand', 'shield', 'armor', 'ring', 'artefact', 'wand', 'potion', 'scroll', 'food', 'amulet'];
 const TYPE_ORDER = Object.fromEntries(Object.entries({
-  weapon: WEAPONS, bow: BOWS, arrow: ARROWS, armor: ARMORS, shield: SHIELDS, offhand: OFFHANDS, artefact: ARTEFACTS, food: FOOD,
+  weapon: WEAPONS, bow: BOWS, arrow: ARROWS, thrown: THROWN, armor: ARMORS, shield: SHIELDS, offhand: OFFHANDS, artefact: ARTEFACTS,
+  food: FOOD,
 })
   .map(([kind, defs]) => [kind, Object.keys(defs)]));
 const rankOf = (kind) => (PACK_ORDER.includes(kind) ? PACK_ORDER.indexOf(kind) : PACK_ORDER.length);
@@ -81,6 +83,10 @@ export class Player {
     this.draw = 0;
     this.drawing = false;
     this.latch = false;
+    // A thrown weapon held up from the hotbar (see thrown.js): `windup` rises from 0 to 1 as you draw your arm back to
+    // throw it (right-click held), and then `throwCharge` as the throw charges.
+    this.windup = 0;
+    this.throwCharge = 0;
     this.mode = 'walk'; // walk | sprint | sneak
     this.sneaking = false; // toggled with C (see update)
     this.crouch = 0; // 0..1, eases the camera down while sneaking
@@ -223,9 +229,11 @@ export class Player {
     if (a) s *= Math.max(0.6, 1 - Math.max(0, ARMORS[a.type].str - this.str) * 0.08);
     if (this.hunger <= 0) s *= 0.8;
     if (this.wading) s *= WADE_SPEED;
-    // A raised shield slows you as it comes up (see shield.js), and so does a drawn bow (see bow.js).
+    // A raised shield slows you as it comes up (see shield.js), and so does a drawn bow (see bow.js), or your arm drawn
+    // back to throw (see thrown.js).
     if (this.guard > 0 && shieldOf(this)) s *= 1 - (1 - shieldStats(shieldOf(this)).slow) * this.guard;
     if (this.draw > 0 && bowOf(this)) s *= bowStats(bowOf(this)).slow;
+    if (this.windup > 0) s *= THROW_SLOW;
     return s;
   }
 
@@ -412,9 +420,11 @@ export class Player {
     if (!para && input.wasPressed('KeyC')) this.sneaking = !this.sneaking;
     if (input.sprint || this.winded) this.sneaking = false;
     // Holding right-click raises a shield in your off hand (see shield.js), though not while you're held fast, or
-    // holding something up from the hotbar. You can't sprint behind it, nor with an arrow nocked (see bow.js).
+    // holding something up from the hotbar. You can't sprint behind it, nor with an arrow nocked (see bow.js), nor with
+    // your arm drawn back to throw (see thrown.js).
     updateGuard(this, input.guard, !para && !game.hold, dt);
-    let mode = para ? 'walk' : this.sneaking ? 'sneak' : input.sprint && this.guard === 0 && this.nock === 0 ? 'sprint' : 'walk';
+    let mode = para ? 'walk' : this.sneaking ? 'sneak'
+      : input.sprint && this.guard === 0 && this.nock === 0 && this.windup === 0 ? 'sprint' : 'walk';
     if (this.winded) mode = 'walk';
     this.mode = mode;
     this.crouch += ((mode === 'sneak' ? 1 : 0) - this.crouch) * Math.min(1, dt * 8);
@@ -462,6 +472,8 @@ export class Player {
     this.bashT = Math.max(0, this.bashT - dt);
     if (!input.attack) this.latch = false;
     if (!archery) this.nock = this.draw = 0;
+    // A thrown weapon held up from the hotbar is wound up and thrown with the mouse (see thrown.js).
+    updateThrow(game, this, input, dt, !para);
     if (this.swingT >= 0) {
       this.swingT += dt;
       // (Its whoosh as the cut or lunge starts, out of the wind-up.)

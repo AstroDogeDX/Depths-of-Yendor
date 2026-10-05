@@ -1,9 +1,10 @@
 import { MONSTERS } from './defs.js';
-import { buildMonsterModel } from './models.js';
+import { buildMonsterModel, SENSED_LAYER } from './models.js';
 import { rand } from '../rng.js';
 import { PLAYER_RADIUS, TILE, POOL, WADE_SPEED, danger } from '../config.js';
 import { spawnProjectile } from '../fx/projectiles.js';
 import { burst } from '../fx/particles.js';
+import { strain } from '../fx/statusFx.js';
 import { round2 } from '../save.js';
 import { DAMAGE_TYPES, damageType, damageMult, isPhysical } from '../damage.js';
 import {
@@ -122,6 +123,9 @@ export class Monster {
 
   // --- Statuses (see status.js) ---
 
+  /** Mends `n` of its health (see Healing in status.js). */
+  heal(n) { this.hp = Math.min(this.maxHp, this.hp + n); }
+
   /** Gives it a status. `show`: pop up "IMMUNE" if it can't take it. Returns whether it took. */
   afflict(game, key, secs, show = true) { return applyStatus(game, this, key, secs, { show }); }
 
@@ -235,6 +239,7 @@ export class Monster {
       strike: a.phase === 'strike' ? Math.min(1, a.t / STRIKE_TIME) : -1,
       reveal: this.revealT ?? -1,
     });
+    strain(this);
     this.updateTint(dt);
 
     if (this.state === 'sleep') {
@@ -755,6 +760,8 @@ export class Monster {
   die(game, killer = null) {
     this.dead = true;
     this.deathT = 0;
+    this.mesh.rotation.z = 0; // (no longer straining: see strain)
+    this.mesh.traverse((o) => o.layers.disable(SENSED_LAYER)); // (no mind left to sense)
     this.attack.phase = 'none';
     burst(game.level, this.x, this.baseY + this.height * 0.5, this.z, BLOOD[this.type], 16, 3.5, 0.9);
     game.onMonsterKilled(this, killer);

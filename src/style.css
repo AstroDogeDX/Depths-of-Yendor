@@ -22,8 +22,6 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #000; color:
 #fade { background: #000; }
 #dark { background: radial-gradient(ellipse at center, transparent 5%, #000 55%); transition: opacity 0.6s; }
 body.blind #dark { opacity: 0.95; }
-body.lowhp #hurt { animation: pulse 1.2s infinite; }
-@keyframes pulse { 0%, 100% { opacity: 0.12; } 50% { opacity: 0.4; } }
 
 /* --- HUD --- */
 #hud { position: fixed; inset: 0; pointer-events: none; text-shadow: 0 0 3px #000, 1px 1px 0 #000; }
@@ -157,7 +155,7 @@ body.lowhp #hurt { animation: pulse 1.2s infinite; }
 }
 .popup small { display: block; margin-top: 0.15em; font-size: 0.42em; letter-spacing: 0.12em; }
 .popup.crit { color: #ffd040; font-size: 1.35em; }
-.popup.dot { color: #9ee070; font-size: 0.7em; }
+.popup.dot { color: #ff5060; font-size: 0.7em; }
 .popup.miss { color: #d0c8b8; font-size: 0.65em; font-style: italic; font-weight: bold; }
 .popup.immune { color: #b8c4d0; font-size: 0.7em; letter-spacing: 0.08em; }
 .popup.hurt { color: #ff4a3a; font-size: 1.05em; }
@@ -176,7 +174,7 @@ body.lowhp #hurt { animation: pulse 1.2s infinite; }
 .popup.el-fire { color: #ff6a2a; }
 .popup.el-ice { color: #7fd4ff; }
 .popup.el-lightning { color: #f6f060; }
-.popup.el-poison { color: #9ee070; }
+.popup.el-poison { color: #c27ae8; }
 .popup.el-holy { color: #fffbe8; filter: drop-shadow(0 0 0.2em rgba(255, 214, 90, 0.9)); }
 /* A status taking hold of a monster, or fire and cold meeting on it (see status.js). */
 .popup.status { font-size: 0.55em; letter-spacing: 0.1em; color: #e0e0e0; }
@@ -185,6 +183,7 @@ body.lowhp #hurt { animation: pulse 1.2s infinite; }
 .popup.s-weakened { color: #d0a878; }
 .popup.s-oiled { color: #d8b050; }
 .popup.s-wet { color: #70b0ff; }
+.popup.s-healing { color: #8cf08a; }
 .popup.s-doused { color: #d8e4ec; }
 .popup.s-thawed { color: #ffb070; }
 
@@ -458,7 +457,8 @@ button.alt { background: linear-gradient(#5a5040, #3a3228); color: var(--ink); }
 .check { display: inline-flex; gap: 8px; align-items: center; font-size: 14px; cursor: pointer; }
 .check span { opacity: 0.55; font-size: 13px; }
 .check input { accent-color: #b08c48; }
-#pause-fs { margin-top: 6px; font-size: 13px; opacity: 0.8; }
+#pause-fs, #pause-music { margin-top: 6px; font-size: 13px; opacity: 0.8; }
+#pause-music { margin-left: 16px; }
 .pause-actions { margin-top: 16px; }
 .pause-note { margin: 10px 0 0; font-size: 13px; opacity: 0.6; }
 .lore { font-size: 14px; opacity: 0.6; line-height: 1.6; margin-top: 22px; }

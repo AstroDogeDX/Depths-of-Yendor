@@ -18,7 +18,7 @@ export const MARKS = {
   paralysis: 'paralysis', identify: 'identify', upgrade: 'upgrade', cleanse: 'remove curse', teleport: 'teleportation',
   map: 'mapping', aggravate: 'aggravation', fear: 'terror', summon: 'summoning', recharge: 'recharging',
   enchant: 'enchantment', protection: 'protection', food: 'sustenance', quiet: 'quiet', steady: 'steadfastness',
-  thorns: 'thorns',
+  thorns: 'thorns', charm: 'charming',
 };
 
 // Which mark each thing gets: by type for potions, scrolls, wands, rings and artefacts (once you know what kind it is),

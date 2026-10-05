@@ -3,20 +3,25 @@ import * as THREE from 'three';
 // Pixel-art flame. A quad that turns about the vertical to face the camera (so flames always rise,
 // however the torch is tilted), shaded on a coarse grid of "pixels" to match the chunky textures:
 // a teardrop of stepped fire colours, its edges licked away by scrolling noise, and a few sparks
-// drifting up off the top.
+// drifting up off the top. One burning on something (a burning monster: see fx/statusFx.js) can be drawn
+// `toward` the camera by so many metres, looking no bigger, so the thing it's on doesn't hide it.
 
 const GEO = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0); // base at the origin
 
 const vertexShader = /* glsl */ `
+uniform float uToward;
 varying vec2 vUv;
 void main() {
   vUv = uv;
   vec3 center = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
   vec3 toCam = cameraPosition - center;
+  float away = length(toCam);
   toCam.y = 0.0;
   vec3 right = length(toCam) > 1e-4 ? normalize(cross(vec3(0.0, 1.0, 0.0), toCam)) : vec3(1.0, 0.0, 0.0);
   vec2 size = vec2(length(modelMatrix[0].xyz), length(modelMatrix[1].xyz));
   vec3 world = center + right * position.x * size.x + vec3(0.0, position.y * size.y, 0.0);
+  // (Drawn nearer, along the line from the camera, and smaller to match: just as big and in the same place on screen.)
+  world = cameraPosition + (world - cameraPosition) * (max(0.05, away - uToward) / max(away, 1e-4));
   gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
 }`;
 
@@ -87,8 +92,9 @@ export class Flame extends THREE.Mesh {
    * @param pixel          size of one flame pixel in world units
    * @param blue           burn blue instead of orange
    * @param violet         burn violet
+   * @param toward         drawn this many metres nearer the camera (looking no bigger)
    */
-  constructor({ width, height, pixel, seed = Math.random(), blue = false, violet = false }) {
+  constructor({ width, height, pixel, seed = Math.random(), blue = false, violet = false, toward = 0 }) {
     super(GEO, new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
@@ -97,6 +103,7 @@ export class Flame extends THREE.Mesh {
         uLean: { value: 0 },
         uGrid: { value: new THREE.Vector2(Math.round(width / pixel), Math.round(height / pixel)) },
         uTint: { value: blue ? 1 : violet ? 2 : 0 },
+        uToward: { value: toward },
       },
       vertexShader, fragmentShader, transparent: true, depthWrite: false,
     }));
