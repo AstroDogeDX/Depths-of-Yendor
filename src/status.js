@@ -23,6 +23,7 @@ import { danger, WADE_WET } from './config.js';
 //   player, monster  false if it never afflicts one of them
 //
 // What the effects themselves do is in the code for the player and monsters (e.g. `held()` for paralysed or frozen).
+// How they look is in fx/statusFx.js (on monsters) and fx/screenFx.js (over your view).
 // Being Hunted isn't one of these: it's carrying the Amulet (see Game.hunted).
 //
 // `who` is the player or a monster, with: status, isPlayer, boss, resistMult(type), hasTrait(trait),

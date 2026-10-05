@@ -75,7 +75,7 @@ src/
   items/use.js         potions, scrolls, wands, equip/curses, grip and off-hand use, throwing, artefact powers
   items/models.js      loads the weapon and item models, tinting each item in its colour
   items/bbmodel.js     loads Blockbench .bbmodel projects (cubes, meshes, groups, textures) into three.js
-  fx/                  viewmodel (hands), pixel-art flames, projectiles, particles, drips, ripples round waders, haze over channels (the rifts' miasma, the lava's embers), glow sprites, statuses shown on monsters (statusFx.js)
+  fx/                  viewmodel (hands), pixel-art flames, projectiles, particles, drips, ripples round waders, haze over channels (the rifts' miasma, the lava's embers), glow sprites, statuses shown on monsters (statusFx.js) and over your view (screenFx.js)
   ui/ui.js             HUD, minimap, message log, floating text, pack (and its tooltip), dialogs, title and end screens
   ui/iconArt.js        the hand-drawn pixel art: the scrolls' runes and the pack's marks
   ui/icons.js          renders the item icons from their models (their poses, the tinted ones, the scrolls' runes), paints the marks

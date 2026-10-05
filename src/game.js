@@ -10,6 +10,7 @@ import { makeItem, randomItem, nextItemUid, reserveUids, arrows, soldByThePile }
 import { itemActions, activateArtefact, toggleGrip, useOffhand } from './items/use.js';
 import { ViewModel, HOLD_RAISE, HOLD_USE, actTime } from './fx/viewmodel.js';
 import { burst, ring, gasCloud, lightColumn } from './fx/particles.js';
+import { ScreenFx } from './fx/screenFx.js';
 import { playerPopupPos } from './combat.js';
 import { Input, GAME_KEYS } from './input.js';
 import { Sfx } from './audio.js';
@@ -59,6 +60,7 @@ export class Game {
     this.scene.add(this.ambient);
 
     this.viewmodel = new ViewModel();
+    this.screenFx = new ScreenFx(); // your statuses, over your view
     this.title = new TitleScene(this.renderer); // the walk through the dungeon behind the title screen
     this.input = new Input(canvas);
     this.audio = new Sfx();
@@ -116,6 +118,7 @@ export class Game {
   /** What a new run and a continued one both start with: the seed's dungeon, cleared of any last run. */
   beginRun(seed, name) {
     this.title.stop();
+    this.screenFx.reset();
     this.seed = seed;
     this.playerName = name;
     const rng = new RNG(`${this.seed}:run`);
@@ -545,6 +548,7 @@ export class Game {
       offhand: p.equip.offhand, guard: p.guard, twoHanded: p.twoHanded, held: this.heldItem(),
       nock: p.nock, draw: p.draw, quiver: quiverOf(p)?.type ?? null,
     });
+    this.screenFx.update(dt, this);
     this.interaction = this.findInteraction();
     this.target = this.findTarget();
   }
@@ -586,8 +590,10 @@ export class Game {
     r.clear();
     r.render(this.scene, this.camera);
     if (this.state === 'play' && !this.over) {
+      this.screenFx.beforeHands(r);
       r.clearDepth();
       r.render(this.viewmodel.scene, this.viewmodel.camera);
+      this.screenFx.render(r);
     }
   }
 
