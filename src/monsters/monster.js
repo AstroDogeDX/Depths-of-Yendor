@@ -1,5 +1,5 @@
 import { MONSTERS } from './defs.js';
-import { buildMonsterModel } from './models.js';
+import { buildMonsterModel, SENSED_LAYER } from './models.js';
 import { rand } from '../rng.js';
 import { PLAYER_RADIUS, TILE, POOL, WADE_SPEED, danger } from '../config.js';
 import { spawnProjectile } from '../fx/projectiles.js';
@@ -761,6 +761,7 @@ export class Monster {
     this.dead = true;
     this.deathT = 0;
     this.mesh.rotation.z = 0; // (no longer straining: see strain)
+    this.mesh.traverse((o) => o.layers.disable(SENSED_LAYER)); // (no mind left to sense)
     this.attack.phase = 'none';
     burst(game.level, this.x, this.baseY + this.height * 0.5, this.z, BLOOD[this.type], 16, 3.5, 0.9);
     game.onMonsterKilled(this, killer);

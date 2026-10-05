@@ -593,7 +593,7 @@ export class Game {
       this.screenFx.beforeHands(r);
       r.clearDepth();
       r.render(this.viewmodel.scene, this.viewmodel.camera);
-      this.screenFx.render(r);
+      this.screenFx.render(r, this);
     }
   }
 

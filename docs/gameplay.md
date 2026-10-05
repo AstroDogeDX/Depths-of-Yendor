@@ -8,7 +8,7 @@ How the game plays and the rules behind it: what's in it, the controls, the pack
 - **13 monsters:** rat, bat, ooze, goblin, goblin archer, skeleton, orc, wraith, fire imp, troll, stone golem, the **mimic**, which passes for a chest until you reach for it, and the **Warden of Yendor**, who fires bolt volleys and raises the dead at half health.
 - **Items:** 7 weapons with different reach, speed and damage types (spears out-reach swords, hammers hit hard but recover slowly), each to be gripped in one hand or both, the lantern, a **shield** or a **bow** (with **arrows** in your quiver) in your off hand, 5 armours with strength requirements, 10 potions, 10 scrolls, 5 wands, 6 rings, food. Most are found in **chests**, and the best in locked ones. See [Chests and mimics](dungeon.md#chests-and-mimics).
 - **A shop** on the first floor of each theme after the first (floors 6, 11, 16 and 21). See [The shop](dungeon.md#the-shop).
-- **6 artefacts**, 5 per run in guarded shrines on the third floor of each theme (3, 8, 13, 18 and 23): Chalice of Crimson Thirst (lifesteal), Eye of the Deep (see all monsters and traps), Horn of Thunder (stun blast), Cloak of Shadows (invisibility), Boots of the Wind (speed), Emberheart (burning strikes, fire immunity). You have two attunement slots.
+- **6 artefacts**, 5 per run in guarded shrines on the third floor of each theme (3, 8, 13, 18 and 23): Chalice of Crimson Thirst (lifesteal), Eye of the Deep (see all monsters, even through walls, and traps), Horn of Thunder (stun blast), Cloak of Shadows (invisibility), Boots of the Wind (speed), Emberheart (burning strikes, fire immunity). You have two attunement slots.
 - A Rogue tombstone when you die. Seeds are shareable.
 
 ## Controls
@@ -215,8 +215,8 @@ Statuses afflict you and monsters alike, by one set of rules (`status.js`): what
   - **Wet:** drops of water by the edges, each a little lens on the view, sliding down. **Oiled:** a dark amber smear with an oily sheen.
   - **Weakened:** the colour drains, the edges darken. **Confused:** the view swims and doubles. **Paralysed:** grey and blue, with static crackling at the edges and the view jolting as you strain.
   - **Charmed:** a rosy glow, hearts floating up the sides. **Heartbroken:** a cold grey edge. **Healing:** a warm green glow round the edges, swelling and ebbing, and green crosses rising up the sides.
-  - **Hasted:** streaks rushing out past the edges. **Mind vision:** violet edges, rings rippling out. **Invisible:** the edges shimmer, and your own hands and what's in them turn see-through.
-  - **Hunger:** famished, the colour drains toward the edges; starving, more, the edges darker, and now and then everything swims as you nearly faint. **Hunted** (carrying the Amulet): the edges darken red with a heartbeat. **Winded:** the edges darken and lighten with your breath. (Blindness darkens all but the middle of the view, as before.)
+  - **Hasted:** streaks rushing out past the edges. **Mind vision:** violet edges, rings rippling out, and every creature on the floor outlined in violet, even through walls (fainter the further off; a mimic passing for a chest too). Attuned to the Eye of the Deep, you see the same outlines for as long as you wear it, without the violet edges. **Invisible:** the edges shimmer, and your own hands and what's in them turn see-through.
+  - **Hunger:** famished, the colour drains toward the edges; starving, more, the edges darker, and now and then everything swims as you nearly faint. **Hunted** (carrying the Amulet): the edges darken red with a heartbeat. **Winded:** the edges darken and lighten with your breath. **Wounded:** below 45% of your health (`WOUNDED`), your heart pounds in red at the edges, quicker as you weaken, the colour drains and the dark closes in; near death, dark veins creep in from the edges, throbbing with it. (Blindness darkens all but the middle of the view, as before.)
 - **Bosses** take any hostile status for half as long.
 - **Floors you've left** stand still, since only the one you're on runs. When you come back, its monsters' statuses have worn down by the time you were away, without doing their damage.
 
@@ -238,7 +238,7 @@ Statuses afflict you and monsters alike, by one set of rules (`status.js`): what
 | Charmed | nothing yet | you can't fight: no swinging, zapping, throwing or Horn. A monster takes your side (see *Allies* below); a boss just stops fighting. Striking a charmed monster breaks the charm |
 | Smitten | nothing yet (the Bard, to come) | monsters only: a charm that never wears off. On a boss it's an ordinary charm |
 | Heartbroken | a charm ending, or broken | no charm takes. 60 s for you, 30 s for a monster |
-| Hasted, Mind vision, Invisible | their potions, the Cloak of Shadows | yours only: you're faster, you sense every monster on the floor, monsters lose track of you |
+| Hasted, Mind vision, Invisible | their potions, the Cloak of Shadows | yours only: you're faster, you sense every monster on the floor (on the map, and outlined in violet where you look, walls or no walls), monsters lose track of you |
 | Hunted | carrying the Amulet (not timed) | every monster on the floor knows where you are, even while you're invisible (but they can't strike what they can't see) |
 
 How they meet (`afflict` in `status.js`):

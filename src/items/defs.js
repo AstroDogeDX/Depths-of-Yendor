@@ -147,7 +147,7 @@ export const ARTEFACTS = {
   chalice: { name: 'Chalice of Crimson Thirst', color: 0xb01030,
     desc: 'Heals you for a quarter of all melee damage you deal.' },
   eye:     { name: 'Eye of the Deep', color: 0x30c0b0,
-    desc: 'Every creature on the floor shows on your map, and hidden traps reveal themselves.' },
+    desc: 'You sense every creature on the floor: each shows on your map, its outline glowing through the walls. Hidden traps reveal themselves.' },
   horn:    { name: 'Horn of Thunder', color: 0xd0a040, active: { cooldown: 40, label: 'Sound the horn' },
     desc: 'Active: a thunderclap that stuns and hurls back every nearby monster.' },
   cloak:   { name: 'Cloak of Shadows', color: 0x404060, active: { cooldown: 50, label: 'Vanish' },

@@ -15,6 +15,9 @@ import { MODEL_PX } from '../config.js';
 // over its head (see fx/statusFx.js).
 
 const FILES = import.meta.glob('../../assets/models/monsters/*.bbmodel', { import: 'default', eager: true });
+// The render layer a living monster's meshes are on as well as the usual one, so mind vision can find them to outline
+// through walls (see fx/screenFx.js). A mimic passing for a chest is on it too: it has a mind all the same.
+export const SENSED_LAYER = 1;
 const templates = new Map();
 const crowns = new Map();
 // Where the crown of a monster with no `head` is: the top of the whole model, this far from its middle toward its front
@@ -176,7 +179,10 @@ export function buildMonsterModel(type) {
   const bones = {};
   const meshes = [];
   root.traverse((o) => {
-    if (o.isMesh) meshes.push(o);
+    if (o.isMesh) {
+      meshes.push(o);
+      o.layers.enable(SENSED_LAYER);
+    }
     if (o.isMesh && o.material.isMeshLambertMaterial) {
       if (!own.has(o.material)) {
         const m = o.material.clone();

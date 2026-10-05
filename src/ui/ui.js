@@ -358,7 +358,6 @@ export class UI {
     $('st-bar').classList.toggle('winded', p.winded);
     $('st-bar').classList.toggle('guard', p.guard > 0); // (a raised shield: it isn't coming back meanwhile)
     $('atk-bar').classList.toggle('ready', p.charge >= 1);
-    document.body.classList.toggle('lowhp', hpFrac < 0.25);
     document.body.classList.toggle('blind', p.status.blind > 0);
 
     const st = [];

@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { HUNGER_HUNGRY, HUNGER_FAMISHED } from '../config.js';
+import { RNG } from '../rng.js';
+import { SENSED_LAYER } from '../monsters/models.js';
 
 // What's afflicting you shows over your view (see STATUSES in status.js), as monsters' show on them (fx/statusFx.js):
 //   burning      a fiery glow round the edges, deepest below, flames licking up from the bottom (higher at the sides),
@@ -16,22 +18,29 @@ import { HUNGER_HUNGRY, HUNGER_FAMISHED } from '../config.js';
 //   charmed      a rosy glow, pink at the edges, hearts floating up the sides
 //   heartbroken  a cold grey round the edges, the colour drained a little
 //   hasted       streaks rushing out past the edges
-//   mind vision  violet at the edges, rings rippling out
+//   mind vision  violet at the edges, rings rippling out, and you sense (below)
+//   sensing      (mind vision, or the Eye of the Deep attuned) every creature on the floor outlined in violet, walls or
+//                no walls (see sense): brighter the nearer it is
 //   invisible    the edges shimmer, as if the air there bent round you
 //   hungry       next to nothing; famished, the colour drains toward the edges; starving, more, the edges dark, and
 //                now and then it all swims as you nearly faint
 //   hunted       (carrying the Amulet) the edges darken red with a heartbeat
 //   winded       the edges darken and lighten with your breath
+//   wounded      (below WOUNDED of your health) your heart pounding in red at the edges, faster as you weaken, the
+//                colour draining and the dark closing in; near death, veins creeping in from the edges (growVeins)
 //   healing      a warm green glow round the edges, swelling and ebbing, green crosses rising up the sides
-// Blindness has its own darkness (#dark in the page, and the lantern's light: see Game.updateCamera), and a low ebb of
-// health its own red throb (#hurt).
+// Blindness has its own darkness (#dark in the page, and the lantern's light: see Game.updateCamera), and a blow its own
+// red flash (#hurt).
 //
 // It's one pass over the finished frame (world, hands and all), at the game's own resolution: the frame is copied, and
 // drawn again through a shader that bends it, grades it and paints over it in chunky dithered pixels to match the
 // textures (an effect pixel is a pixel at 270 lines, however finely the view's drawn). Each effect fades in and out over
 // the seconds EFFECTS gives it; with none showing, the pass is skipped.
 
-/** Each effect's uniform: how strongly it shows (`show`: 0 to 1), fading in over `in` seconds and out over `out`. */
+/**
+ * Each effect's uniform: how strongly it shows (`show`: 0 to 1), fading in over `in` seconds and out over `out`, and
+ * eased in and out of that, unless it's `raw` (your wounds, which follow your health as it is).
+ */
 const EFFECTS = {
   uBurn: { show: (g, p) => p.status.burning > 0, in: 0.4, out: 1 },
   uChill: { show: (g, p) => p.status.chilled > 0, in: 0.6, out: 1.5 },
@@ -47,13 +56,17 @@ const EFFECTS = {
   uHeartbroken: { show: (g, p) => p.status.heartbroken > 0, in: 1, out: 1.5 },
   uHaste: { show: (g, p) => p.status.hasted > 0, in: 0.5, out: 0.8 },
   uMind: { show: (g, p) => p.status.mindvision > 0, in: 0.8, out: 1 },
+  uSense: { show: (g, p) => p.status.mindvision > 0 || p.hasArtefact('eye'), in: 0.6, out: 0.8 },
   uInvisible: { show: (g, p) => p.status.invisible > 0, in: 0.6, out: 0.8 },
   uHunger: { show: (g, p) => (p.hunger <= 0 ? 1 : p.hunger < HUNGER_FAMISHED ? 0.55 : p.hunger < HUNGER_HUNGRY ? 0.12 : 0), in: 2, out: 2 },
   uHunted: { show: (g) => g.hunted, in: 1.5, out: 1.5 },
   uWinded: { show: (g, p) => p.winded, in: 0.4, out: 0.8 },
+  uWounds: { show: (g, p) => Math.min(1, Math.max(0, (WOUNDED - p.hp / p.maxHp) / WOUNDED)), in: 0.3, out: 0.8, raw: true },
   uHealing: { show: (g, p) => p.status.healing > 0, in: 0.4, out: 1 },
 };
 const NAMES = Object.keys(EFFECTS);
+const WOUNDED = 0.45; // the share of your health below which your wounds show, more and more as it runs out
+const VEIN_REACH = 0.2; // the furthest in from the edge that a vein runs, at death's door: a share of the view's height
 const smooth = (x) => x * x * (3 - 2 * x);
 
 const vertexShader = /* glsl */ `
@@ -66,6 +79,8 @@ void main() {
 const fragmentShader = /* glsl */ `
 uniform sampler2D uScene;
 uniform sampler2D uWorld; // the frame before your hands were drawn over it (only while you're invisible)
+uniform sampler2D uSensed; // the creatures sensed (only with mind vision): how bright each one's outline, where it is
+uniform sampler2D uVeins;  // the veins of the wounded (see growVeins)
 uniform vec2 uRes;   // the frame, in pixels
 uniform float uPix;  // the frame's pixels to an effect pixel
 uniform float uTime;
@@ -185,10 +200,17 @@ void main() {
   else if (drop > 0.75) col = mix(col, vec3(0.55, 0.7, 0.86), 0.6);
   else if (drop > 0.0) col = col * 1.1 + vec3(0.04, 0.06, 0.09);
 
+  // Wounded, your heart pounds (lub-dub), faster as you weaken.
+  float beat = 0.0;
+  if (uWounds > 0.001) {
+    float b = fract(t / mix(1.1, 0.5, uWounds));
+    beat = exp(-b * 14.0) + 0.55 * step(0.16, b) * exp(-(b - 0.16) * 14.0);
+  }
+
   // --- How the view's coloured ---
   float cold = clamp(uChill * 0.45 + uFrozen, 0.0, 1.0);
   float grey = 0.35 * uWeak + 0.45 * uParalysed + 0.35 * uFrozen + 0.12 * uChill + 0.25 * uHeartbroken + 0.15 * uInvisible
-    + uHunger * (0.2 + 0.4 * smoothstep(0.3, 1.2, rv));
+    + uHunger * (0.2 + 0.4 * smoothstep(0.3, 1.2, rv)) + uWounds * (0.15 + 0.55 * smoothstep(0.2, 1.1, rv));
   col = mix(col, vec3(luma(col)), clamp(grey, 0.0, 0.85));
   col *= mix(vec3(1.0), vec3(0.84, 0.96, 1.14), 0.35 * uChill + 0.45 * uFrozen);
   col *= mix(vec3(1.0), vec3(0.88, 1.06, 0.8), 0.3 * uPoison);
@@ -232,6 +254,11 @@ void main() {
     col = rim(col, vec3(0.4, 0.03, 0.02), 0.7, 1.35, (0.25 + 0.45 * beat) * uHunted);
   }
   if (uWinded > 0.001) col = rim(col, vec3(0.0), 0.6, 1.3, (0.2 + 0.25 * (0.5 + 0.5 * sin(t * 4.5))) * uWinded);
+  if (uWounds > 0.001) {
+    // Red throbbing in from the edges with each beat, deeper as you weaken, and the dark closing in behind it.
+    col = rim(col, vec3(0.62, 0.02, 0.03), mix(0.95, 0.45, uWounds), 1.35, (0.3 + 0.45 * beat) * sqrt(uWounds) * 0.85);
+    col = rim(col, vec3(0.05, 0.0, 0.0), mix(1.15, 0.55, uWounds), 1.45, (0.35 + 0.2 * beat) * uWounds * uWounds);
+  }
   if (uHealing > 0.001) col = rim(col, vec3(0.45, 0.85, 0.35), 0.6, 1.35, (0.3 + 0.15 * sin(t * 2.6)) * uHealing);
 
   // --- What's over the view ---
@@ -309,6 +336,27 @@ void main() {
   if (uHealing > 0.001 && sprite(28.0, vec2(floor(sin(t * 0.9) * 2.0), floor(t * 16.0)), 0.22 * uHealing, 61.0, 0.3, d) && plus(d)) {
     col = d == vec2(2.0, 4.0) ? vec3(1.0, 0.97, 0.8) : (d.x >= 3.0 && d.y <= 2.0) ? vec3(0.35, 0.7, 0.3) : vec3(0.6, 0.95, 0.55);
   }
+  // Near death: veins creeping in from the edges (see growVeins), further the nearer death, throbbing with each beat;
+  // each a little lighter down its middle.
+  if (uWounds > 0.5) {
+    vec4 v = texture2D(uVeins, (px + 0.5) / grid);
+    if (v.a > 0.5 && v.r <= (uWounds - 0.5) * 2.0) {
+      vec3 vc = mix(vec3(0.32, 0.0, 0.03), vec3(0.6, 0.04, 0.05), beat);
+      col = v.g > 0.75 ? mix(col, vc, 0.9) : mix(col, vc * 0.6, 0.7);
+    }
+  }
+  // Sensing: an outline round every creature sensed, two pixels wide, brightest next to it, pulsing slowly.
+  if (uSense > 0.001 && texture2D(uSensed, (px + 0.5) / grid).r < 0.01) {
+    float glow = 0.0;
+    for (int j = -2; j <= 2; j++) {
+      for (int i = -2; i <= 2; i++) {
+        int out1 = abs(i) + abs(j);
+        if (out1 == 0 || out1 > 3) continue;
+        glow = max(glow, texture2D(uSensed, (px + vec2(float(i), float(j)) + 0.5) / grid).r * (out1 == 1 ? 1.0 : 0.55));
+      }
+    }
+    if (glow > 0.01) col = mix(col, vec3(0.8, 0.62, 1.0), min(1.0, glow * (0.85 + 0.15 * sin(t * 3.0))) * uSense);
+  }
   // Hasted: streaks rushing out past the edges.
   if (uHaste > 0.001 && rv > 0.6) {
     vec2 q = (uv - 0.5) * vec2(aspect, 1.0);
@@ -322,6 +370,74 @@ void main() {
 }`;
 
 const SIZE = new THREE.Vector2();
+const CLEAR = new THREE.Color();
+
+// What mind vision draws to find the creatures it outlines: each one white, dimmer the further off (to a quarter, from
+// 12 m out to 40 m), whatever's in the way.
+const sensedMaterial = new THREE.ShaderMaterial({
+  vertexShader: `
+varying float vAway;
+void main() {
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  vAway = -mv.z;
+  gl_Position = projectionMatrix * mv;
+}`,
+  fragmentShader: `
+varying float vAway;
+void main() { gl_FragColor = vec4(vec3(1.0 - 0.75 * smoothstep(12.0, 40.0, vAway)), 1.0); }`,
+});
+
+// A vein's thickness at a step, as the pixels it covers round the step (1, 2 or 3 across: the 3 a plus, to look round).
+const VEIN_WIDTH = { 1: [[0, 0]], 2: [[0, 0], [1, 0], [0, 1], [1, 1]], 3: [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]] };
+
+/**
+ * The veins that creep in from the edges near death (see uWounds), grown once for a view `w` × `h` effect pixels: from
+ * roots spaced round the edges (and one in each corner), each grows inward a pixel at a time, wandering, 3 or 2 pixels
+ * thick at its root and thinning to 1, and now and then a thinner, shorter branch forks off it. None runs further in
+ * than VEIN_REACH of the view's height. Each pixel of one holds how far along from the edge it is (red, 0 to 1 of that
+ * reach: the shader shows a vein only as far in as your wounds have come), and whether it's the middle of the vein
+ * (green, full) or its side.
+ */
+function growVeins(w, h) {
+  const rng = new RNG('veins'), data = new Uint8Array(w * h * 4), reach = h * VEIN_REACH;
+  const stamp = (x, y, width, along) => {
+    for (const [dx, dy] of VEIN_WIDTH[width]) {
+      const px = Math.round(x) + dx, py = Math.round(y) + dy, a = Math.min(255, Math.round(along * 255));
+      if (px < 0 || py < 0 || px >= w || py >= h) continue;
+      const o = (py * w + px) * 4;
+      if (data[o + 3] && data[o] <= a) continue; // (where veins cross, the one nearer its root shows first)
+      data[o] = a;
+      data[o + 1] = dx === 0 && dy === 0 ? 255 : 110;
+      data[o + 3] = 255;
+    }
+  };
+  const grow = (x, y, angle, length, width, from) => {
+    for (let s = 0; s < length; s++) {
+      stamp(x, y, Math.max(1, Math.round(width * (0.45 + 0.55 * (1 - s / length)))), (from + s) / reach);
+      angle += rng.range(-0.22, 0.22);
+      x += Math.cos(angle);
+      y += Math.sin(angle);
+      if (width > 1 && length - s > 10 && rng.chance(0.05)) {
+        grow(x, y, angle + rng.pick([-1, 1]) * rng.range(0.45, 0.95), (length - s) * rng.range(0.35, 0.65), width - 1, from + s);
+      }
+    }
+  };
+  // Roots about every 15th of the way round the edges (bottom, right, top, left: the rows run up from the bottom), each
+  // growing in from its edge, give or take; and one in each corner, toward the middle.
+  const round = 2 * (w + h), gap = round / 15;
+  for (let d = rng.range(0, gap); d < round; d += gap * rng.range(0.6, 1.4)) {
+    const [x, y, a] = d < w ? [d, 0, Math.PI / 2] : d < w + h ? [w - 1, d - w, Math.PI]
+      : d < 2 * w + h ? [w - 1 - (d - w - h), h - 1, -Math.PI / 2] : [0, h - 1 - (d - 2 * w - h), 0];
+    grow(x, y, a + rng.range(-0.5, 0.5), reach * rng.range(0.45, 1), rng.pick([2, 3]), 0);
+  }
+  for (const [x, y] of [[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]]) {
+    grow(x, y, Math.atan2(h / 2 - y, w / 2 - x) + rng.range(-0.3, 0.3), reach * rng.range(0.6, 1), 3, 0);
+  }
+  const tex = new THREE.DataTexture(data, w, h);
+  tex.magFilter = tex.minFilter = THREE.NearestFilter;
+  tex.needsUpdate = true;
+  return tex;
+}
 
 /** Your statuses shown over your view (see the top of this file): update() as the game runs, render() after each frame. */
 export class ScreenFx {
@@ -329,7 +445,8 @@ export class ScreenFx {
     this.scene = new THREE.Scene();
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     const uniforms = {
-      uScene: { value: null }, uWorld: { value: null }, uRes: { value: new THREE.Vector2(1, 1) }, uPix: { value: 1 }, uTime: { value: 0 },
+      uScene: { value: null }, uWorld: { value: null }, uSensed: { value: null }, uVeins: { value: null },
+      uRes: { value: new THREE.Vector2(1, 1) }, uPix: { value: 1 }, uTime: { value: 0 },
     };
     for (const name of NAMES) uniforms[name] = { value: 0 };
     this.material = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader, depthTest: false, depthWrite: false });
@@ -352,7 +469,7 @@ export class ScreenFx {
     for (const name of NAMES) {
       const e = EFFECTS[name], want = +e.show(game, p), now = this.level[name];
       this.level[name] = want > now ? Math.min(want, now + dt / e.in) : Math.max(want, now - dt / e.out);
-      u[name].value = smooth(this.level[name]);
+      u[name].value = e.raw ? this.level[name] : smooth(this.level[name]);
       if (this.level[name] > 0.001) this.on = true;
     }
     u.uTime.value = game.time;
@@ -375,14 +492,50 @@ export class ScreenFx {
     if (this.level.uInvisible > 0.001) this.material.uniforms.uWorld.value = this.grab(renderer, 'world');
   }
 
+  /**
+   * Sensing (see uSense), draws the creatures sensed (every living monster, and mimics passing for chests: SENSED_LAYER)
+   * by themselves, as the camera sees them but through anything in the way, into a texture the shader outlines them
+   * from (uSensed).
+   */
+  sense(renderer, game, w, h) {
+    if (!this.sensed || this.sensed.width !== w || this.sensed.height !== h) {
+      this.sensed?.dispose();
+      this.sensed = new THREE.WebGLRenderTarget(w, h, { magFilter: THREE.NearestFilter, minFilter: THREE.NearestFilter });
+      this.sensedCamera = new THREE.PerspectiveCamera();
+    }
+    const cam = this.sensedCamera.copy(game.camera), scene = game.scene, alpha = renderer.getClearAlpha();
+    cam.layers.set(SENSED_LAYER);
+    renderer.getClearColor(CLEAR);
+    renderer.setRenderTarget(this.sensed);
+    renderer.setClearColor(0x000000, 1);
+    renderer.clear();
+    scene.overrideMaterial = sensedMaterial;
+    renderer.render(scene, cam);
+    scene.overrideMaterial = null;
+    renderer.setRenderTarget(null);
+    renderer.setClearColor(CLEAR, alpha);
+    return this.sensed.texture;
+  }
+
+  /** The veins for a view `gw` × `gh` effect pixels (see growVeins), grown again if that changes. */
+  veinsFor(gw, gh) {
+    if (!this.veins || this.veins.image.width !== gw || this.veins.image.height !== gh) {
+      this.veins?.dispose();
+      this.veins = growVeins(gw, gh);
+    }
+    return this.veins;
+  }
+
   /** Draws the frame on the canvas again, through the effects, if any are showing. */
-  render(renderer) {
+  render(renderer, game) {
     if (!this.on) return;
     const { x: w, y: h } = renderer.getDrawingBufferSize(SIZE), u = this.material.uniforms;
+    u.uSensed.value = this.level.uSense > 0.001 ? this.sense(renderer, game, w, h) : null;
     u.uScene.value = this.grab(renderer, 'copy');
     if (!(this.level.uInvisible > 0.001)) u.uWorld.value = u.uScene.value; // (not looked at)
     u.uRes.value.set(w, h);
-    u.uPix.value = Math.max(1, Math.round(h / 270));
+    const pix = (u.uPix.value = Math.max(1, Math.round(h / 270)));
+    if (this.level.uWounds > 0.5) u.uVeins.value = this.veinsFor(Math.floor(w / pix), Math.floor(h / pix));
     renderer.render(this.scene, this.camera);
   }
 }

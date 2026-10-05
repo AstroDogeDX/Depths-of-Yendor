@@ -123,7 +123,7 @@ Most of what there is to find is in **chests**: two to four on each floor, one m
   - the tips of teeth show under the front of its lid,
   - and now and then, while you're about and can see it (every 15–35 s), it licks its lips: the lid lifts a crack, and a tongue slips out along the front and back in, with a faint wet sound if you're close.
 
-  A potion of mind vision or the Eye of the Deep shows its mind on the map, like any monster's, over the chest it's passing for.
+  A potion of mind vision or the Eye of the Deep shows its mind on the map, like any monster's, over the chest it's passing for, and outlines it in violet as it does any creature.
   - **Reach for it (E)** and it springs at you, biting before you can pull back.
   - **Strike it first** and your blow catches it before it can spring: double damage, like a sneak attack, and it always lands. A bolt or lightning wakes it too, as does a harmful splash (poison, confusion, darkness, paralysis or flame), each doing its work on it as it wakes; teleport other wakes it and sends it away. So striking a chest you suspect is worth it, but not every chest: a chest you strike is smashed, and locked chests, which are never mimics, can't be.
   - Awake, it hops after you, a little slower than you walk, gapes wide to wind up and snaps shut as it lunges. A point sticks in its wooden hide (−25% stab), and it burns like kindling (+50% fire). It gets tougher faster than other monsters with depth (`grow` in `monsters/defs.js`). It never spawns on its own. When it dies, it spills out what its chest held.
