@@ -17,6 +17,7 @@ import { Flame } from './flame.js';
 //   feared       sweat flying off its head
 //   weakened     its strength draining out of it, sinking away
 //   paralysed    it strains against its own limbs, shaking in fits (see strain)
+//   healing      green crosses rising off it, and glints of gold
 // Only monsters near you and in sight show them. A floor's sprites are all one THREE.Points (StatusFx), each sprite a
 // cell of one small atlas (SPRITES) drawn in its particle's colour; the flames are the torches' (fx/flame.js).
 
@@ -37,6 +38,7 @@ const SPRITES = {
   wisp: ['........', '..bbb...', '.babbb..', 'bbbbbbc.', '.bbbbc..', '..ccc...', '........', '........'],
   chevron: ['........', 'b.....b.', 'bb...bb.', '.bb.bb..', '..bbc...', '...c....', '........', '........'],
   spark: ['........', '........', '...a....', '..aWb...', '...b....', '........', '........', '........'],
+  plus: ['........', '...ab...', '...bb...', '.abWbbc.', '.bbbbcc.', '...bc...', '...cc...', '........'],
 };
 const SHADES = { a: 1.35, b: 1, c: 0.68, d: 0.42 };
 const FRAME = Object.fromEntries(Object.keys(SPRITES).map((k, i) => [k, i]));
@@ -45,7 +47,7 @@ const FRAME = Object.fromEntries(Object.keys(SPRITES).map((k, i) => [k, i]));
 const COLORS = {
   water: 0x8cc4ff, blood: 0xc81a24, oil: 0xa8822a, sweat: 0xe0f2ff, frost: 0xd8f2ff, poison: 0x86e85a, heart: 0xff5aa6,
   broken: 0xc07898, star: 0xffe27a, starAlt: 0xe0a8ff, murk: 0x7c7694, weak: 0xc8603c, ember: 0xffd040, cinder: 0xa02008,
-  smoke: 0x3a3532,
+  smoke: 0x3a3532, heal: 0x8cf08a, healGlint: 0xfff0a8,
 };
 const rgb = (hex) => [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
 const C = Object.fromEntries(Object.entries(COLORS).map(([k, v]) => [k, rgb(v)]));
@@ -72,6 +74,7 @@ const SHOWS = {
   blind: { every: 0.1, emit: (fx, m) => fx.murk(m) },
   feared: { every: 0.18, emit: (fx, m) => fx.sweat(m) },
   weakened: { every: 0.25, body: true, emit: (fx, m) => fx.drain(m) },
+  healing: { every: 0.1, body: true, emit: (fx, m) => fx.mend(m) },
 };
 const SHOWN = Object.keys(SHOWS);
 
@@ -373,6 +376,17 @@ export class StatusFx {
     this.add({
       x: c.x + Math.cos(a) * 0.07, y: c.y - 0.04, z: c.z + Math.sin(a) * 0.07, vx: Math.cos(a) * out, vy: rnd(0.7, 1), vz: Math.sin(a) * out,
       g: 7, floor: this.level.surfaceY(c.x, c.z), frame: FRAME.drop, size: 0.09, color: C.sweat, life: 1.2, fadeOut: 0.05,
+    });
+  }
+
+  /** Its wounds mending: a green cross rising off it, or a glint of gold. */
+  mend(m) {
+    if (!this.bodyPoint(m, P)) return;
+    const glint = Math.random() < 0.3;
+    this.add({
+      x: P.x, y: P.y, z: P.z, vy: rnd(0.3, 0.5), wob: 0.02, wobF: 4,
+      frame: glint ? FRAME.spark : FRAME.plus, size: glint ? 0.07 : 0.1, color: glint ? C.healGlint : C.heal,
+      life: rnd(0.8, 1.2), fadeIn: 0.15, fadeOut: 0.4,
     });
   }
 

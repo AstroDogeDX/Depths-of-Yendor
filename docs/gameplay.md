@@ -207,13 +207,14 @@ Statuses afflict you and monsters alike, by one set of rules (`status.js`): what
   - **Charmed or smitten:** hearts circle its head. **Heartbroken:** now and then a cracked heart sinks from it.
   - **Confused:** stars whirl round its head. **Blind:** murk swirls round its eyes. **Feared:** sweat flies off its head. **Weakened:** red chevrons sink down it as its strength drains.
   - **Paralysed:** it strains against its locked limbs, shaking in fits.
+  - **Healing:** green crosses rise off it, with glints of gold.
 - **Yours show over your view** too (`fx/screenFx.js`), in the same chunky pixels, fading in and out, as well as under your health:
   - **Burning:** a fiery glow round the edges, flames licking up from the bottom (higher at the sides), embers, and the air shimmering low down.
   - **Chilled:** frost creeps in from the edges and corners, snow drifts down, and the view cools. **Frozen:** thick frost, the view grey-blue and cracked across like ice.
   - **Poisoned:** a throbbing sickly green round the edges, the view swimming, bubbles rising up the sides. **Bleeding:** red round the edges, beating, with blood running down from the top.
   - **Wet:** drops of water by the edges, each a little lens on the view, sliding down. **Oiled:** a dark amber smear with an oily sheen.
   - **Weakened:** the colour drains, the edges darken. **Confused:** the view swims and doubles. **Paralysed:** grey and blue, with static crackling at the edges and the view jolting as you strain.
-  - **Charmed:** a rosy glow, hearts floating up the sides. **Heartbroken:** a cold grey edge.
+  - **Charmed:** a rosy glow, hearts floating up the sides. **Heartbroken:** a cold grey edge. **Healing:** a warm green glow round the edges, swelling and ebbing, and green crosses rising up the sides.
   - **Hasted:** streaks rushing out past the edges. **Mind vision:** violet edges, rings rippling out. **Invisible:** the edges shimmer, and your own hands and what's in them turn see-through.
   - **Hunger:** famished, the colour drains toward the edges; starving, more, the edges darker, and now and then everything swims as you nearly faint. **Hunted** (carrying the Amulet): the edges darken red with a heartbeat. **Winded:** the edges darken and lighten with your breath. (Blindness darkens all but the middle of the view, as before.)
 - **Bosses** take any hostile status for half as long.
@@ -226,6 +227,7 @@ Statuses afflict you and monsters alike, by one set of rules (`status.js`): what
 | Bleeding | nothing yet | damage every second that armour and resistances don't reduce, and you don't heal. The bloodless (skeletons, wraiths, golems, oozes) can't bleed |
 | Chilled | the wand of frost | you move at 60% speed, and your weapon recovers a quarter slower; monsters move and strike at half speed |
 | Frozen | cold on something wet, or on an ooze | frozen stiff: it can't move or act, a frozen monster takes a blow as if unaware (double damage), and it loses every resistance (weaknesses stay). A thaw leaves 4 s of Chilled |
+| Healing | potions of healing, drunk (which also purges poison, bleeding, blindness and confusion at once) or thrown | mends 3/4 of your health over 8 s, or half of a monster's (`HEALING` in `status.js`); another potion adds its 8 s to what's left |
 | Wet | wading through a pool (see [Pools](dungeon.md#pools)): it lasts as long as you wade, and wears off over 10 s once you're out (`WADE_WET`) | won't burn, and lightning does half as much damage again |
 | Oiled | nothing yet (oil flasks and traps, to come) | fire does half as much damage again, and set alight, it burns twice as long |
 | Paralysed | paralysis potions, the Horn of Thunder | as Frozen, but its resistances stay |

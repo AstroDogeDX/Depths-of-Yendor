@@ -123,6 +123,9 @@ export class Monster {
 
   // --- Statuses (see status.js) ---
 
+  /** Mends `n` of its health (see Healing in status.js). */
+  heal(n) { this.hp = Math.min(this.maxHp, this.hp + n); }
+
   /** Gives it a status. `show`: pop up "IMMUNE" if it can't take it. Returns whether it took. */
   afflict(game, key, secs, show = true) { return applyStatus(game, this, key, secs, { show }); }
 

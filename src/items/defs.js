@@ -83,7 +83,7 @@ export const ARMORS = {
 };
 
 export const POTIONS = {
-  healing:    { name: 'healing',     freq: 24, value: 50, good: true,  desc: 'Mends wounds and purges poison.' },
+  healing:    { name: 'healing',     freq: 24, value: 50, good: true,  desc: 'Mends wounds over a few seconds, and purges poison.' },
   strength:   { name: 'strength',    freq: 6, value: 120,  good: true,  desc: 'Permanently increases your strength.' },
   experience: { name: 'experience',  freq: 4, value: 150,  good: true,  desc: 'Floods you with hard-won insight: you gain a level.' },
   haste:      { name: 'haste',       freq: 10, value: 60, good: true,  desc: 'Your movements and strikes quicken for a time.' },

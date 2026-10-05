@@ -15,6 +15,7 @@ import { danger, WADE_WET } from './config.js';
 //   hold(who)        while this is true it doesn't wear down (Wet, while wading)
 //   dot              hurts every second: { type (a damage type, see damage.js, or none), source (what killed you),
 //                    player(game), monster(game, m) (how much) }
+//   regen(who)       heals this much a second, little by little
 //   resist           the damage type whose immunity wards it off (fire for burning: nothing burns a fire imp)
 //   immune(who)      anything else that wards it off
 //   start, end       what the log says as it starts ([text, kind]) and ends, for the player
@@ -31,6 +32,9 @@ import { danger, WADE_WET } from './config.js';
 // (standing in a pool: see wade).
 
 export const BOSS_STATUS = 0.5;
+// A potion of healing's Healing (see drinkPotion and potionSplash in items/use.js): how long it lasts, and how much of
+// your health (or a monster's) it mends over that time. Another adds its time to what's left.
+export const HEALING = { secs: 8, share: { player: 0.75, monster: 0.5 } };
 const FROZEN_THAW_CHILL = 4; // seconds of Chilled a thaw leaves behind
 // How long a charm leaves its target heartbroken (immune to charms) once it ends, or is broken.
 export const HEARTBREAK = { player: 60, monster: 30 };
@@ -126,6 +130,10 @@ export const STATUSES = {
   wet: {
     label: 'Wet', color: '#70b0ff', mark: 'WET', hold: (who) => !!who.wading,
     start: ['You are soaked through.', 'info'], end: 'You have dried off.',
+  },
+  healing: {
+    label: 'Healing', color: '#8cf08a', stack: 'add', mark: 'HEALING', end: 'The healing warmth fades.',
+    regen: (who) => (who.maxHp * HEALING.share[who.isPlayer ? 'player' : 'monster']) / HEALING.secs,
   },
   hasted: { label: 'Hasted', color: '#a8e890', stack: 'add', monster: false, end: 'You feel yourself slow down.' },
   mindvision: { label: 'Mind vision', color: '#a8e890', monster: false, end: "Your mind's eye closes." },
@@ -303,8 +311,9 @@ export function hitStatuses(game, who, type, { ignite = 0, chill = 0 } = {}) {
 }
 
 /**
- * Runs `who`'s statuses on by `dt` seconds: they wear down (and off, with what that does), and those that hurt,
- * hurt once a second. `damage: false` for catching a floor up on the time you were away (see Level.catchUp).
+ * Runs `who`'s statuses on by `dt` seconds: they wear down (and off, with what that does), those that heal, heal, and
+ * those that hurt, hurt once a second. `damage: false` for catching a floor up on the time you were away (see
+ * Level.catchUp): they only wear down.
  */
 export function tickStatuses(game, who, dt, { damage = true } = {}) {
   const s = who.status;
@@ -317,6 +326,7 @@ export function tickStatuses(game, who, dt, { damage = true } = {}) {
       who.statusNote(game, key, 'end');
     } else if (STATUSES[key].dot) hurting = true;
   }
+  if (damage && !who.dead) for (const key in s) if (s[key] > 0 && STATUSES[key].regen) who.heal(STATUSES[key].regen(who) * dt);
   if (!damage || !hurting) return;
   who.dotT = (who.dotT ?? 0) + dt;
   if (who.dotT < 1) return;

@@ -22,6 +22,7 @@ import { HUNGER_HUNGRY, HUNGER_FAMISHED } from '../config.js';
 //                now and then it all swims as you nearly faint
 //   hunted       (carrying the Amulet) the edges darken red with a heartbeat
 //   winded       the edges darken and lighten with your breath
+//   healing      a warm green glow round the edges, swelling and ebbing, green crosses rising up the sides
 // Blindness has its own darkness (#dark in the page, and the lantern's light: see Game.updateCamera), and a low ebb of
 // health its own red throb (#hurt).
 //
@@ -50,6 +51,7 @@ const EFFECTS = {
   uHunger: { show: (g, p) => (p.hunger <= 0 ? 1 : p.hunger < HUNGER_FAMISHED ? 0.55 : p.hunger < HUNGER_HUNGRY ? 0.12 : 0), in: 2, out: 2 },
   uHunted: { show: (g) => g.hunted, in: 1.5, out: 1.5 },
   uWinded: { show: (g, p) => p.winded, in: 0.4, out: 0.8 },
+  uHealing: { show: (g, p) => p.status.healing > 0, in: 0.4, out: 1 },
 };
 const NAMES = Object.keys(EFFECTS);
 const smooth = (x) => x * x * (3 - 2 * x);
@@ -116,6 +118,10 @@ bool heart(vec2 d) {
   if (d.x < 0.0 || d.y < 0.0 || d.x > 6.0 || d.y > 5.0) return false;
   ivec2 i = ivec2(d);
   return ((HEART[i.y] >> (6 - i.x)) & 1) == 1;
+}
+
+bool plus(vec2 d) {
+  return d.x >= 0.0 && d.y >= 0.0 && d.x <= 5.0 && d.y <= 5.0 && ((d.x >= 2.0 && d.x <= 3.0) || (d.y >= 2.0 && d.y <= 3.0));
 }
 
 bool flake(vec2 d) {
@@ -188,6 +194,7 @@ void main() {
   col *= mix(vec3(1.0), vec3(0.88, 1.06, 0.8), 0.3 * uPoison);
   col *= mix(vec3(1.0), vec3(0.92, 0.92, 1.1), 0.35 * uParalysed);
   col += (vec3(1.0, 0.72, 0.84) - col) * 0.07 * uCharmed;
+  col += (vec3(0.85, 1.0, 0.75) - col) * 0.05 * uHealing;
 
   // --- The rims of the view ---
   if (uBurn > 0.001) {
@@ -225,6 +232,7 @@ void main() {
     col = rim(col, vec3(0.4, 0.03, 0.02), 0.7, 1.35, (0.25 + 0.45 * beat) * uHunted);
   }
   if (uWinded > 0.001) col = rim(col, vec3(0.0), 0.6, 1.3, (0.2 + 0.25 * (0.5 + 0.5 * sin(t * 4.5))) * uWinded);
+  if (uHealing > 0.001) col = rim(col, vec3(0.45, 0.85, 0.35), 0.6, 1.35, (0.3 + 0.15 * sin(t * 2.6)) * uHealing);
 
   // --- What's over the view ---
   // Burning: flames licking up from the bottom, taller at the sides; embers rising.
@@ -296,6 +304,10 @@ void main() {
   // Charmed: hearts floating up the sides.
   if (uCharmed > 0.001 && sprite(30.0, vec2(floor(sin(t * 0.8) * 3.0), floor(t * 14.0)), 0.2 * uCharmed, 21.0, 0.3, d) && heart(d)) {
     col = d == vec2(1.0, 4.0) ? vec3(1.0) : vec3(1.0, 0.36, 0.62);
+  }
+  // Healing: green crosses rising up the sides, each with a glint.
+  if (uHealing > 0.001 && sprite(28.0, vec2(floor(sin(t * 0.9) * 2.0), floor(t * 16.0)), 0.22 * uHealing, 61.0, 0.3, d) && plus(d)) {
+    col = d == vec2(2.0, 4.0) ? vec3(1.0, 0.97, 0.8) : (d.x >= 3.0 && d.y <= 2.0) ? vec3(0.35, 0.7, 0.3) : vec3(0.6, 0.95, 0.55);
   }
   // Hasted: streaks rushing out past the edges.
   if (uHaste > 0.001 && rv > 0.6) {

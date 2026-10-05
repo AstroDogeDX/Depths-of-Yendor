@@ -185,6 +185,7 @@ body.lowhp #hurt { animation: pulse 1.2s infinite; }
 .popup.s-weakened { color: #d0a878; }
 .popup.s-oiled { color: #d8b050; }
 .popup.s-wet { color: #70b0ff; }
+.popup.s-healing { color: #8cf08a; }
 .popup.s-doused { color: #d8e4ec; }
 .popup.s-thawed { color: #ffb070; }
 
