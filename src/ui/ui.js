@@ -235,6 +235,8 @@ export class UI {
     this.hotKeys = [];
     this.invTab = 'pack';
     this.invSel = 0;
+    this.boss = null; // the boss whose bar shows (see updateBossBar)
+    this.bossTrail = 0;
     $('hud').hidden = $('hotbar').hidden = false;
     $('end').hidden = true;
   }
@@ -357,8 +359,9 @@ export class UI {
     const p = g.player, lvl = g.level, k = g.knowledge;
 
     this.set('depth-line', `Depth ${lvl.depth} · ${lvl.theme.name}${p.hasAmulet() ? '  ✦ Amulet' : ''}`);
-    // Keys for this floor's locks: iron for doors, gold for chests.
-    const keys = [[p.keys[lvl.depth], 'iron'], [p.goldKeys[lvl.depth], 'gold']].filter(([n]) => n > 0).map(([n, kind]) => `${n} ${kind}`).join(', ');
+    // Keys for this floor's locks: iron for doors, gold for chests, and the boss key for its boss's door.
+    const keys = [[p.keys[lvl.depth], 'iron'], [p.goldKeys[lvl.depth], 'gold'], [p.bossKeys[lvl.depth], 'boss']]
+      .filter(([n]) => n > 0).map(([n, kind]) => `${n} ${kind}`).join(', ');
     this.set('stat-line', `Lv ${p.level}   XP ${p.xp}/${p.xpToNext()}   Str ${p.str}   Def ${p.defense}   Gold ${p.gold}${keys ? `   Keys: ${keys}` : ''}`);
 
     const hpFrac = Math.max(0, p.hp / p.maxHp);
@@ -410,7 +413,8 @@ export class UI {
     const prompt = g.menu ? '' : how ? `${g.knowledge.name(held)}: ${use}` : g.interaction ? `[E] ${g.interaction.label}` : '';
     this.set('prompt', prompt);
 
-    const t = g.target;
+    // (A boss with its bar showing doesn't need the target's: see updateBossBar.)
+    const t = g.target && !(g.target.boss && g.target === this.boss) ? g.target : null;
     $('target').hidden = !t;
     if (t) {
       const tag = t.isAlly() ? ' (fighting for you)' : t.charmed() ? '' : t.state === 'sleep' ? ' (asleep)' : t.state !== 'hunt' ? ' (unaware)'
@@ -420,6 +424,7 @@ export class UI {
       this.setHtml('target-name', `${t.name}${tag}${sts ? ` <span class="target-st">${sts}</span>` : ''}`);
       $('target-fill').style.width = `${Math.max(0, t.hp / t.maxHp) * 100}%`;
     }
+    this.updateBossBar(lvl, dt);
 
     const heading = ((-p.yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
     this.set('compass', COMPASS[Math.round(heading / (Math.PI / 4)) % 8]);
@@ -436,6 +441,29 @@ export class UI {
     this.updatePopups(dt);
     this.drawMinimap();
     $('pause').hidden = !(g.paused && !g.menu && !g.over);
+  }
+
+  /**
+   * A boss that has woken and come for you shows its name, what afflicts it and its health across the foot of the view,
+   * for as long as it's after you; a pale trail behind its health shows what the last blows took, draining away after
+   * them. It reddens once the boss is enraged (see monsters/bosses.js), and when it dies its bar empties and fades.
+   */
+  updateBossBar(lvl, dt = 1 / 60) {
+    const b = lvl.monsters.find((m) => m.boss && (m.dead || (m.state === 'hunt' && m.seen && !m.charmed())));
+    const el = $('boss');
+    if (b !== this.boss) this.bossTrail = b ? b.hp / b.maxHp : 0;
+    this.boss = b ?? null;
+    el.hidden = !b;
+    if (!b) return;
+    const frac = b.dead ? 0 : Math.max(0, b.hp / b.maxHp);
+    this.bossTrail = Math.max(frac, this.bossTrail - dt * 0.35);
+    const sts = Object.entries(STATUSES).filter(([key]) => b.status[key] > 0)
+      .map(([, def]) => `<span style="color:${def.color}">${def.label}</span>`).join(' ');
+    this.setHtml('boss-name', `${b.name}${sts && !b.dead ? ` <span class="target-st">${sts}</span>` : ''}`);
+    $('boss-fill').style.width = `${frac * 100}%`;
+    $('boss-trail').style.width = `${this.bossTrail * 100}%`;
+    el.classList.toggle('gone', b.dead);
+    el.classList.toggle('enraged', !!b.enraged);
   }
 
   updatePopups(dt) {

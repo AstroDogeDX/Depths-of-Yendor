@@ -9,6 +9,8 @@ import { SENSED_LAYER } from '../monsters/models.js';
 //   chilled      the view cools and pales, frost creeps in from the edges, thickest in the corners, and snow drifts down
 //   frozen       the frost thickens and the view goes blue and grey, cracked across like a sheet of ice
 //   poisoned     a sickly purple round the edges, throbbing, the view swimming, bubbles rising up the sides
+//   malediction  a dark purple ichor round the edges, the colour soured a little, and thick drips of the taint creeping
+//                down from the top, each catching the light in magenta at its tip
 //   bleeding     red round the edges, beating with each second's loss, and blood running down from the top
 //   wet          drops of water by the edges, each a little lens on the view, sliding down
 //   oiled        a dark amber smear round the edges, with a sheen sliding over it
@@ -46,6 +48,7 @@ const EFFECTS = {
   uChill: { show: (g, p) => p.status.chilled > 0, in: 0.6, out: 1.5 },
   uFrozen: { show: (g, p) => p.status.frozen > 0, in: 0.15, out: 1.2 },
   uPoison: { show: (g, p) => p.status.poisoned > 0, in: 0.8, out: 1.2 },
+  uMalediction: { show: (g, p) => p.status.malediction > 0, in: 0.6, out: 1.2 },
   uBleed: { show: (g, p) => p.status.bleeding > 0, in: 0.5, out: 1 },
   uWet: { show: (g, p) => p.status.wet > 0, in: 0.5, out: 1.5 },
   uOil: { show: (g, p) => p.status.oiled > 0, in: 0.5, out: 1.5 },
@@ -214,6 +217,7 @@ void main() {
   col = mix(col, vec3(luma(col)), clamp(grey, 0.0, 0.85));
   col *= mix(vec3(1.0), vec3(0.84, 0.96, 1.14), 0.35 * uChill + 0.45 * uFrozen);
   col *= mix(vec3(1.0), vec3(1.02, 0.84, 1.08), 0.3 * uPoison);
+  col *= mix(vec3(1.0), vec3(0.92, 0.8, 0.96), 0.4 * uMalediction);
   col *= mix(vec3(1.0), vec3(0.92, 0.92, 1.1), 0.35 * uParalysed);
   col += (vec3(1.0, 0.72, 0.84) - col) * 0.07 * uCharmed;
   col += (vec3(0.85, 1.0, 0.75) - col) * 0.05 * uHealing;
@@ -226,6 +230,7 @@ void main() {
   }
   if (cold > 0.001) col = rim(col, vec3(0.62, 0.84, 1.0), 0.6, 1.3, 0.5 * cold);
   if (uPoison > 0.001) col = rim(col, vec3(0.42, 0.12, 0.58), 0.5, 1.35, 0.55 * (0.7 + 0.3 * sin(t * 2.1)) * uPoison);
+  if (uMalediction > 0.001) col = rim(col, vec3(0.13, 0.02, 0.17), 0.45, 1.3, (0.55 + 0.15 * sin(t * 1.4)) * uMalediction);
   if (uWet > 0.001) col = rim(col, vec3(0.2, 0.32, 0.45), 0.7, 1.35, 0.35 * uWet);
   if (uBleed > 0.001) col = rim(col, vec3(0.45, 0.0, 0.02), 0.55, 1.3, (0.4 + 0.25 * exp(-fract(t) * 5.0)) * uBleed);
   if (uOil > 0.001) {
@@ -322,6 +327,16 @@ void main() {
       float ph = fract(t * (0.05 + 0.07 * hash(vec2(lane, 9.0))) + h * 13.0);
       float len = ph * (0.15 + 0.3 * hash(vec2(lane, 2.0))), down = 1.0 - uv.y;
       if (down < len) col = mix(col, down > len - one.y * 2.0 ? vec3(0.75, 0.05, 0.06) : vec3(0.5, 0.02, 0.03), 0.85 * (1.0 - smoothstep(0.75, 1.0, ph)));
+    }
+  }
+  // Malediction: thick drips of the taint creeping down from the top, three pixels wide, dark, catching the light in
+  // magenta at their tips, oftener toward the sides.
+  if (uMalediction > 0.001) {
+    float lane = floor(px.x / 3.0), h = hash(vec2(lane, 17.0));
+    if (h < (0.05 + 0.2 * side) * uMalediction) {
+      float ph = fract(t * (0.02 + 0.03 * hash(vec2(lane, 23.0))) + h * 7.0);
+      float len = ph * (0.08 + 0.22 * hash(vec2(lane, 29.0))), down = 1.0 - uv.y;
+      if (down < len) col = mix(col, down > len - one.y * 2.0 ? vec3(0.86, 0.32, 0.76) : vec3(0.17, 0.03, 0.22), 0.92 * (1.0 - smoothstep(0.8, 1.0, ph)));
     }
   }
   // Paralysed: static crackling round the edges, worst as you strain.

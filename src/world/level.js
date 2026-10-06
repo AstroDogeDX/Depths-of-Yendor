@@ -22,7 +22,7 @@ import { tickStatuses } from '../status.js';
 
 const N8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
-// Traps on the map: grey spikes, green gas, azure teleport, yellow alarm (as their models; see trapModels.js).
+// Traps on the map: grey spikes, purple gas, azure teleport, yellow alarm (as their models; see trapModels.js).
 export const TRAP_COLORS = { spike: 0xa0a0a0, poison: 0xa050d8, teleport: 0x3aa0ff, alarm: 0xe0c020 };
 
 // Chests (see addChest): how far a lid swings open (radians) and how long it takes; how long things take to fly out of
@@ -164,7 +164,8 @@ export class Level {
   populate() {
     const data = this.data;
     for (const m of data.monsters) {
-      this.addMonster(m.type, (m.x + 0.5) * TILE, (m.y + 0.5) * TILE, { asleep: m.asleep, boss: m.boss, guardian: m.guardian });
+      // (A boss may carry what it spills when it dies: see arenas.js.)
+      this.addMonster(m.type, (m.x + 0.5) * TILE, (m.y + 0.5) * TILE, { asleep: m.asleep, boss: m.boss, guardian: m.guardian }).loot = m.loot ?? null;
     }
     for (const it of data.items) {
       this.addItem(it.item, (it.x + 0.5 + rand.range(-0.2, 0.2)) * TILE, (it.y + 0.5 + rand.range(-0.2, 0.2)) * TILE);
@@ -943,13 +944,13 @@ export class Level {
       if (found) game.audio.trapFound(); // (once, for however many)
     }
 
-    // The dungeon restocks itself. Carrying the Amulet makes it furious.
+    // The dungeon restocks itself, but for a boss's arena (see arenas.js). Carrying the Amulet makes it furious, there too.
     this.spawnT -= dt;
     if (this.spawnT <= 0) {
       const amulet = p.hasAmulet();
       this.spawnT = amulet ? rand.range(18, 28) : rand.range(60, 90);
       const alive = this.monsters.filter((m) => !m.dead).length;
-      if (alive < 8 + danger(this.depth) * 1.5 + (amulet ? 6 : 0)) this.spawnWanderer(amulet);
+      if ((amulet || this.data.restock !== false) && alive < 8 + danger(this.depth) * 1.5 + (amulet ? 6 : 0)) this.spawnWanderer(amulet);
     }
   }
 

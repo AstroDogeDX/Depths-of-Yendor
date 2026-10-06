@@ -8,8 +8,10 @@ import { MODEL_PX } from '../config.js';
 // on the others. A model's origin is at its feet and it faces +z.
 //
 // buildMonsterModel returns { root, animate(s), materials, height, meshes, crown(out) }. animate(s) receives { t, walk,
-// windup, strike, reveal } where windup/strike are 0..1 progress or -1, and reveal the seconds since it gave itself away
-// (a mimic waking) or -1; a mimic passing for a chest gets { dormant: true, lick } instead (see Level.addChest).
+// windup, strike, move, reveal, asleep } where windup/strike are 0..1 progress or -1, `move` the boss move they're of
+// (see `moves` in defs.js), or null for its blow or shot, reveal the seconds since it gave itself away (a mimic waking,
+// the Maledicted Ooze heaving itself up) or -1, and `dying` (0..1) how far a boss with a death of its own is through it
+// (see bosses.js); a mimic passing for a chest gets { dormant: true, lick } instead (see Level.addChest).
 // materials are the monster's own lit materials, so it can be tinted (hurt, burning...) on its own. meshes are its
 // meshes, and crown(out) sets `out` to the top of its head in the world, as it stands now: for what shows on it and
 // over its head (see fx/statusFx.js).
@@ -89,6 +91,63 @@ const ANIMATE = {
     else if (s.strike >= 0) { k = 0.7 + 0.6 * Math.sin(Math.PI * s.strike); z = 0.3 * Math.sin(Math.PI * s.strike); }
     b.blob.scale.set(1 + (1 - k) * 0.5, k, 1 + (1 - k) * 0.5);
     move(b.blob, 0, 0, z);
+  },
+  // The Maledicted Ooze (see monsters/bosses.js): as the ooze does, but vast and slow, breathing. Asleep, it lies sunk low
+  // in its filth, and waking (`reveal`), it heaves itself up, overshooting and settling. Each of its moves winds up its
+  // own way: its blow rears back and lunges; its spit swells forward and snaps back; its blast swells up wide,
+  // quivering harder and harder, and slams down flat. Its core and all in it drift slowly round inside it. Dying, it
+  // slumps into a puddle (`dying`, 0..1).
+  maledicted_ooze: (b) => (s) => {
+    const SUNK = 0.6;
+    let k = 1 + Math.sin(s.t * 2.1) * 0.035, wide = 0, z = 0, lean = 0, quiver = 0;
+    if (s.asleep) k = SUNK + Math.sin(s.t * 0.8) * 0.025;
+    else if (s.reveal >= 0) {
+      const r = Math.min(1, s.reveal / 1.2), up = 1 - (1 - r) ** 3;
+      k = SUNK + (1 - SUNK) * up + Math.sin(r * Math.PI * 3) * 0.1 * (1 - r);
+    }
+    if (s.walk) k += Math.sin(s.walk * 1.3) * 0.03; // (rolling along)
+    const w = s.windup, st = s.strike;
+    if (s.move === 'slam') {
+      if (w >= 0) {
+        k = 1 + 0.22 * easeOut(w);
+        wide = 0.12 * w;
+        quiver = (0.01 + 0.05 * w * w) * Math.sin(s.t * 47);
+      } else if (st >= 0) {
+        const hit = Math.min(1, st * 3);
+        k = 1.22 - 0.72 * hit + 0.5 * Math.max(0, st - 0.33) * 1.5;
+        wide = 0.12 + 0.38 * hit - 0.5 * Math.max(0, st - 0.33) * 1.5;
+      }
+    } else if (s.move === 'spit') {
+      if (w >= 0) {
+        k = 1 + 0.1 * w;
+        lean = -0.12 * easeOut(w);
+      } else if (st >= 0) {
+        k = 1.1 - 0.18 * Math.sin(Math.PI * st);
+        lean = -0.12 + 0.3 * Math.sin(Math.PI * Math.min(1, st * 1.6));
+        z = 0.15 * Math.sin(Math.PI * st);
+      }
+    } else if (w >= 0) {
+      k = 1 + 0.16 * easeOut(w);
+      lean = -0.18 * w;
+      z = -0.15 * w;
+    } else if (st >= 0) {
+      k = 1.16 - 0.4 * Math.sin(Math.PI * st);
+      lean = -0.18 + 0.45 * Math.sin(Math.PI * Math.min(1, st * 1.5));
+      z = 0.55 * Math.sin(Math.PI * st);
+    }
+    if (s.dying >= 0) {
+      const d = easeOut(s.dying);
+      k = 1 - 0.88 * d;
+      wide = 0.7 * d;
+      lean = quiver = 0;
+      z = 0;
+    }
+    const spread = 1 + (1 - k) * 0.45 + wide;
+    b.blob.scale.set(spread + quiver, k, spread - quiver);
+    turn(b.blob, lean);
+    move(b.blob, 0, 0, z);
+    turn(b.core, Math.sin(s.t * 0.37) * 0.12, s.t * 0.21, Math.sin(s.t * 0.29) * 0.1);
+    move(b.core, 0, Math.sin(s.t * 0.9) * 0.04, 0);
   },
   goblin: (b) => biped(b),
   skeleton: (b) => biped(b),

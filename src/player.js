@@ -21,8 +21,11 @@ import { SWING_AT } from './fx/viewmodel.js';
 const SAVED = [
   'x', 'z', 'yaw', 'pitch', 'maxHp', 'hp', 'baseStr', 'level', 'xp', 'gold', 'hunger', 'hungerState', 'charge',
   'maxStamina', 'stamina', 'winded', 'sneaking', 'twoHanded', 'artefactCD', 'teleT', 'kills', 'maxDepth', 'keys', 'goldKeys',
-  'containers', 'hotbar', 'inventory',
+  'bossKeys', 'containers', 'hotbar', 'inventory',
 ];
+// A shove (the Maledicted Ooze's blast: see monsters/bosses.js) carries you its distance over this long, whatever you
+// do, slowing as it goes.
+const SHOVE_TIME = 0.4;
 
 // The pack keeps things of a kind together, in this order (anything else last), so you know roughly where to look.
 // Weapons, bows, arrows, thrown weapons, armour, shields, off-hand things, artefacts and food, whose type you can always
@@ -67,6 +70,8 @@ export class Player {
     this.hotbar = new Array(HOTBAR_SIZE).fill(null);
     this.keys = {}; // depth -> iron keys held for that floor (for its locked doors)
     this.goldKeys = {}; // depth -> gold keys held for that floor (for its locked chests)
+    this.bossKeys = {}; // depth -> boss keys held for that floor (for the door on from its boss's lair)
+    this.shoving = null; // a shove carrying you back: { vx, vz (metres a second, at first), t (seconds left) }
     this.charge = 1;
     this.maxStamina = STAMINA_BASE;
     this.stamina = STAMINA_BASE;
@@ -270,6 +275,12 @@ export class Player {
     else if (event === 'end' && def.end) game.log(def.end, 'info');
     else if (event === 'doused') game.log('The flames on you go out.', 'good');
     else if (event === 'thawed') game.log('Warmth floods back into your limbs.', 'good');
+    else if (event === 'washed') game.log('The taint runs off you with the water before it can take hold.', 'good');
+  }
+
+  /** Throws you `dx`, `dz` metres back, over SHOVE_TIME (see update), whatever you do meanwhile. */
+  shove(dx, dz) {
+    this.shoving = { vx: (dx * 2) / SHOVE_TIME, vz: (dz * 2) / SHOVE_TIME, t: SHOVE_TIME };
   }
 
   gainXp(n, game) {
@@ -346,7 +357,7 @@ export class Player {
       return true;
     }
     if (item.kind === 'key') {
-      const keys = item.type === 'gold' ? this.goldKeys : this.keys;
+      const keys = item.type === 'gold' ? this.goldKeys : item.type === 'boss' ? this.bossKeys : this.keys;
       keys[item.depth] = (keys[item.depth] || 0) + 1;
       return true;
     }
@@ -446,6 +457,13 @@ export class Player {
       // Walking into a closed door opens it (or tries its lock).
       const door = level.doorAhead(this.x, this.z, mx, mz, PLAYER_RADIUS);
       if (door) game.useDoor(door);
+    }
+    // A shove carries you back (see shove), slowing to a stop.
+    if (this.shoving) {
+      const sh = this.shoving, k = sh.t / SHOVE_TIME, step = Math.min(dt, sh.t);
+      this.x += sh.vx * k * step;
+      this.z += sh.vz * k * step;
+      if ((sh.t -= dt) <= 0) this.shoving = null;
     }
     level.collide(this, PLAYER_RADIUS);
     for (const m of level.monsters) {
@@ -587,8 +605,9 @@ export class Player {
   }
 
   updateRegen(dt) {
-    // Nothing heals while you're famished, poisoned or bleeding.
-    if (this.hunger < HUNGER_FAMISHED || this.hp >= this.maxHp || this.status.poisoned > 0 || this.status.bleeding > 0) return;
+    // Nothing heals while you're famished, poisoned, bleeding or maledicted.
+    const s = this.status;
+    if (this.hunger < HUNGER_FAMISHED || this.hp >= this.maxHp || s.poisoned > 0 || s.bleeding > 0 || s.malediction > 0) return;
     let mult = 1;
     if (this.wearingRing('regeneration')) mult = Math.max(0.25, 1 + this.ringBonus('regeneration') * 0.8);
     const interval = Math.max(1.5, 8 - this.level * 0.35);

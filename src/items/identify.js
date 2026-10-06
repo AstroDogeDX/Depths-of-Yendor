@@ -144,7 +144,7 @@ export class Knowledge {
       case 'food': return 0x8a5a2a;
       case 'gold': return 0xf0c040;
       case 'amulet': return 0xffd040;
-      case 'key': return item.type === 'gold' ? 0xffd040 : 0xb8b0a0;
+      case 'key': return { gold: 0xffd040, boss: 0xe040c0 }[item.type] ?? 0xb8b0a0;
       case 'container': return 0xb07840;
     }
     return 0xffffff;
@@ -213,7 +213,7 @@ export class Knowledge {
       case 'artefact': return ARTEFACTS[item.type].name;
       case 'amulet': return 'the Amulet of Yendor';
       case 'gold': return `${q} gold`;
-      case 'key': return `${item.type} key`;
+      case 'key': return item.type === 'boss' ? 'boss key' : `${item.type} key`;
       case 'container': return CONTAINERS[item.type].name;
     }
     return 'strange object';
@@ -317,7 +317,8 @@ export class Knowledge {
       case 'amulet': return 'The Amulet of Yendor. It thrums with the heartbeat of the dungeon itself. Invoke it to escape now, or carry it back to the surface for true glory.';
       case 'gold': return 'Shiny.';
       case 'key': return item.type === 'gold' ? `A finely wrought gold key. It opens a locked chest somewhere on depth ${item.depth}.`
-        : `A heavy iron key. It opens a locked door somewhere on depth ${item.depth}.`;
+        : item.type === 'boss' ? `A great key of black iron, a skull for its bow, still slick with the ooze's taint. It opens the chained door out of its lair on depth ${item.depth}, and the way on down.`
+          : `A heavy iron key. It opens a locked door somewhere on depth ${item.depth}.`;
     }
     return '';
   }

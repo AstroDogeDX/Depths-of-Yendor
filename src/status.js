@@ -28,8 +28,8 @@ import { danger, WADE_WET } from './config.js';
 // Being Hunted isn't one of these: it's carrying the Amulet (see Game.hunted).
 //
 // `who` is the player or a monster, with: status, isPlayer, boss, resistMult(type), hasTrait(trait),
-// statusNote(game, key, event) (says what happened: 'start', 'end', 'immune', 'doused', 'thawed'), and `wading`
-// (standing in a pool: see wade).
+// statusNote(game, key, event) (says what happened: 'start', 'end', 'immune', 'doused', 'thawed', 'washed' (water
+// kept a malediction off)), `wading` (standing in a pool: see wade), and `noFreeze` (nothing freezes it now).
 
 export const BOSS_STATUS = 0.5;
 // A potion of healing's Healing (see drinkPotion and potionSplash in items/use.js): how long it lasts, and how much of
@@ -46,10 +46,14 @@ const charmEnds = (game, who) => {
 };
 
 const poisonDose = { player: (game) => 1 + Math.floor(danger(game.level.depth) / 4), monster: (game, m) => 1 + Math.floor(m.danger / 3) };
+// A malediction's bite, every second until water washes it off: 2 on the Sewers' last floor, where the ooze spits it.
+const maledictionDose = { player: (game) => 1 + Math.floor(danger(game.level.depth) / 2), monster: (game, m) => 1 + Math.floor(m.danger / 2) };
 
 export const STATUSES = {
   frozen: {
     label: 'Frozen', color: '#c8ecff', tint: 0x4a7aa8, harm: true, resist: 'ice', mark: 'FROZEN',
+    // (Past half its health, the Maledicted Ooze's taint boils too hot to freeze: see monsters/bosses.js.)
+    immune: (who) => !!who.noFreeze,
     start: ['You are frozen solid!', 'danger'], end: 'You thaw out.',
     onEnd: (game, who) => afflict(game, who, 'chilled', FROZEN_THAW_CHILL, { show: false, thaw: true }),
   },
@@ -76,6 +80,15 @@ export const STATUSES = {
     dot: { type: null, source: 'blood loss', ...poisonDose },
     immune: (who) => who.hasTrait('bloodless'),
     start: ['You are bleeding!', 'danger'], end: 'The bleeding stops.',
+  },
+  // The Maledicted Ooze's taint (see monsters/bosses.js): it eats at you every second, through armour and resistances,
+  // and you don't heal, for as long as it clings to you, which is until water washes it off (see afflict). Nothing
+  // wet can take it, and the ooze itself is made of it.
+  malediction: {
+    label: 'Malediction', color: '#f05ad0', harm: true, permanent: true, mark: 'MALEDICTION',
+    dot: { type: null, source: 'a malediction', ...maledictionDose },
+    immune: (who) => who.hasTrait('maledicted'),
+    start: ['A malediction seeps into you! Only water will wash it off.', 'danger'], end: 'The water washes the malediction off you.',
   },
   weakened: {
     label: 'Weakened', color: '#d0a878', harm: true, mark: 'WEAKENED',
@@ -176,14 +189,16 @@ export function immuneTo(who, key) {
  * - Water puts out fire, and nothing wet will burn.
  * - Cold puts out fire, and heat drives out cold: burning something chilled or frozen thaws it instead of setting
  *   it alight, and chilling something burning douses it instead of chilling it.
- * - Cold on something wet (or `fluid`, like an ooze) freezes it solid, as does wetting something chilled.
+ * - Cold on something wet (or `fluid`, like an ooze) freezes it solid, as does wetting something chilled: unless it
+ *   can't be frozen, when it's only chilled.
  * - Oil makes fire worse: set alight, it burns twice as long (and fire hurts it more; see damageTakenMult).
+ * - Water washes a malediction off, and nothing wet can take one.
  * `show`: say so when it's immune (leave it off when a hit that has just done so brought the status). `thaw`: the
  * chill a thaw leaves, which never freezes anything again (else an ooze, or anything standing in water, would thaw
  * straight back into ice, for ever).
  * Returns whether it took.
  */
-export function afflict(game, who, key, secs, { show = true, thaw = false } = {}) {
+export function afflict(game, who, key, secs, { show = true, thaw = false, halved = false } = {}) {
   const def = STATUSES[key], s = who.status;
   if (!def) {
     console.warn(`afflict: no status called '${key}'`); // (ALIASES are only for old saves)
@@ -194,7 +209,8 @@ export function afflict(game, who, key, secs, { show = true, thaw = false } = {}
     if (show) who.statusNote(game, key, 'immune');
     return false;
   }
-  if (def.harm && who.boss) secs *= BOSS_STATUS;
+  // (`halved`: it has been already, as the chill that freezes something wet was.)
+  if (def.harm && who.boss && !halved) secs *= BOSS_STATUS;
   switch (key) {
     case 'smitten':
       // A boss is only ever charmed, for a while; anything else stays smitten, and is no longer merely charmed.
@@ -217,7 +233,7 @@ export function afflict(game, who, key, secs, { show = true, thaw = false } = {}
         douse(game, who);
         return false;
       }
-      if (!thaw && (s.wet > 0 || who.hasTrait('fluid'))) return afflict(game, who, 'frozen', secs * 0.75, { show });
+      if (!thaw && (s.wet > 0 || who.hasTrait('fluid')) && !immuneTo(who, 'frozen')) return afflict(game, who, 'frozen', secs * 0.75, { show, halved: true });
       break;
     case 'frozen':
       s.burning = 0;
@@ -226,10 +242,17 @@ export function afflict(game, who, key, secs, { show = true, thaw = false } = {}
       break;
     case 'wet':
       if (s.burning > 0) douse(game, who);
-      if (s.chilled > 0) {
+      if (s.malediction > 0) cure(game, who, 'malediction');
+      if (s.chilled > 0 && !immuneTo(who, 'frozen')) {
         const chill = s.chilled;
         s.chilled = 0;
-        return afflict(game, who, 'frozen', chill * 0.75, { show });
+        return afflict(game, who, 'frozen', chill * 0.75, { show, halved: true });
+      }
+      break;
+    case 'malediction':
+      if (s.wet > 0) {
+        who.statusNote(game, key, 'washed');
+        return false;
       }
       break;
   }
@@ -319,12 +342,18 @@ export function tickStatuses(game, who, dt, { damage = true } = {}) {
   const s = who.status;
   let hurting = false;
   for (const key in s) {
-    if (!(s[key] > 0) || STATUSES[key].permanent || STATUSES[key].hold?.(who)) continue;
+    if (!(s[key] > 0)) continue;
+    const def = STATUSES[key];
+    // (One that never wears off, or isn't wearing down just now, still hurts: a malediction.)
+    if (def.permanent || def.hold?.(who)) {
+      if (def.dot) hurting = true;
+      continue;
+    }
     s[key] = Math.max(0, s[key] - dt);
     if (s[key] === 0) {
-      STATUSES[key].onEnd?.(game, who);
+      def.onEnd?.(game, who);
       who.statusNote(game, key, 'end');
-    } else if (STATUSES[key].dot) hurting = true;
+    } else if (def.dot) hurting = true;
   }
   if (damage && !who.dead) for (const key in s) if (s[key] > 0 && STATUSES[key].regen) who.heal(STATUSES[key].regen(who) * dt);
   if (!damage || !hurting) return;

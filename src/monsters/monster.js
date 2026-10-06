@@ -1,5 +1,6 @@
 import { MONSTERS } from './defs.js';
 import { buildMonsterModel, SENSED_LAYER } from './models.js';
+import { BOSS_AI } from './bosses.js';
 import { rand } from '../rng.js';
 import { PLAYER_RADIUS, TILE, POOL, WADE_SPEED, danger } from '../config.js';
 import { spawnProjectile } from '../fx/projectiles.js';
@@ -14,7 +15,8 @@ import {
 
 const BLOOD = {
   rat: 0x901010, bat: 0x901010, slime: 0x40c040, goblin: 0x902010, archer: 0x902010, skeleton: 0xe0d8c0,
-  orc: 0x801010, wraith: 0x6040a0, imp: 0xff6010, troll: 0x406020, golem: 0x909090, mimic: 0x7a1830, warden: 0xffc040,
+  orc: 0x801010, wraith: 0x6040a0, imp: 0xff6010, troll: 0x406020, golem: 0x909090, mimic: 0x7a1830,
+  maledicted_ooze: 0x5a1a78, warden: 0xffc040,
 };
 
 const STRIKE_TIME = 0.3;
@@ -46,7 +48,10 @@ export class Monster {
     this.radius = def.radius;
     this.flies = !!def.flying; // passes over water
     this.yaw = rand.range(-Math.PI, Math.PI);
-    this.boss = !!opts.boss;
+    this.boss = !!(opts.boss ?? def.boss);
+    this.ai = def.ai ? BOSS_AI[def.ai] : null; // a boss's own way of fighting (see bosses.js)
+    this.enraged = false; // down to its `enrage` share of its health, a boss with an `ai` fights harder (see bosses.js)
+    this.noFreeze = false; // nothing freezes it now (see Frozen in status.js)
     this.guardian = !!opts.guardian;
     this.state = (opts.asleep ?? rand.chance(def.sleepChance)) ? 'sleep' : 'wander';
 
@@ -62,7 +67,7 @@ export class Monster {
     this.wading = false;
     this.mesh.position.set(x, this.baseY, z);
 
-    this.attack = { phase: 'none', t: 0, ranged: false };
+    this.attack = { phase: 'none', t: 0, ranged: false, move: null };
     this.cooldown = rand.range(0.3, 1);
     this.status = blankStatus(false); // seconds left of each status (see status.js)
     this.isPlayer = false;
@@ -100,7 +105,7 @@ export class Monster {
       type: this.type, x: round2(this.x), z: round2(this.z), yaw: round2(this.yaw), hp: round2(this.hp), maxHp: this.maxHp,
       danger: this.danger, dmgMult: this.dmgMult, state: this.state, seen: this.seen || undefined, status,
       boss: this.boss || undefined, guardian: this.guardian || undefined, summoned: this.summoned || undefined,
-      weakBase: this.weakBase ?? undefined, loot: this.loot ?? undefined,
+      enraged: this.enraged || undefined, weakBase: this.weakBase ?? undefined, loot: this.loot ?? undefined,
     };
   }
 
@@ -117,6 +122,7 @@ export class Monster {
     this.seen = !!s.seen;
     this.summoned = !!s.summoned;
     this.loot = s.loot ?? null;
+    if (s.enraged) this.ai?.enrage(this, null, { quiet: true });
     this.mesh.rotation.y = this.yaw;
     return this;
   }
@@ -166,12 +172,14 @@ export class Monster {
     if (this.dead) return;
     if (event === 'immune') {
       game.popup(this.headPos(), 'IMMUNE', 'immune');
-      if (STATUSES[key].resist) this.revealResist(game, STATUSES[key].resist, 0);
+      // (Only if that's why: nothing freezes the enraged ooze, though cold still bites it.)
+      const resist = STATUSES[key].resist;
+      if (resist && this.resistMult(resist) === 0) this.revealResist(game, resist, 0);
       return;
     }
     if (!game.level.isVisibleWorld(this.x, this.z)) return;
     if (event === 'start' && STATUSES[key].mark) game.popup(this.headPos(), STATUSES[key].mark, `status s-${key}`);
-    else if (event === 'doused' || event === 'thawed') game.popup(this.headPos(), event.toUpperCase(), `status s-${event}`);
+    else if (event === 'doused' || event === 'thawed' || event === 'washed') game.popup(this.headPos(), event.toUpperCase(), `status s-${event}`);
   }
 
   headPos() {
@@ -182,6 +190,10 @@ export class Monster {
     this.t += dt;
     if (this.dead) {
       this.deathT += dt;
+      if (this.ai?.dying) {
+        this.ai.dying(this, level);
+        return;
+      }
       const k = Math.min(1, this.deathT / 0.45), ground = level.groundY(this.x, this.z);
       this.mesh.rotation.x = -k * Math.PI / 2;
       this.mesh.position.y = ground + (this.baseY - ground) * (1 - k) - Math.max(0, this.deathT - 0.7) * 0.8;
@@ -225,9 +237,10 @@ export class Monster {
       this.cooldown -= dt * speedMult;
       moving = this.think(dt, game, level, dist, dx, dz, moveMult);
     }
+    this.ai?.update(this, dt * speedMult, game, level);
 
     if (moving) this.walk += dt * this.def.speed * moveMult * 3;
-    if (this.revealT !== null && (this.revealT += dt) > 1) this.revealT = null;
+    if (this.revealT !== null && (this.revealT += dt) > 1.2) this.revealT = null;
     if (!this.flies) this.updateWading(dt, game, level, moving);
     this.mesh.position.set(this.x, this.baseY, this.z);
     this.mesh.rotation.y = this.yaw;
@@ -235,9 +248,11 @@ export class Monster {
     this.model.animate({
       t: this.held() ? 0 : this.t,
       walk: this.walk,
-      windup: a.phase === 'windup' ? Math.min(1, a.t / this.def.windup) : -1,
+      windup: a.phase === 'windup' ? Math.min(1, a.t / this.windupOf(a.move)) : -1,
       strike: a.phase === 'strike' ? Math.min(1, a.t / STRIKE_TIME) : -1,
+      move: a.phase === 'none' ? null : a.move, // a boss's own move (see bosses.js), or null for its blow or shot
       reveal: this.revealT ?? -1,
+      asleep: this.state === 'sleep',
     });
     strain(this);
     this.updateTint(dt);
@@ -267,13 +282,15 @@ export class Monster {
     if (this.dead) return;
     if (this.def.regen && this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + this.def.regen * dt);
 
-    if (this.boss && !this.summoned && this.hp < this.maxHp * 0.5) {
+    // A boss that summons (the Warden), down to half its health, calls up its servants about it, once.
+    const call = this.def.summons;
+    if (call && !this.summoned && this.hp < this.maxHp * 0.5) {
       this.summoned = true;
-      game.log(`The ${this.name} raises its halberd — the dead answer!`, 'danger');
+      game.log(call.say, 'danger');
       game.audio.alert(0.5);
-      for (let i = 0; i < 3; i++) {
-        const a = (i / 3) * Math.PI * 2;
-        const m = level.addMonster(i === 0 ? 'wraith' : 'skeleton', this.x + Math.cos(a) * 1.6, this.z + Math.sin(a) * 1.6, { asleep: false });
+      for (let i = 0; i < call.types.length; i++) {
+        const a = (i / call.types.length) * Math.PI * 2;
+        const m = level.addMonster(call.types[i], this.x + Math.cos(a) * 1.6, this.z + Math.sin(a) * 1.6, { asleep: false });
         level.collide(m, m.radius, m.flies);
         m.state = 'hunt';
         burst(level, m.x, 0.5, m.z, 0x8060ff, 12, 3, 0.6);
@@ -389,7 +406,8 @@ export class Monster {
     this.lostT = 0;
     if (mark && game.level.isVisibleWorld(this.x, this.z)) game.popup(this.headPos(), '!', 'alert');
     game.audio.alert(this.boss ? 0.4 : 1 + (1.2 - this.height) * 0.4);
-    if (this.boss) game.log(`The ${this.name} awakens. "You shall not take it."`, 'danger');
+    if (this.boss) game.log(this.def.wake ?? `The ${this.name} awakens.`, 'danger');
+    this.ai?.wake?.(this, game);
   }
 
   think(dt, game, level, dist, dx, dz, speedMult) {
@@ -422,6 +440,8 @@ export class Monster {
       }
     }
     if (this.state === 'sleep') return false;
+    // A boss with its own way of fighting (see bosses.js) does as it does, hunting you or not.
+    if (this.ai) return this.ai.think(this, dt, game, level, dist, dx, dz, speed);
     if (this.state === 'wander') return this.doWander(dt, level, game, speed * 0.55);
 
     const inReach = this.canSee && dist <= def.reach + PLAYER_RADIUS;
@@ -582,13 +602,20 @@ export class Monster {
     this.yaw += wrapAngle(target - this.yaw) * Math.min(1, dt * rate);
   }
 
-  /** Winds up an attack on `target`: you, or a monster it's fighting. */
-  startAttack(ranged, target) {
+  /**
+   * Winds up an attack on `target`: you, or a monster it's fighting. `move`: one of a boss's own (see `moves` in
+   * defs.js, and bosses.js), rather than its blow or its shot.
+   */
+  startAttack(ranged, target, move = null) {
     this.attack.phase = 'windup';
     this.attack.t = 0;
     this.attack.ranged = ranged;
     this.attack.target = target;
+    this.attack.move = move;
   }
+
+  /** How long it winds up a `move` (see startAttack), or its blow or shot. */
+  windupOf(move) { return move ? this.def.moves[move].windup : this.def.windup; }
 
   updateAttack(dt, game, level) {
     const a = this.attack, t = a.target;
@@ -601,10 +628,11 @@ export class Monster {
     const target = Math.atan2(t.x - this.x, t.z - this.z);
     const maxTurn = 2.6 * dt;
     this.yaw += Math.max(-maxTurn, Math.min(maxTurn, wrapAngle(target - this.yaw)));
-    if (a.phase === 'windup' && a.t >= this.def.windup) {
+    if (a.phase === 'windup' && a.t >= this.windupOf(a.move)) {
       a.phase = 'strike';
       a.t = 0;
-      if (a.ranged) this.fire(game, level, t);
+      if (a.move) this.ai.strike(this, a.move, game, level, t);
+      else if (a.ranged) this.fire(game, level, t);
       else this.melee(game, level, t);
     } else if (a.phase === 'strike' && a.t >= STRIKE_TIME) {
       a.phase = 'none';
@@ -612,9 +640,12 @@ export class Monster {
     }
   }
 
-  /** A roll of its damage: less while it's weakened (see status.js). `scale` for shots, which hit softer. */
-  rollDamage(scale = 1) {
-    return Math.round(rand.int(this.def.dmg[0], this.def.dmg[1]) * this.dmgMult * scale * (this.status.weakened > 0 ? 0.75 : 1));
+  /**
+   * A roll of its damage: less while it's weakened (see status.js). `scale` for shots, which hit softer; `dmg`, a range
+   * of its own (a boss's move: see `moves` in defs.js).
+   */
+  rollDamage(scale = 1, dmg = this.def.dmg) {
+    return Math.round(rand.int(dmg[0], dmg[1]) * this.dmgMult * scale * (this.status.weakened > 0 ? 0.75 : 1));
   }
 
   melee(game, level, target) {
@@ -764,6 +795,7 @@ export class Monster {
     this.mesh.traverse((o) => o.layers.disable(SENSED_LAYER)); // (no mind left to sense)
     this.attack.phase = 'none';
     burst(game.level, this.x, this.baseY + this.height * 0.5, this.z, BLOOD[this.type], 16, 3.5, 0.9);
+    this.ai?.die?.(this, game, game.level);
     game.onMonsterKilled(this, killer);
   }
 

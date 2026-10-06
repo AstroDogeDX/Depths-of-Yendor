@@ -94,6 +94,7 @@ export function everyIcon() {
   RUNES.forEach((_, rune) => add('scroll', Object.keys(SCROLLS)[0], `scroll: rune ${rune}`, { rune }));
   add('key', 'iron');
   add('key', 'gold');
+  add('key', 'boss');
   add('gold', 'gold', 'gold');
   add('amulet', 'yendor');
   return out;

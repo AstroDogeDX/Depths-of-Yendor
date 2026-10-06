@@ -6,13 +6,13 @@ The floors and how they're made: the themes, rooms and passages, lights, pools, 
 
 | Floors | Theme | Meant to be | Boss floor |
 |---|---|---|---|
-| 1–5 | Sewers | dank and wet | 5 |
+| 1–5 | Sewers | dank and wet | 5: the Maledicted Ooze |
 | 6–10 | Catacombs | old jail cells, cages and chains | 10 |
 | 11–15 | Caves | natural, rough-hewn rock | 15 |
 | 16–20 | Dwarven Ruins | an ancient civilisation's halls, fallen apart | 20 |
 | 21–25 | Underworld | hellish, demonic and hot | 25: the Warden of Yendor and the Amulet |
 
-Each theme has four ordinary floors and a boss floor (`isBossDepth` in `config.js`). For now the boss floors are built like any other, except floor 25, which holds the Amulet's vault and its keeper, the Warden. Each theme has its own look (below).
+Each theme has four ordinary floors and a boss floor (`isBossDepth` in `config.js`). The Sewers' is an arena laid out by hand, the Maledicted Ooze's lair (see [Boss floors](#boss-floors)). The rest are built like any other for now, except floor 25, which holds the Amulet's vault and its keeper, the Warden. Each theme has its own look (below).
 
 **Texture variants.** Every theme's walls, floors and vaults (the Underworld's passages too) are painted in code, 2 m to a texture, and come in variants so the same stain or crack doesn't come round every two metres (`variants` in `dungeon/texturePaint.js`):
 
@@ -89,13 +89,13 @@ Most stairs fill their tile, which is solid. The ladders don't, so they stop you
 
 The way out of the dungeon, up from the first floor, comes up into the open air (`stairs_surface`): the manhole at the top of its short shaft stands open to a summer sky, weeds hanging over its rim, and the sun shines down it in a shaft of light with dust drifting in it, lighting a patch of the floor (`sunlight` in `dungeon/levelBuilder.js`). Near it you can hear a breeze up there, and now and then a bird.
 
-For now the stairs down from a theme's last floor are that theme's, and the stairs up on the next floor are the next theme's, so the two don't match: the boss floors are where those crossings will be made.
+The boss floors are where one theme gives way to the next. The Sewers' last floor makes its crossing: its way down is the Catacombs' steps (an arena's stairs may be another theme's: their `style`), so they match the Catacombs' way up on floor 6, and the Catacombs' stone is worked in round them (see [Boss floors](#boss-floors)). For now the other boss floors' stairs down are their own theme's, and the stairs up on the next floor are the next theme's, so the two don't match.
 
 The title screen's walk through the dungeon goes down each kind of stairs its own way: down steps, a ladder or a spiral (`stairsDescent` in `dungeon/levelBuilder.js`).
 
 ### Locked doors
 
-From the second floor on, a floor often has a locked side room: about a third of floors at first, rising to two thirds by the last, and from floor 15 on now and then a second. A locked room is always a dead end, a branch that nothing else hangs off, so it never cuts off anything but itself, and it's never on the loop. Each needs an iron key, which lies loose in a room you can reach without any key: any room on the floor but a locked one. Behind the door is a stash worth the key: a chest or two (never a mimic) and a heap of gold half again the usual size, and half the time, if the floor has a locked chest, that too. No monsters, traps or loose things are put in a locked room. Keys don't take pack slots: they show as *Keys* on the stat line (iron and gold, "Keys: 1 iron, 1 gold") and are used up when you walk into (or use) the locked door, or open a locked chest. Monsters can't path through a locked door, and teleports never drop you inside a locked room.
+From the second floor on, a floor often has a locked side room: about a third of floors at first, rising to two thirds by the last, and from floor 15 on now and then a second. A locked room is always a dead end, a branch that nothing else hangs off, so it never cuts off anything but itself, and it's never on the loop. Each needs an iron key, which lies loose in a room you can reach without any key: any room on the floor but a locked one. Behind the door is a stash worth the key: a chest or two (never a mimic) and a heap of gold half again the usual size, and half the time, if the floor has a locked chest, that too. No monsters, traps or loose things are put in a locked room. Keys don't take pack slots: they show as *Keys* on the stat line (iron, gold and the boss key: "Keys: 1 iron, 1 gold") and are used up when you walk into (or use) the locked door, or open a locked chest. Monsters can't path through a locked door, and teleports never drop you inside a locked room.
 
 ### Traps
 
@@ -109,6 +109,20 @@ Traps lie hidden in rooms and corridors (never near the entrance, in the shop or
 | Alarm | a wooden plate with a brass bell on a post | the plate goes down and the bell swings and rings (monsters within 30 m come) | the plate jammed down, the bell fallen and cracked |
 
 The minimap marks found traps in the same colours (grey, purple, azure, yellow), spent ones dimmed. The used state would also serve for a trap that's been disarmed.
+
+## Boss floors
+
+Each theme's last floor is its boss floor, where it gives way to the next. A boss floor can be an arena laid out by hand rather than generated (`dungeon/arenas.js`, which `generateLevel` hands it to): so far, only the Sewers' is. Its boss is in [Bosses](gameplay.md#bosses).
+
+### The Sewers' boss floor
+
+Floor 5 is the lair of the **Maledicted Ooze**, the same every run:
+
+- **The way in.** The ladder comes down into a small room, and an archway at its far end opens into the hall. A foul stench rolls out of it as you arrive.
+- **The hall,** 13 tiles square. Four square pillars stand in it, two tiles across and three in from its walls, and behind each, in the corner it makes, is an L of standing water, five tiles of it along the pillar's two sides away from the middle: cover from the ooze's globs, and water to wash their malediction off. Nothing else in it is solid, so there's no nook the ooze can't reach you in. The ooze lies asleep in its filth in the middle (a dark purple stain the level builder paints, as it does puddles: `taint`), with the bones of those it took about it, drain pipes over the water and valve wheels on the walls. Eight wall lights ring it, two on each wall (an arena's rooms may bring their own: `sconces`).
+- **The door on,** in the far wall: the Catacombs' door under its skull-keyed arch, chained shut, two chains crossed over it on each side and a great padlock where they meet, a skull on its face and its keyhole glowing with the ooze's magenta taint, which has seeped out under the door (`door_boss`, which its doorway names as its `model`). Only the **boss key** opens it (its `lock` is `'boss'`), and the ooze carries that: when it dies, it spills the key, with what it had swallowed of those who came before it (a treasure, as a locked chest holds, gold twice the usual and something more). The key shows as *Keys: 1 boss* on the stat line, and opening the door uses it up.
+- **The crossing.** Behind the door is a passage four tiles long, where the sewer's brick gives way to the old stone of the Catacombs: each tile's floor, vault and every face of its walls is of the one stone or the other, by a share that grows down its length (`blend` in `dungeon/arenas.js`, drawn by `buildLevelMeshes`). Their dressing mixes as their stone does: bones strewn back into the sewer, a puddle seeping on into the stone, cobwebs as it opens out. It opens into a crypt, all the Catacombs': burial niches in its walls, candles either side of the steps down, a grave slab, bones, cobwebs. The way down is the Catacombs' own steps, so the floor below begins as this one ends.
+- **Nothing else.** There are no other monsters, traps, chests or loose things, but for a ration in the room you come into, and the dungeon doesn't restock it, but for the Amulet's hunters on your way back up (`restock`). The passage and the crypt count as behind a lock, so nothing teleports into them.
 
 ## Chests and mimics
 
@@ -150,5 +164,7 @@ On the first floor of each new theme after the first (floors 6, 11, 16 and 21), 
   - Stacks sell one at a time, equipped items come off first (not if they're cursed), and the shopkeeper won't buy the Amulet.
 - **Buying back:** the shopkeeper sets what you sell out with its wares, at its usual price for that item. It goes on the rug, which holds six, and once that's full, on the first free spot on the counter or the display tables (never the plinths). Potions, scrolls and food of the same kind pile up on one spot and sell back one at a time. When every spot is taken, the item you sold longest ago goes to make room.
 - **Monsters** never spawn, wander or get teleported into the shop. Only a monster that was chasing you when you went in may follow you in. Any other monster that comes looking waits at the door, unless you attack it from inside.
+
+**Adding an arena:** a boss floor laid out by hand is an entry in `ARENAS` in `dungeon/arenas.js`, by its floor: a `build(seed, depth)` that returns the floor's data as `generateLevel` would, the props it needs beyond its theme's, and what the log says as you first arrive.
 
 **Adding a specialist room:** add a type to `dungeon/rooms.js` (size, door style, whether the normal population pass may use it, and a `furnish(ctx, room)` that places its contents), then put it in the plan in `dungeon/generator.js` as a branch, e.g. `{ type: 'treasury', locked: true }`.

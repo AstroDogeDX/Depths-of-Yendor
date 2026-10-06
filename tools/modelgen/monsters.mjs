@@ -25,6 +25,14 @@ const MON_PAL = {
   batFur: P('#120c0a', '#1e1512', '#2a1e1a', '#382823', '#46332c'),
   membrane: P('#1a0f0c', '#2a1a15', '#3b2620', '#4d332b'),
   gel: P('#0e3a10', '#18561a', '#227226', '#2e9032', '#3eae40', '#62cc5a', '#a8ecb0'),
+  // The Maledicted Ooze: gel tainted near black-purple (cool enough to stay purple in warm light), its core darker
+  // still, veins of violet taint through it, and its eyes and the knots in its core glowing magenta.
+  taintGel: P('#08040f', '#10071c', '#190b2b', '#22103c', '#2d164f', '#3b1f64', '#5a3a88', '#9a7ac4'),
+  taintCore: P('#050209', '#0a0412', '#10061c', '#170926', '#1f0c32'),
+  taintVein: P('#1e0832', '#341054', '#521a7c', '#7a2aa6', '#a046cc'),
+  taint: P('#4a0a3a', '#7a1462', '#b0228c', '#e040c0', '#ff7ae0', '#ffd0f4'),
+  stainedBone: P('#1e1a18', '#2e2824', '#403830', '#54493c', '#685a48'),
+  rust: P('#1e120c', '#2e1a10', '#442614', '#5a341c', '#704426'),
   robe: P('#08060e', '#0f0b1a', '#171126', '#1f1834', '#282042'),
   wood: PAL.wood,
   steel: PAL.steel,
@@ -121,6 +129,22 @@ const MATS = {
     return [...col, v > 0.9 ? 230 : 140];
   },
   core: skin('gel', { seed: 10 }),
+  // The Maledicted Ooze's gel: see-through, darkest low down, lighter toward its top with wet glints, threaded with
+  // faint magenta veins of its taint (a little less see-through where they run).
+  taintGel(c) {
+    const { p, n } = c;
+    let v = 0.3 + 0.2 * n.y + 0.14 * patches(p, 520, 0.08) + 0.1 * clamp01(p.y / 128);
+    if (n.y > 0.3 && rand(c.ax, c.ay, 521) > 0.982) v = 0.95; // wet glints, scattered over its top
+    const vein = Math.abs(noise3(p.x * 0.035, p.y * 0.035, p.z * 0.035, 522) - 0.5) < 0.016;
+    if (vein && p.y > 8) return [...ramp(MON_PAL.taintVein, 0.45 + 0.25 * patches(p, 523, 0.2), c.ax, c.ay), 200];
+    return [...ramp(MON_PAL.taintGel, v, c.ax, c.ay), v > 0.9 ? 215 : 165];
+  },
+  taintCore: (c) => ramp(MON_PAL.taintCore, 0.45 + 0.25 * patches(c.p, 525, 0.12) + bevel(c, 0.1), c.ax, c.ay),
+  // Its taint, glowing: its eyes' irises and the knots of it in its core.
+  taint: (c) => ramp(MON_PAL.taint, 0.55 + 0.3 * Math.max(0, c.n.z) + 0.15 * patches(c.p, 526, 0.5), c.ax, c.ay),
+  rust: (c) => ramp(MON_PAL.rust, 0.45 + 0.2 * patches(c.p, 527, 0.3) + bevel(c, 0.2), c.ax, c.ay),
+  // Bone, stained dark by long soaking in it.
+  stainedBone: (c) => ramp(MON_PAL.stainedBone, 0.5 + 0.2 * patches(c.p, 528, 0.4) + bevel(c, 0.15) + 0.08 * c.n.y, c.ax, c.ay),
   // Wraith robe, see-through, its hem ragged: texels below a wavy line are cut away.
   robe(c) {
     const { p } = c;
@@ -263,6 +287,74 @@ const monsters = {
       pair((s, side) => m.mesh(`eye_${side}`, revolve([[0, -2.4], [2.2, -1.2], [2.4, 0.6], [1.4, 2.2], [0, 2.6]], { sides: 6 }), { mat: 'void', origin: [s * 8, 26, 22] }));
     }, { origin: [0, 0, 0] });
   }, { translucent: ['gel'], density: 1 }),
+
+  maledicted_ooze: defineModel('maledicted_ooze', MATS, (m) => {
+    // The Maledicted Ooze, the Sewers' boss: a vast dome of near-black purple gel, 2.6 m across and 2 m high, lumpy and
+    // sagging, spreading in lobes about its foot. Through it you see its dark core, knotted with glowing taint, and what's
+    // left of those it took drifting round it: a skull, a helmet, a rusted sword, bones. Eyes of glowing magenta crowd
+    // its front, two great ones and a scatter of small. Its `blob` squashes and swells about its base; its `core` (and
+    // all in it) drifts slowly round within it.
+    // (Lumpy: every point of the gel pushed out or in from the middle by a smooth noise, the same for the same point,
+    // so the faces still meet; its foot stays flat on the floor.)
+    const lump = (polys, amt, seed) => polys.map((poly) => ({ ...poly, pts: poly.pts.map(([x, y, z]) => {
+      const k = 1 + amt * (noise3(x * 0.028, y * 0.028, z * 0.028, seed) - 0.5) * 2 * Math.min(1, y / 12);
+      return [x * k, y, z * k];
+    }) }));
+    const GEL = [[0, 0], [72, 0], [83, 9], [85, 28], [80, 54], [67, 82], [48, 106], [25, 121], [0, 128]];
+    const radiusAt = (y) => {
+      for (let i = 1; i < GEL.length; i++) if (y <= GEL[i][1]) return GEL[i - 1][0] + ((y - GEL[i - 1][1]) / (GEL[i][1] - GEL[i - 1][1])) * (GEL[i][0] - GEL[i - 1][0]);
+      return 0;
+    };
+    m.group('blob', () => {
+      m.mesh('gel', lump(revolve(GEL, { sides: 16 }), 0.09, 530), { mat: 'taintGel' });
+      // Lobes of it spreading over the floor about its foot.
+      [0.3, 1.5, 2.6, 3.7, 4.9, 5.8].forEach((a, i) => {
+        const r = 78 + rand(i, 531) * 8, s = 14 + rand(i, 532) * 8;
+        m.mesh(`lobe_${i + 1}`, revolve([[0, 0], [s * 1.6, 0], [s * 1.3, 4], [s * 0.6, 8], [0, 9]], { sides: 8 }),
+          { mat: 'taintGel', origin: [Math.cos(a) * r, 0, Math.sin(a) * r], rotation: [0, (a * 180) / Math.PI, 0] });
+      });
+      // Its eyes: glowing irises bulging out of the gel at its front, each with a black slit of a pupil.
+      const eye = (name, a, y, size) => {
+        const r = radiusAt(y) * 0.97, x = Math.sin(a) * r, z = Math.cos(a) * r, turn = (a * 180) / Math.PI;
+        m.mesh(`${name}_iris`, revolve([[0, -size], [size * 0.9, -size * 0.55], [size, 0], [size * 0.85, size * 0.55], [0, size]], { sides: 8 }),
+          { mat: 'taint', origin: [x, y, z], rotation: [90, turn, 0] });
+        // (The slit stands out of the iris's face, turned with it.)
+        const c = [x + Math.sin(a) * size * 0.8, y, z + Math.cos(a) * size * 0.8];
+        m.cube(`${name}_pupil`, [c[0] - size * 0.17, c[1] - size * 0.66, c[2] - size * 0.3], [c[0] + size * 0.17, c[1] + size * 0.66, c[2] + size * 0.3],
+          { mat: 'void', origin: c, rotation: [0, turn, 0] });
+      };
+      eye('eye_left', -0.32, 74, 9);
+      eye('eye_right', 0.3, 76, 10);
+      eye('eye_small_1', -0.75, 92, 4.5);
+      eye('eye_small_2', 0.66, 98, 5);
+      eye('eye_small_3', 0.02, 104, 4);
+      eye('eye_small_4', -0.12, 52, 3.5);
+      eye('eye_small_5', 0.95, 58, 4);
+      // Its core, and what it has swallowed, drifting about it.
+      m.group('core', () => {
+        m.mesh('core', lump(revolve([[0, 26], [24, 30], [34, 46], [32, 62], [20, 76], [0, 80]], { sides: 10 }), 0.18, 533), { mat: 'taintCore' });
+        [[10, 52, 26, 7], [-20, 44, 18, 5], [4, 70, -24, 6], [26, 60, -6, 4.5]].forEach(([x, y, z, s], i) => m.mesh(`knot_${i + 1}`,
+          revolve([[0, -s], [s, -s * 0.4], [s * 0.9, s * 0.5], [0, s]], { sides: 6 }), { mat: 'taint', origin: [x, y, z] }));
+        // A skull, tipped back as it turns in the gel.
+        const sk = [-34, 62, 38];
+        m.mesh('skull', revolve([[0, -5], [9, -6], [11.5, 1], [12, 7], [9, 12.5], [0, 14.5]], { sides: 8 }), { mat: 'stainedBone', origin: sk, rotation: [-28, 30, 12] });
+        m.cube('skull_jaw', [sk[0] - 5.5, sk[1] - 10, sk[2] + 1], [sk[0] + 5.5, sk[1] - 4.5, sk[2] + 10], { mat: 'stainedBone', origin: sk, rotation: [-28, 30, 12] });
+        for (const s of [-1, 1]) m.cube(`skull_socket_${s < 0 ? 'left' : 'right'}`, [sk[0] + s * 4.5 - 2.2, sk[1] + 1, sk[2] + 9], [sk[0] + s * 4.5 + 2.2, sk[1] + 5, sk[2] + 11.6], { mat: 'socket', origin: sk, rotation: [-28, 30, 12] });
+        // A dented helmet, on its side.
+        m.mesh('helmet', revolve([[0, 0], [15, 0], [15, 1.5], [12, 2], [11.5, 8], [7, 13], [0, 14.5]], { sides: 8 }),
+          { mat: 'ironDark', origin: [42, 30, -30], rotation: [70, 20, -15] });
+        // A rusted sword, run through it.
+        const sw = { origin: [8, 58, 4], rotation: [10, -35, 64] };
+        m.mesh('sword_blade', loft([[-40, 2.4], [26, 2], [34, 0]].map(([zz, w]) => (w ? [[w, 0, zz], [0, 0.6, zz], [-w, 0, zz], [0, -0.6, zz]] : apex(4, [0, 0, zz])))), { mat: 'rust', ...sw });
+        m.mesh('sword_guard', tube([[-8, 0, -40], [8, 0, -40]], { half: 1.3, sides: 4 }), { mat: 'rust', ...sw });
+        m.mesh('sword_grip', tube([[0, 0, -40], [0, 0, -52]], { half: 1.2, sides: 6 }), { mat: 'hide', ...sw });
+        // Bones: a thigh, a forearm, ribs.
+        [[[-24, 30, -36], [-2, 40, -46], 2.2], [[30, 86, 18], [44, 72, 4], 1.6], [[-46, 40, -4], [-38, 52, -22], 1.4]].forEach(([a, b, r], i) =>
+          m.mesh(`bone_${i + 1}`, tube([a, b], { half: r, sides: 6 }), { mat: 'stainedBone' }));
+        [0, 1, 2].forEach((i) => m.mesh(`rib_${i + 1}`, tube([[-12, 88 - i * 6, -30], [-2, 92 - i * 6, -38], [10, 90 - i * 6, -34]], { half: 1.1, sides: 4 }), { mat: 'stainedBone' }));
+      }, { origin: [0, 52, 0] });
+    }, { origin: [0, 0, 0] });
+  }, { translucent: ['taintGel'], glow: ['taint'], density: 0.75 }),
 
   goblin: defineModel('goblin', MATS, (m) => {
     humanoid(m, {

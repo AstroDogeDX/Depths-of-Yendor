@@ -5,7 +5,7 @@ How the game plays and the rules behind it: what's in it, the controls, the pack
 ## What's in it
 
 - **25 floors in 5 themes** of five floors each: Sewers, Catacombs, Caves, Dwarven Ruins and the Underworld. Seeded layouts with pillared halls, wall sconces, doors and hidden traps (spike, poison gas, teleport, alarm). See [The dungeon](dungeon.md).
-- **13 monsters:** rat, bat, ooze, goblin, goblin archer, skeleton, orc, wraith, fire imp, troll, stone golem, the **mimic**, which passes for a chest until you reach for it, and the **Warden of Yendor**, who fires bolt volleys and raises the dead at half health.
+- **14 monsters:** rat, bat, ooze, goblin, goblin archer, skeleton, orc, wraith, fire imp, troll, stone golem, the **mimic**, which passes for a chest until you reach for it, and two bosses: the **Maledicted Ooze**, in its lair at the bottom of the Sewers, and the **Warden of Yendor**, who fires bolt volleys and raises the dead at half health. See [Bosses](#bosses).
 - **Items:** 7 weapons with different reach, speed and damage types (spears out-reach swords, hammers hit hard but recover slowly), each to be gripped in one hand or both, the lantern, a **shield** or a **bow** (with **arrows** in your quiver) in your off hand, **thrown weapons** (stones, darts and throwing knives), 5 armours with strength requirements, 10 potions, 10 scrolls, 5 wands, 6 rings, food. Most are found in **chests**, and the best in locked ones. See [Chests and mimics](dungeon.md#chests-and-mimics).
 - **A shop** on the first floor of each theme after the first (floors 6, 11, 16 and 21). See [The shop](dungeon.md#the-shop).
 - **6 artefacts**, 5 per run in guarded shrines on the third floor of each theme (3, 8, 13, 18 and 23): Chalice of Crimson Thirst (lifesteal), Eye of the Deep (see all monsters, even through walls, and traps), Horn of Thunder (stun blast), Cloak of Shadows (invisibility), Boots of the Wind (speed), Emberheart (burning strikes, fire immunity). You have two attunement slots.
@@ -143,7 +143,7 @@ Every source of damage has a type (`damage.js`), physical or magical. Only starv
 
 | Type | Comes from now | Notes |
 | --- | --- | --- |
-| Magic | the wand of magic missile, wraiths' and the Warden's bolts, the Horn of Thunder's blast | non-elemental magic |
+| Magic | the wand of magic missile, wraiths' and the Warden's bolts, the Maledicted Ooze's globs, the Horn of Thunder's blast | non-elemental magic |
 | Fire | the wand of firebolt, liquid flame, fire imps' fireballs, burning | fire hits set you burning; being immune to fire means you can't burn |
 | Ice | the wand of frost | chills, and freezes what's wet (see [Statuses](#statuses)); being immune to ice means you can't be chilled or frozen |
 | Lightning | the wand of lightning | |
@@ -180,6 +180,7 @@ Each monster's blows fit what it fights with, and most resist some kinds of dama
 | Troll | bash (club) | | +25% | −25% | fire +50% |
 | Stone golem | bash (fists) | −50% | −50% | +50% | magic +25%, fire −50%, lightning −50%, poison immune |
 | Mimic | stab (bite) | | −25% | | fire +50% |
+| Maledicted Ooze | bash (slam, blast), magic (globs) | +25% | −25% | −50% | fire +25%, poison immune; past half its health, cold only chills it |
 | Warden of Yendor | slash (halberd), magic (bolts) | −30% | −20% | +25% | holy +25%, fire immune |
 
 So a mace is the answer to skeletons, golems and the Warden but little use against oozes, wraiths and trolls. A spear or dagger runs through orcs, imps and trolls, but not the undead. Fire is the troll's bane, and magic is the golem's. Carrying a second weapon, and the right wand, pays. The dev tools' monster buttons list these as tooltips.
@@ -221,7 +222,7 @@ Statuses afflict you and monsters alike, by one set of rules (`status.js`): what
   - **Wet, bleeding, oiled:** water, blood or oil drips off it.
   - **Burning:** flames lick up off it, flaring up and dying down from spot to spot, with embers and smoke rising, and it glows with the fire.
   - **Chilled:** frost glitters about it, drifting down. **Frozen:** thicker frost, and it's tinted blue.
-  - **Poisoned:** purple bubbles rise off its head and burst.
+  - **Poisoned:** purple bubbles rise off its head and burst. **Malediction:** dark taint drips off it, and flecks of it rise, glowing magenta.
   - **Charmed or smitten:** hearts circle its head. **Heartbroken:** now and then a cracked heart sinks from it.
   - **Confused:** stars whirl round its head. **Blind:** murk swirls round its eyes. **Feared:** sweat flies off its head. **Weakened:** red chevrons sink down it as its strength drains.
   - **Paralysed:** it strains against its locked limbs, shaking in fits.
@@ -229,7 +230,7 @@ Statuses afflict you and monsters alike, by one set of rules (`status.js`): what
 - **Yours show over your view** too (`fx/screenFx.js`), in the same chunky pixels, fading in and out, as well as under your health:
   - **Burning:** a fiery glow round the edges, flames licking up from the bottom (higher at the sides), embers, and the air shimmering low down.
   - **Chilled:** frost creeps in from the edges and corners, snow drifts down, and the view cools. **Frozen:** thick frost, the view grey-blue and cracked across like ice.
-  - **Poisoned:** a throbbing sickly purple round the edges, the view swimming, bubbles rising up the sides. **Bleeding:** red round the edges, beating, with blood running down from the top.
+  - **Poisoned:** a throbbing sickly purple round the edges, the view swimming, bubbles rising up the sides. **Malediction:** a dark purple ichor round the edges, the colour soured, and thick drips of the taint creeping down from the top, magenta at their tips. **Bleeding:** red round the edges, beating, with blood running down from the top.
   - **Wet:** drops of water by the edges, each a little lens on the view, sliding down. **Oiled:** a dark amber smear with an oily sheen.
   - **Weakened:** the colour drains, the edges darken. **Confused:** the view swims and doubles. **Paralysed:** grey and blue, with static crackling at the edges and the view jolting as you strain.
   - **Charmed:** a rosy glow, hearts floating up the sides. **Heartbroken:** a cold grey edge. **Healing:** a warm green glow round the edges, swelling and ebbing, and green crosses rising up the sides.
@@ -243,8 +244,9 @@ Statuses afflict you and monsters alike, by one set of rules (`status.js`): what
 | Burning | fire hits (the wand of firebolt, liquid flame, fire imps), Emberheart's strikes | fire damage every second |
 | Poisoned | poison potions and gas traps, oozes' hits | poison damage every second, and you don't heal |
 | Bleeding | nothing yet | damage every second that armour and resistances don't reduce, and you don't heal. The bloodless (skeletons, wraiths, golems, oozes) can't bleed |
+| Malediction | the Maledicted Ooze's globs (see [Bosses](#bosses)) | damage every second that armour and resistances don't reduce, and you don't heal; it never wears off, until water washes it off (a pool: see below), and nothing wet can take one |
 | Chilled | the wand of frost | you move at 60% speed, and your weapon recovers a quarter slower; monsters move and strike at half speed |
-| Frozen | cold on something wet, or on an ooze | frozen stiff: it can't move or act, a frozen monster takes a blow as if unaware (double damage), and it loses every resistance (weaknesses stay). A thaw leaves 4 s of Chilled |
+| Frozen | cold on something wet, or on an ooze (but the Maledicted Ooze past half its health, which cold only chills) | frozen stiff: it can't move or act, a frozen monster takes a blow as if unaware (double damage), and it loses every resistance (weaknesses stay). A thaw leaves 4 s of Chilled |
 | Healing | potions of healing, drunk (which also purges poison, bleeding, blindness and confusion at once) or thrown | mends 3/4 of your health over 8 s, or half of a monster's (`HEALING` in `status.js`); another potion adds its 8 s to what's left |
 | Wet | wading through a pool (see [Pools](dungeon.md#pools)): it lasts as long as you wade, and wears off over 10 s once you're out (`WADE_WET`) | won't burn, and lightning does half as much damage again |
 | Oiled | nothing yet (oil flasks and traps, to come) | fire does half as much damage again, and set alight, it burns twice as long |
@@ -263,7 +265,8 @@ How they meet (`afflict` in `status.js`):
 
 - **Water puts out fire,** and nothing wet will burn.
 - **Cold puts out fire, and heat drives out cold.** Setting something chilled or frozen alight thaws it instead, and chilling something that's burning douses it instead. A fire hit on something frozen thaws it and does its full damage.
-- **Cold on something wet freezes it solid,** as does wetting something chilled (wading into a pool while chilled, say). Oozes are `fluid` (a trait in `monsters/defs.js`), so cold alone freezes them. The chill a thaw leaves never freezes anything again, so an ooze, or something frozen where it stands in water, thaws out for good; the ice dries it, and the water only soaks it again once that chill has gone.
+- **Cold on something wet freezes it solid,** as does wetting something chilled (wading into a pool while chilled, say), unless it can't be frozen (the Maledicted Ooze, past half its health), when it's only chilled. Oozes are `fluid` (a trait in `monsters/defs.js`), so cold alone freezes them. The chill a thaw leaves never freezes anything again, so an ooze, or something frozen where it stands in water, thaws out for good; the ice dries it, and the water only soaks it again once that chill has gone.
+- **Water washes a malediction off,** the moment you step into a pool, and nothing wet can take one, so for the few seconds you're still Wet after you climb out, the ooze's globs can't maledict you.
 - **A charm leaves its target Heartbroken,** whether it wears off or is broken, and nothing heartbroken can be charmed.
 - **Immunity to a damage type wards off its status.** A resistance of 0 to fire, poison or ice (the fire imp to fire, Emberheart's wearer, the undead to poison) means no burning, no poison, or no chill or freezing.
 
@@ -286,6 +289,22 @@ How they meet (`afflict` in `status.js`):
 - When it loses sight of you, it goes to where it last saw you.
 - Either way, it looks around when it gets there and heads for anything else it hears.
 - It gives up after 12 s with no sign of you. A boss never gives up.
+
+## Bosses
+
+A boss is a monster with a floor of its own, at the end of a theme. It never gives up the hunt (see *Hunting by ear*), takes any hostile status for half as long, and can't be terrified, teleported away or knocked back. While one is after you, its name, what afflicts it and its health show across the top of your view, a pale trail behind its health showing what your last blows took (`UI.updateBossBar`). Bosses that fight in ways of their own have them in `monsters/bosses.js` (a def's `ai` and `moves` in `monsters/defs.js`). Two so far:
+
+**The Maledicted Ooze** lies asleep in its lair at the bottom of the Sewers (see [The Sewers' boss floor](dungeon.md#the-sewers-boss-floor)): a vast ooze, 2.6 m across and 2 m high, of near-black purple gel, its many eyes glowing magenta and the bones of those it took drifting in it, 120 health. It wakes when it sees you within 9 m, or hears you, and heaves itself up out of its filth.
+
+- **It's an ooze,** as the green one is: blades cut it (+25% slash), points and blows do less (−25% stab, −50% bash), fire boils it (+25%), poison can't touch it, it can't bleed, and cold alone freezes it solid, open to your blows as anything frozen is. It's quicker than a green ooze for all its size (2.1 m a second, to its 1.5), though slower than you.
+- **Its blow:** in reach (2.2 m), it rears back and lunges, for 5–10 bash.
+- **Its blast:** with you close, it swells up for 1.5 s, quivering harder and harder, with a magenta ring on the floor showing how far it will reach (4.5 m), then slams down, for 6–11 bash, throwing you 3.5 m back. Get out of the ring, or behind a pillar: it only catches what it can see. It blasts every 6 to 9 s at most. Freezing it stops it.
+- **Its globs:** with you further off, it spits a glob of its taint, which arcs to you, for 3–6 magic, and if it gets through, a **malediction** (see [Statuses](#statuses)): damage every second through your armour, and no healing, until water washes it off. So the water behind the pillars is worth reaching. Step aside to dodge them, or put a pillar between you.
+- **Half its health gone,** its taint boils up: no cold will freeze it from then on, only chill it (any ice on it bursts off), it glows faintly, and it spits three globs at a time, in a spread. Its bar turns red.
+- **It never leaves its lair:** too big for any doorway, it won't follow you out of the hall, but it watches you from inside, and spits at you while it can see you. Lose it behind a pillar, or out of the hall, and it goes back to the middle to wait.
+- **When it dies,** it bursts and slumps into a puddle, and spills what it had swallowed: the boss key to the door on, a treasure as a locked chest holds, gold, and something more.
+
+**The Warden of Yendor** keeps the Amulet's vault on the last floor: halberd blows, volleys of bolts, and at half its health, the dead answer its call.
 
 ## Stamina, sprinting and sneaking
 

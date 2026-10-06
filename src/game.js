@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { TILE, MAX_DEPTH, ARTEFACT_DEPTHS, SHOP_DEPTHS, RENDER_HEIGHTS, HOTBAR_SIZE, danger, themeForDepth } from './config.js';
+import { TILE, MAX_DEPTH, ARTEFACT_DEPTHS, SHOP_DEPTHS, RENDER_HEIGHTS, HOTBAR_SIZE, danger } from './config.js';
 import { RNG, rand } from './rng.js';
 import { generateLevel } from './dungeon/generator.js';
 import { Level } from './world/level.js';
@@ -16,7 +16,8 @@ import { Input, GAME_KEYS } from './input.js';
 import { Sfx } from './audio.js';
 import { Music } from './music/music.js';
 import { useSlot, slotItem, useHeldSlot, useHeld, HELD } from './hotbar.js';
-import { disposeGroup, propsForTheme } from './dungeon/levelBuilder.js';
+import { disposeGroup, propsForFloor } from './dungeon/levelBuilder.js';
+import { arenaFor } from './dungeon/arenas.js';
 import { loadProps } from './dungeon/props.js';
 import { loadTraps } from './world/trapModels.js';
 import { TitleScene } from './ui/titleScene.js';
@@ -313,7 +314,7 @@ export class Game {
    * see arrive()).
    */
   enterLevel(depth, arrive, done = () => {}) {
-    const pending = this.levels.has(depth) ? null : loadProps(propsForTheme(themeForDepth(depth)));
+    const pending = this.levels.has(depth) ? null : loadProps(propsForFloor(depth));
     if (!pending) {
       this.arrive(depth, arrive);
       done();
@@ -365,6 +366,9 @@ export class Game {
       p.pitch = 0;
     }
     p.lastTrapTile = level.idx(level.toTile(p.x), level.toTile(p.z));
+    // Coming up from beyond a boss's door (a run saved before its arena was, or the dev tools), you unbar it from its
+    // far side, rather than be shut in behind it.
+    if (arrive === 'up') for (const d of level.doors) if (d.lock === 'boss' && d.locked) level.unlockDoor(d);
     p.maxDepth = Math.max(p.maxDepth, depth);
     level.visT = 0;
     level.flowT = 0;
@@ -376,6 +380,7 @@ export class Game {
     if (firstVisit && depth === MAX_DEPTH) this.log('The air hums with ancient power. The Amulet is near — and so is its keeper.', 'danger');
     else if (firstVisit && level.data.shrine) this.log('You sense an artefact of power somewhere on this floor.', 'info');
     if (firstVisit && level.shopkeeper) this.log('Somewhere close by, coins clink in the dark.', 'info');
+    if (firstVisit && arenaFor(depth)) this.log(arenaFor(depth).arrive, 'danger');
 
     if (p.hasAmulet() && arrive === 'up') {
       this.log('The dungeon howls as the Amulet passes through. Things are coming.', 'danger');
@@ -383,7 +388,7 @@ export class Game {
       for (let i = 0; i < 2; i++) level.spawnWanderer(true);
     }
     // Start fetching the next floor's props, so they're here by the time you go down.
-    loadProps(propsForTheme(themeForDepth(Math.min(MAX_DEPTH, depth + 1))))?.catch(() => {});
+    loadProps(propsForFloor(Math.min(MAX_DEPTH, depth + 1)))?.catch(() => {});
     this.save(); // every floor you reach
   }
 
@@ -669,6 +674,9 @@ export class Game {
     const door = level.doorAt(level.toTile(p.x + fx * 1.4), level.toTile(p.z + fz * 1.4));
     if (door && !door.open) {
       if (!door.locked) return { kind: 'door', door, label: 'Open the door' };
+      if (door.lock === 'boss') {
+        return { kind: 'door', door, label: p.bossKeys[level.depth] ? 'Unlock the door (uses the boss key)' : 'Chained shut. Its key is with the master of this place' };
+      }
       const keys = p.keys[level.depth] || 0;
       return { kind: 'door', door, label: keys ? 'Unlock the door (uses an iron key)' : 'Locked. It needs an iron key from this floor' };
     }
@@ -741,7 +749,8 @@ export class Game {
     }
     if (item.kind === 'key') {
       this.log(item.type === 'gold' ? 'You pick up a gold key. Somewhere on this floor, a locked chest is waiting for it.'
-        : 'You pick up an iron key. Somewhere on this floor, a lock is waiting for it.', 'good');
+        : item.type === 'boss' ? 'You pick up the boss key, still slick with filth. It will open the way on down.'
+          : 'You pick up an iron key. Somewhere on this floor, a lock is waiting for it.', 'good');
       return;
     }
     // Arrows go into your quiver, if they're the kind in it (see Player.addItem).
@@ -829,22 +838,28 @@ export class Game {
     });
   }
 
-  /** Open a door the player walked into or used. Locked doors take an iron key for this floor. */
+  /**
+   * Open a door the player walked into or used. Locked doors take an iron key for this floor; a boss's door (`lock`
+   * 'boss': see arenas.js), the key its boss leaves when it dies.
+   */
   useDoor(door) {
     if (door.open) return;
-    const p = this.player, depth = this.level.depth;
+    const p = this.player, depth = this.level.depth, boss = door.lock === 'boss';
     if (door.locked) {
-      if ((p.keys[depth] || 0) > 0) {
-        p.keys[depth]--;
+      const keys = boss ? p.bossKeys : p.keys;
+      if ((keys[depth] || 0) > 0) {
+        keys[depth]--;
         this.level.unlockDoor(door);
         this.audio.unlock();
-        this.log('You turn the iron key in the lock. The door grinds open.', 'good');
+        this.log(boss ? 'The boss key turns in the great lock, and the chains fall away. The door grinds open.'
+          : 'You turn the iron key in the lock. The door grinds open.', 'good');
       } else {
         // Bumping a locked door repeatedly shouldn't spam the log.
         if (this.time - (door.lastRattle ?? -Infinity) > 2) {
           door.lastRattle = this.time;
           this.audio.locked();
-          this.log('The door is locked. Its key must be somewhere on this floor.', 'warn');
+          this.log(boss ? 'The door is chained shut, with a great lock. Its key must be with whatever lairs here.'
+            : 'The door is locked. Its key must be somewhere on this floor.', 'warn');
         }
         return;
       }
@@ -958,15 +973,16 @@ export class Game {
    * Hurts the player by `amount`: less their armour's defense unless opts.ignoreArmor, then more or less as what
    * they wear resists or is weak to its damage type (see Player.resistMult), and as their statuses make it (see
    * status.js). opts: { source (what killed them), type (see damage.js: fire sets them alight, for `ignite` seconds,
-   * 3 by default), chill (seconds of chill it brings), monster, dot, ranged, ignoreArmor }.
+   * 3 by default), chill (seconds of chill it brings), monster, dot, ranged, ignoreArmor }. Returns the damage that got
+   * through.
    */
   hurtPlayer(amount, opts = {}) {
-    if (this.over || this.dev?.god) return;
+    if (this.over || this.dev?.god) return 0;
     const p = this.player;
     const mult = damageTakenMult(p, opts.type, p.resistMult(opts.type));
     if (mult === 0) {
       if (!opts.dot) this.popup(playerPopupPos(p), 'IMMUNE', 'immune');
-      return;
+      return 0;
     }
     let dmg = amount, shielded = 0;
     if (!opts.ignoreArmor) {
@@ -988,7 +1004,7 @@ export class Game {
     if (dmg === 0) {
       this.popup(playerPopupPos(p), 'blocked', 'miss');
       if (!shielded) this.audio.block();
-      return;
+      return 0;
     }
     p.hp -= dmg;
     this.ui.hurtFlash(Math.min(1, (dmg / p.maxHp) * 3));
@@ -1001,10 +1017,11 @@ export class Game {
     }
     if (p.hp <= 0) {
       this.playerDied(opts.source || 'something');
-      return;
+      return dmg;
     }
     // Fire thaws you or sets you alight; ice chills you (see status.js).
     if (!opts.dot) hitStatuses(this, p, opts.type, { ignite: opts.type === 'fire' ? opts.ignite ?? 3 : 0, chill: opts.chill });
+    return dmg;
   }
 
   /**
@@ -1019,14 +1036,16 @@ export class Game {
     } else {
       p.kills++;
       const how = killer ? `The ${killer.name} kills the ${m.name}.` : `You kill the ${m.name}.`;
-      this.log(m.boss ? `The ${m.name} crashes to the floor and is still.` : how, m.boss ? 'good' : '');
+      this.log(m.boss ? m.def.death ?? `The ${m.name} is dead.` : how, m.boss ? 'good' : '');
       p.gainXp(Math.round(m.def.xp * (1 + (m.maxHp / m.def.hp - 1) * 0.5)), this);
     }
     const level = this.level;
-    // A mimic spills what its chest held out of its maw. Anything else may have carried something, which falls where
-    // it died, or onto the bank if it flew over water.
+    // A mimic spills what its chest held out of its maw, and a boss what it carried (the Maledicted Ooze, its key and
+    // what it had swallowed: see arenas.js), flung wider for its size. Anything else may have carried something, which
+    // falls where it died, or onto the bank if it flew over water.
     if (m.loot) {
-      level.spill(m.loot, m, { from: 0.4, delay: 0.3 });
+      level.spill(m.loot, m, m.boss ? { from: 0.6, delay: 0.5, out: m.radius, scatter: 0.6 } : { from: 0.4, delay: 0.3 });
+      if (m.boss && m.loot.some((it) => it.kind === 'key' && it.type === 'boss')) this.log('Something glints in what spills out of it: a key.', 'info');
       return;
     }
     const at = level.landSpot(m.x, m.z);
@@ -1052,7 +1071,7 @@ export class Game {
         this.hurtPlayer(rand.int(3, 6) + level.depth, { source: 'a spike trap', type: 'stab' });
         break;
       case 'poison':
-        this.log('A cloud of green gas billows up around you!', 'danger');
+        this.log('A cloud of purple gas billows up around you!', 'danger');
         this.audio.hiss();
         ring(level, x, z, 0xa050d8, 3, 1);
         gasCloud(level, x, z, 0x9a52d0);

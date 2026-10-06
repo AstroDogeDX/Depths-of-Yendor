@@ -16,6 +16,8 @@ const CAT_PAL = {
   void: P('#030303', '#08080a', '#0e0e10'),
   blood: P('#1a0806', '#2e0e0a', '#44150f'),
   oak: P('#0e0a07', '#17110b', '#211810', '#2c2016', '#382a1c', '#453423', '#53402c'), // old oak, near black
+  taint: P('#4a0a3a', '#7a1462', '#b0228c', '#e040c0', '#ff7ae0', '#ffd0f4'),
+  ooze: P('#0e0316', '#1c0729', '#2c0c3e', '#3e1456', '#55206f', '#8a4aa6'),
 };
 const PIT = -96; // the floor of a spike pit
 const VAULT = 179; // the ceiling
@@ -136,6 +138,14 @@ const MATS = {
     const iron = flat ? u < 0.95 && (u > 0.45 || f < 0.22 || f > 0.78) : u < 0.3;
     return iron ? MAT.rustyIron(c) : [0, 0, 0, 0];
   },
+  // The Maledicted Ooze's taint, glowing (the boss door's keyhole), and its filth, seeped under the door.
+  taintGlow: (c) => ramp(CAT_PAL.taint, 0.6 + 0.3 * patches(c.p, 970, 1), c.ax, c.ay),
+  ooze(c) {
+    const { p } = c;
+    let v = 0.4 + 0.25 * patches(p, 971, 0.2) + 0.2 * c.n.y;
+    if (noise3(p.x * 0.3, 0, p.z * 0.3, 972) > 0.7) v = 0.85; // a wet glint
+    return ramp(CAT_PAL.ooze, v, c.ax, c.ay);
+  },
 };
 
 // ---------------------------------------------------------------- shared parts
@@ -185,6 +195,67 @@ function facing(pts, out) {
   const u = b.map((v, i) => v - a[i]), w = c.map((v, i) => v - a[i]);
   const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
   return { pts: n[0] * out[0] + n[1] * out[1] + n[2] * out[2] >= 0 ? pts : [...pts].reverse() };
+}
+
+/**
+ * A chain across a door's face, from `a` to `b` (each [x, y, z], z out from the middle), sagging `sag` px in the
+ * middle, in `runs` straight runs `w` either side of its line, on the side `s` (±1) faces: links painted on strips
+ * (chainRun in MATS), each run going on where the last left off. `name(i)` names the i-th run (from 1).
+ */
+function chainRun(m, name, a, b, s, { sag = 0, runs = 6, w = 2.2 } = {}) {
+  const pt = (t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t - sag * 4 * t * (1 - t), s * (a[2] + (b[2] - a[2]) * t)];
+  let off = 0;
+  for (let j = 0; j < runs; j++) {
+    const p = pt(j / runs), q = pt((j + 1) / runs), len = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    const d = [(q[0] - p[0]) / len, (q[1] - p[1]) / len], nx = -d[1] * w, ny = d[0] * w;
+    const quad = [[p[0] - nx, p[1] - ny, p[2]], [q[0] - nx, q[1] - ny, q[2]], [q[0] + nx, q[1] + ny, q[2]], [p[0] + nx, p[1] + ny, p[2]]];
+    m.mesh(name(j + 1), [facing(quad, [0, 0, s])], { mat: 'chainRun', info: { a: [p[0], p[1]], d, w, off } });
+    off += len;
+  }
+}
+
+/**
+ * The Catacombs' door (see doorkit.mjs for how doors go together): a tall door of old oak boards under a round stone
+ * arch, a skull carved on the keystone either side. Three black iron straps cross it from the hinges, ending in spear
+ * points, with studs between them and a heavy ring to pull it by. `lock(zs)` fills its lock group, and `extra(zs)`
+ * adds to its frame (`zs(s, a, b)`: a to b px out from the middle, on the side s faces).
+ */
+function oakDoor(m, lock, extra = null) {
+  const OW = 53, SPRING = 124, RISE = 28, BACK = 40; // the opening, where its arch springs, and the arch's rise inside and out
+  const zs = (s, a, b) => (s > 0 ? [a, b] : [-b, -a]);
+  m.group('frame', () => {
+    for (const s of [-1, 1]) m.cube(`jamb_${s < 0 ? 'left' : 'right'}`, [s < 0 ? -HALF : OW, 0, -18], [s < 0 ? -OW : HALF, SPRING, 18], { mat: 'ashlar' });
+    m.cube('step', [-OW, 0, -18], [OW, 2, 18], { mat: 'voussoir', info: { block: 40 } });
+    // Nine voussoirs between the curve over the opening and the arch's back, the keystone standing proud; the
+    // wall above them, up to the vault.
+    const N = 9, inner = archPts(OW, SPRING, RISE, N), outer = archPts(HALF, SPRING, BACK, N);
+    for (let i = 0; i < N; i++) {
+      const key = i === (N - 1) / 2, lift = key ? 6 : 0, d = key ? 21 : 18;
+      const block = [inner[i], [outer[i][0], outer[i][1] + lift], [outer[i + 1][0], outer[i + 1][1] + lift], inner[i + 1]];
+      m.mesh(`voussoir_${i + 1}`, prism(block, -d, d), { mat: 'voussoir', info: { block: i } });
+      m.mesh(`spandrel_${i + 1}`, prism([outer[i], [outer[i][0], TOP], [outer[i + 1][0], TOP], outer[i + 1]], -16, 16), { mat: 'ashlar' });
+    }
+    bothFaces((s) => skull(m, `keystone_skull_${s > 0 ? 'front' : 'back'}`, [0, SPRING + RISE + 8, s * 21.5], { s: 10, rot: s > 0 ? [0, 0, 0] : [0, 180, 0] }));
+    extra?.(zs);
+  });
+  m.group('leaf', () => {
+    m.cube('boards', [-OW + 1, 1.5, -4], [OW - 1, SPRING, 4], { mat: 'oak' });
+    archSlices(OW - 1, SPRING, RISE - 1, 12, SPRING).forEach((slice, i) => m.mesh(`boards_top_${i + 1}`, prism(slice, -4, 4), { mat: 'oak' }));
+    bothFaces((s) => {
+      const side = s > 0 ? 'front' : 'back', [z0, z1] = zs(s, 4, 5.6), [t0, t1] = zs(s, 4, 5.2);
+      [18, 62, 106].forEach((y, i) => m.mesh(`strap_${i + 1}_${side}`,
+        prism([[-OW + 1, y], [26, y], [34, y + 3.5], [26, y + 7], [-OW + 1, y + 7]], z0, z1), { mat: 'strap', info: { y: y + 3.5 } }));
+      for (const y of [42, 86]) for (let k = 0; k < 6; k++) {
+        const x = -OW + 1 + 17.33 * (k + 0.5);
+        m.cube(`stud_${y}_${k + 1}_${side}`, [x - 1.3, y - 1.3, t0], [x + 1.3, y + 1.3, t1], { mat: 'strap' });
+      }
+      const [b0, b1] = zs(s, 4, 6.2);
+      m.cube(`ring_boss_${side}`, [33, 73, b0], [39, 79, b1], { mat: 'strap' });
+      ring(m, `ring_${side}`, [36, 67, s * 6.6], 6.5, { n: 10, half: 1.2, normal: 'z' });
+    });
+    for (const y of [16, 60, 104]) m.mesh(`pintle_${y}`, revolve([[0, 0], [2.6, 0], [2.6, 11], [0, 11]], { sides: 6 }), { mat: 'strap', origin: [-OW, y, 0] });
+  }, { origin: [-OW, 0, 0] });
+  m.group('lock', () => lock(zs));
 }
 
 // ---------------------------------------------------------------- props
@@ -421,62 +492,44 @@ export const catacombs = {
   }, { density: 0.75 }),
 
   door_catacombs: defineModel('door_catacombs', MATS, (m) => {
-    // A tall door of old oak boards under a round stone arch, a skull carved on the keystone either side (see
-    // doorkit.mjs for how doors go together). Three black iron straps cross it from the hinges, ending in spear
-    // points, with studs between them and a heavy ring to pull it by. Locked, a chain sags across it from a
+    // A tall door of old oak boards under a round stone arch (see oakDoor). Locked, a chain sags across it from a
     // staple in the jamb to a hasp over the latch, padlocked, on both sides.
-    const OW = 53, SPRING = 124, RISE = 28, BACK = 40; // the opening, where its arch springs, and the arch's rise inside and out
-    const zs = (s, a, b) => (s > 0 ? [a, b] : [-b, -a]); // a to b out from the middle, on the side s faces
-    m.group('frame', () => {
-      for (const s of [-1, 1]) m.cube(`jamb_${s < 0 ? 'left' : 'right'}`, [s < 0 ? -HALF : OW, 0, -18], [s < 0 ? -OW : HALF, SPRING, 18], { mat: 'ashlar' });
-      m.cube('step', [-OW, 0, -18], [OW, 2, 18], { mat: 'voussoir', info: { block: 40 } });
-      // Nine voussoirs between the curve over the opening and the arch's back, the keystone standing proud; the
-      // wall above them, up to the vault.
-      const N = 9, inner = archPts(OW, SPRING, RISE, N), outer = archPts(HALF, SPRING, BACK, N);
-      for (let i = 0; i < N; i++) {
-        const key = i === (N - 1) / 2, lift = key ? 6 : 0, d = key ? 21 : 18;
-        const block = [inner[i], [outer[i][0], outer[i][1] + lift], [outer[i + 1][0], outer[i + 1][1] + lift], inner[i + 1]];
-        m.mesh(`voussoir_${i + 1}`, prism(block, -d, d), { mat: 'voussoir', info: { block: i } });
-        m.mesh(`spandrel_${i + 1}`, prism([outer[i], [outer[i][0], TOP], [outer[i + 1][0], TOP], outer[i + 1]], -16, 16), { mat: 'ashlar' });
-      }
-      bothFaces((s) => skull(m, `keystone_skull_${s > 0 ? 'front' : 'back'}`, [0, SPRING + RISE + 8, s * 21.5], { s: 10, rot: s > 0 ? [0, 0, 0] : [0, 180, 0] }));
-    });
-    m.group('leaf', () => {
-      m.cube('boards', [-OW + 1, 1.5, -4], [OW - 1, SPRING, 4], { mat: 'oak' });
-      archSlices(OW - 1, SPRING, RISE - 1, 12, SPRING).forEach((slice, i) => m.mesh(`boards_top_${i + 1}`, prism(slice, -4, 4), { mat: 'oak' }));
-      bothFaces((s) => {
-        const side = s > 0 ? 'front' : 'back', [z0, z1] = zs(s, 4, 5.6), [t0, t1] = zs(s, 4, 5.2);
-        [18, 62, 106].forEach((y, i) => m.mesh(`strap_${i + 1}_${side}`,
-          prism([[-OW + 1, y], [26, y], [34, y + 3.5], [26, y + 7], [-OW + 1, y + 7]], z0, z1), { mat: 'strap', info: { y: y + 3.5 } }));
-        for (const y of [42, 86]) for (let k = 0; k < 6; k++) {
-          const x = -OW + 1 + 17.33 * (k + 0.5);
-          m.cube(`stud_${y}_${k + 1}_${side}`, [x - 1.3, y - 1.3, t0], [x + 1.3, y + 1.3, t1], { mat: 'strap' });
-        }
-        const [b0, b1] = zs(s, 4, 6.2);
-        m.cube(`ring_boss_${side}`, [33, 73, b0], [39, 79, b1], { mat: 'strap' });
-        ring(m, `ring_${side}`, [36, 67, s * 6.6], 6.5, { n: 10, half: 1.2, normal: 'z' });
-      });
-      for (const y of [16, 60, 104]) m.mesh(`pintle_${y}`, revolve([[0, 0], [2.6, 0], [2.6, 11], [0, 11]], { sides: 6 }), { mat: 'strap', origin: [-OW, y, 0] });
-    }, { origin: [-OW, 0, 0] });
-    m.group('lock', () => {
-      bothFaces((s) => {
-        const side = s > 0 ? 'front' : 'back', [h0, h1] = zs(s, 5.6, 7.4), [b0, b1] = zs(s, 7.4, 12);
-        m.cube(`hasp_${side}`, [34, 76, h0], [62, 82, h1], { mat: 'strap' });
-        m.cube(`padlock_${side}`, [40, 58, b0], [51, 70, b1], { mat: 'lockIron', info: { kx: 45.5, ky: 64 } });
-        m.mesh(`shackle_${side}`, tube([[42, 69, s * 9.6], [42, 75, s * 9.6], [45.5, 78, s * 9.6], [49, 75, s * 9.6], [49, 69, s * 9.6]], { half: 1, side: [0, 0, 1] }), { mat: 'rustyIron' });
-        m.mesh(`staple_${side}`, tube([[-61, 77, s * 18], [-61, 83, s * 20], [-55, 83, s * 20], [-55, 77, s * 18]], { half: 1, side: [0, 0, 1] }), { mat: 'rustyIron' });
-        // The chain, sagging from the staple to the shackle in straight runs.
-        const A = [-58, 80, 19], B = [45.5, 76, 9.6], runs = 10, w = 2.2;
-        const pt = (t) => [A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t - 22 * 4 * t * (1 - t), s * (A[2] + (B[2] - A[2]) * t)];
-        let off = 0;
-        for (let j = 0; j < runs; j++) {
-          const a = pt(j / runs), b = pt((j + 1) / runs), len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-          const d = [(b[0] - a[0]) / len, (b[1] - a[1]) / len], nx = -d[1] * w, ny = d[0] * w;
-          const quad = [[a[0] - nx, a[1] - ny, a[2]], [b[0] - nx, b[1] - ny, b[2]], [b[0] + nx, b[1] + ny, b[2]], [a[0] + nx, a[1] + ny, a[2]]];
-          m.mesh(`chain_${j + 1}_${side}`, [facing(quad, [0, 0, s])], { mat: 'chainRun', info: { a: [a[0], a[1]], d, w, off } });
-          off += len;
-        }
-      });
-    });
+    oakDoor(m, (zs) => bothFaces((s) => {
+      const side = s > 0 ? 'front' : 'back', [h0, h1] = zs(s, 5.6, 7.4), [b0, b1] = zs(s, 7.4, 12);
+      m.cube(`hasp_${side}`, [34, 76, h0], [62, 82, h1], { mat: 'strap' });
+      m.cube(`padlock_${side}`, [40, 58, b0], [51, 70, b1], { mat: 'lockIron', info: { kx: 45.5, ky: 64 } });
+      m.mesh(`shackle_${side}`, tube([[42, 69, s * 9.6], [42, 75, s * 9.6], [45.5, 78, s * 9.6], [49, 75, s * 9.6], [49, 69, s * 9.6]], { half: 1, side: [0, 0, 1] }), { mat: 'rustyIron' });
+      m.mesh(`staple_${side}`, tube([[-61, 77, s * 18], [-61, 83, s * 20], [-55, 83, s * 20], [-55, 77, s * 18]], { half: 1, side: [0, 0, 1] }), { mat: 'rustyIron' });
+      // The chain, sagging from the staple to the shackle.
+      chainRun(m, (i) => `chain_${i}_${side}`, [-58, 80, 19], [45.5, 76, 9.6], s, { sag: 22, runs: 10 });
+    }));
   }, { density: 1 }),
+
+  door_boss: defineModel('door_boss', MATS, (m) => {
+    // The door out of a boss's lair (an arena's: see src/dungeon/arenas.js), opened only by the key its boss leaves:
+    // the Catacombs' door, where the Sewers give way to them, chained shut. Two heavy chains cross it on each side,
+    // from staples high and low in the jambs, and meet at a great padlock, a skull on its face and its keyhole
+    // glowing with the Maledicted Ooze's taint. Its filth has seeped under the door, and pools on the floor before it
+    // on its side (-z).
+    oakDoor(m, (zs) => bothFaces((s) => {
+      const side = s > 0 ? 'front' : 'back', [b0, b1] = zs(s, 9, 16);
+      for (const [x0, y0, x1, y1, k] of [[-58, 140, 58, 24, 1], [58, 140, -58, 24, 2]]) {
+        for (const [x, y] of [[x0, y0], [x1, y1]]) {
+          m.mesh(`staple_${k}_${x < 0 ? 'left' : 'right'}_${y > 80 ? 'top' : 'bottom'}_${side}`,
+            tube([[x - 3, y - 3, s * 18], [x - 3, y + 3, s * 20], [x + 3, y + 3, s * 20], [x + 3, y - 3, s * 18]], { half: 1.1, side: [0, 0, 1] }), { mat: 'rustyIron' });
+        }
+        // Each chain from its upper staple down to the padlock, and on from it to the lower one.
+        chainRun(m, (i) => `chain_${k}_upper_${i}_${side}`, [x0, y0, 19], [0, 82, 12], s, { sag: 4, runs: 4, w: 2.6 });
+        chainRun(m, (i) => `chain_${k}_lower_${i}_${side}`, [0, 82, 12], [x1, y1, 19], s, { sag: 4, runs: 4, w: 2.6 });
+      }
+      m.cube(`padlock_${side}`, [-9, 66, b0], [9, 86, b1], { mat: 'lockIron', info: { kx: 0, ky: 200 } });
+      m.mesh(`padlock_shackle_${side}`, tube([[-6, 85, s * 12.5], [-6, 93, s * 12.5], [0, 97, s * 12.5], [6, 93, s * 12.5], [6, 85, s * 12.5]], { half: 1.6, side: [0, 0, 1] }), { mat: 'rustyIron' });
+      skull(m, `padlock_skull_${side}`, [0, 79.5, s * 16.2], { s: 7, rot: s > 0 ? [0, 0, 0] : [0, 180, 0] });
+      const [g0, g1] = zs(s, 16, 16.6);
+      m.cube(`keyhole_${side}`, [-1.2, 67.5, g0], [1.2, 72.5, g1], { mat: 'taintGlow' });
+    }), () => {
+      m.mesh('ooze', revolve([[0, 0], [30, 0], [27, 0.8], [12, 1.3], [0, 1.5]], { sides: 10 }), { mat: 'ooze', origin: [6, 0, -27] });
+      m.mesh('ooze_2', revolve([[0, 0], [14, 0], [12, 0.7], [0, 1.1]], { sides: 8 }), { mat: 'ooze', origin: [-30, 0, -22] });
+    });
+  }, { density: 1, glow: ['taintGlow'], double: ['chainRun', 'ooze'] }),
 };

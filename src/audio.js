@@ -253,6 +253,46 @@ export class Sfx {
     this.tone({ f: 110, dur: 1.0, type: 'sawtooth', vol: 0.22 });
     this.tone({ f: 165, dur: 1.0, type: 'sawtooth', vol: 0.16 });
   }
+  // The Maledicted Ooze (see monsters/bosses.js), each `vol` 0..1 by how near it is: a glob hawked up and spat, landing
+  // with a wet slap; its swelling before its blast, rising for `dur` seconds, and the blast itself, a deep boom and a
+  // splash of gel; a gurgling roar, waking or boiling up; and its death, a great burst and slosh of it.
+  spit(vol = 1) {
+    this.noise({ dur: 0.22, vol: 0.22 * vol, freq: 520, freq2: 1500, q: 2.5 });
+    this.tone({ f: 120, f2: 260, dur: 0.18, type: 'sawtooth', vol: 0.07 * vol });
+    this.noise({ dur: 0.12, vol: 0.18 * vol, freq: 2200, q: 1.5, delay: 0.16 });
+  }
+  splat(vol = 1) {
+    this.noise({ dur: 0.26, vol: 0.26 * vol, freq: 900, freq2: 240, q: 1.2 });
+    this.tone({ f: 170, f2: 60, dur: 0.16, type: 'sine', vol: 0.12 * vol });
+  }
+  swell(vol = 1, dur = 1.5) {
+    this.tone({ f: 48, f2: 110, dur, type: 'sawtooth', vol: 0.09 * vol });
+    this.tone({ f: 72, f2: 170, dur, type: 'sawtooth', vol: 0.05 * vol });
+    this.noise({ dur, vol: 0.12 * vol, freq: 200, freq2: 700, q: 3 });
+  }
+  slam(vol = 1) {
+    this.tone({ f: 90, f2: 28, dur: 0.7, type: 'sine', vol: 0.38 * vol });
+    this.tone({ f: 140, f2: 40, dur: 0.35, type: 'square', vol: 0.14 * vol });
+    this.noise({ dur: 0.55, vol: 0.34 * vol, freq: 600, freq2: 140, type: 'lowpass', q: 0.8 });
+    this.noise({ dur: 0.4, vol: 0.16 * vol, freq: 1600, freq2: 500, q: 1, delay: 0.06 });
+  }
+  roar(vol = 1) {
+    this.tone({ f: 62, f2: 44, dur: 1.4, type: 'sawtooth', vol: 0.2 * vol });
+    this.tone({ f: 93, f2: 70, dur: 1.2, type: 'sawtooth', vol: 0.12 * vol });
+    this.noise({ dur: 1.3, vol: 0.2 * vol, freq: 380, freq2: 160, q: 4 });
+    for (let i = 0; i < 6; i++) this.noise({ dur: 0.1, vol: 0.1 * vol, freq: 300 + Math.random() * 500, q: 6, delay: 0.15 + i * 0.17 + Math.random() * 0.05 });
+  }
+  oozeDeath() {
+    this.roar(0.7);
+    this.tone({ f: 120, f2: 25, dur: 1.6, type: 'sine', vol: 0.3 });
+    this.noise({ dur: 1.4, vol: 0.3, freq: 1200, freq2: 150, q: 0.9, delay: 0.2 });
+    for (let i = 0; i < 5; i++) this.noise({ dur: 0.18, vol: 0.14, freq: 500 + Math.random() * 600, freq2: 200, q: 2, delay: 0.5 + i * 0.22 });
+  }
+  /** A malediction taking hold of you: a low, sour chord, falling. */
+  maledict() {
+    [196, 233, 277].forEach((f, i) => this.tone({ f, f2: f * 0.7, dur: 0.9, type: 'triangle', vol: 0.06, delay: i * 0.05 }));
+    this.noise({ dur: 0.6, vol: 0.06, freq: 300, freq2: 120, q: 5 });
+  }
   death() { this.tone({ f: 220, f2: 35, dur: 1.8, type: 'sawtooth', vol: 0.22 }); }
   victory() { [392, 523, 659, 784, 1046, 1318].forEach((f, i) => this.tone({ f, dur: 0.3, type: 'triangle', vol: 0.14, delay: i * 0.14 })); }
 

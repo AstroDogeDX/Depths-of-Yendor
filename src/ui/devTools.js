@@ -28,7 +28,10 @@ const KINDS = [
   ['arrow', 'Arrows', ARROWS], ['thrown', 'Thrown', THROWN], ['armor', 'Armour', ARMORS], ['potion', 'Potions', POTIONS],
   ['scroll', 'Scrolls', SCROLLS], ['wand', 'Wands', WANDS], ['ring', 'Rings', RINGS], ['artefact', 'Artefacts', ARTEFACTS],
   ['food', 'Food', FOOD], ['container', 'Pack expansions', CONTAINERS],
-  ['special', 'Other', { amulet: { name: 'Amulet of Yendor' }, key: { name: 'iron key (this floor)' }, goldkey: { name: 'gold key (this floor)' } }],
+  ['special', 'Other', {
+    amulet: { name: 'Amulet of Yendor' }, key: { name: 'iron key (this floor)' }, goldkey: { name: 'gold key (this floor)' },
+    bosskey: { name: 'boss key (this floor)' },
+  }],
 ];
 const CHESTS = { chest: 'Chest', locked: 'Locked chest', mimic: 'Mimic (passing for a chest)' };
 const cap = (s) => s[0].toUpperCase() + s.slice(1);
@@ -323,7 +326,7 @@ export class DevTools {
         break;
       }
       case 'special':
-        item = type === 'amulet' ? g.makeAmulet() : makeItem('key', type === 'goldkey' ? 'gold' : 'iron', { depth: g.level.depth });
+        item = type === 'amulet' ? g.makeAmulet() : makeItem('key', { goldkey: 'gold', bosskey: 'boss' }[type] ?? 'iron', { depth: g.level.depth });
         if (type === 'amulet') g.amuletTaken = true;
         break;
       default: item = makeItem(kind, type);
@@ -400,7 +403,7 @@ export class DevTools {
       const x = p.x + fx * d, z = p.z + fz * d;
       if (lvl.blocksPath(lvl.toTile(x), lvl.toTile(z), flying) || !lvl.clearPath(p.x, p.z, x, z, flying)) continue;
       const asleep = this.opt('asleep').checked;
-      lvl.addMonster(type, x, z, { asleep, boss: type === 'warden' });
+      lvl.addMonster(type, x, z, { asleep });
       this.note(`Spawned ${/^[A-Z]/.test(MONSTERS[type].name) ? 'the' : 'a'} ${MONSTERS[type].name}${asleep ? ', asleep' : ''}. Close the panel to meet it.`);
       return;
     }

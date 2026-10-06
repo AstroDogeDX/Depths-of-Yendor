@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { TILE, WALL_H, MODEL_PX, THEMES, POOL } from '../config.js';
+import { TILE, WALL_H, MODEL_PX, THEMES, POOL, themeForDepth } from '../config.js';
 import { T } from './tiles.js';
 import { getTextures } from './textures.js';
+import { arenaFor } from './arenas.js';
 import { CORNER_PATTERNS, EDGE_PATTERNS } from './texturePaint.js';
 import { RNG } from '../rng.js';
 import { glowSprite } from '../fx/glow.js';
@@ -239,6 +240,9 @@ export function propsForTheme(theme) {
   ])];
 }
 
+/** Every prop floor `depth` might use: its theme's (see propsForTheme), and those of an arena laid out by hand (see arenas.js). */
+export const propsForFloor = (depth) => [...new Set([...propsForTheme(themeForDepth(depth)), ...(arenaFor(depth)?.props ?? [])])];
+
 export function buildLevelMeshes(data) {
   const { w, h, grid, theme } = data;
   const tex = getTextures(theme);
@@ -278,7 +282,14 @@ export function buildLevelMeshes(data) {
   const vh = WALL_H / TILE;
   const sunk = (t) => t === T.CHANNEL || t === T.BRIDGE; // a channel: the floor drops away
   const fill = FILLS[theme.channels?.fill];
-  const stairs = STAIRS[theme.style];
+  // Each stairs' kind: the theme's, or (`style`) another's, as the Catacombs' steps down from the Sewers' last floor.
+  const stairsOf = (s) => STAIRS[s.style ?? theme.style];
+  // Where the next theme is worked in round the way on (an arena's `blend`: see arenas.js), each tile's floor, vault and
+  // walls are of its stone or the theme's own, as its share in `mix` says, each one by a throw of its own.
+  const blend = data.blend ?? null, blendTex = blend && getTextures(blend.theme);
+  const blended = blend ? { floors: builders(blendTex.floor), ceils: builders(blendTex.ceiling), walls: builders(blendTex.wall) } : null;
+  const theirs = (x, y, salt) => blend && blend.mix[y * w + x] > (gridHash(data.depth, x, y, 60 + salt) % 1000) / 1000;
+  const wallUV = (t) => (t.wallFullHeight ? [[0, 0], [1, 0], [1, 1], [0, 1]] : [[0, 0], [1, 0], [1, vh], [0, vh]]);
 
   // Corner ambient occlusion: darken grid corners that touch walls.
   const cornerAO = (gx, gy) => {
@@ -301,13 +312,14 @@ export function buildLevelMeshes(data) {
       // (A pool's floor is its bed, a step down, and in shadow under the water. Stairs leave a hole in the floor, or
       // the vault.)
       const y0 = t === T.POOL ? -POOL.bed : 0;
-      const floor = tileOf(inRoom ? floors : tunnelFloors, x, y, 1), ceil = tileOf(ceils, x, y, 2);
-      if (t === T.STAIRS_DOWN) holed(floor, x, y, 0, stairs.down, data.down.dir, ao);
+      const floor = theirs(x, y, 0) ? tileOf(blended.floors, x, y, 1) : tileOf(inRoom ? floors : tunnelFloors, x, y, 1);
+      const ceil = theirs(x, y, 1) ? tileOf(blended.ceils, x, y, 2) : tileOf(ceils, x, y, 2);
+      if (t === T.STAIRS_DOWN) holed(floor, x, y, 0, stairsOf(data.down).down, data.down.dir, ao);
       else if (!sunk(t)) {
         floor.quad([[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], [0, 1, 0],
           [[0, 0], [1, 0], [1, 1], [0, 1]], y0 ? ao.map((v) => v * 0.55) : ao);
       }
-      if (t === T.STAIRS_UP) holed(ceil, x, y, WALL_H, stairs.up, data.up.dir, ao.map((v) => v * 0.8));
+      if (t === T.STAIRS_UP) holed(ceil, x, y, WALL_H, stairsOf(data.up).up, data.up.dir, ao.map((v) => v * 0.8));
       else {
         ceil.quad([[x0, WALL_H, z0], [x1, WALL_H, z0], [x1, WALL_H, z1], [x0, WALL_H, z1]], [0, -1, 0],
           [[0, 0], [1, 0], [1, 1], [0, 1]], ao.map((v) => v * 0.8));
@@ -315,15 +327,21 @@ export function buildLevelMeshes(data) {
 
       const b = 0.62 * tint, tp = 1.0 * tint;
       const wc = [b, b, tp, tp];
-      const wuv = tex.wallFullHeight ? [[0, 0], [1, 0], [1, 1], [0, 1]] : [[0, 0], [1, 0], [1, vh], [0, vh]];
-      // (Each face takes a variant from `list` by the corners at its ends: a pool's side, under a wall, the wall's.)
-      const side = (ya, yb, uv, c, list, open) => {
-        if (open(x, y - 1)) faceOf(list, x, y, 1, [x, y], [x + 1, y]).quad([[x0, ya, z0], [x1, ya, z0], [x1, yb, z0], [x0, yb, z0]], [0, 0, 1], uv, c);
-        if (open(x, y + 1)) faceOf(list, x, y, 2, [x + 1, y + 1], [x, y + 1]).quad([[x1, ya, z1], [x0, ya, z1], [x0, yb, z1], [x1, yb, z1]], [0, 0, -1], uv, c);
-        if (open(x - 1, y)) faceOf(list, x, y, 3, [x, y + 1], [x, y]).quad([[x0, ya, z1], [x0, ya, z0], [x0, yb, z0], [x0, yb, z1]], [1, 0, 0], uv, c);
-        if (open(x + 1, y)) faceOf(list, x, y, 4, [x + 1, y], [x + 1, y + 1]).quad([[x1, ya, z0], [x1, ya, z1], [x1, yb, z1], [x1, yb, z0]], [-1, 0, 0], uv, c);
+      const wuv = wallUV(tex);
+      // (Each face takes a variant from `list` by the corners at its ends: a pool's side, under a wall, the wall's. A wall
+      // face where the next theme is worked in may be of its stone: `blend`.)
+      const side = (ya, yb, uv, c, list, open, blend = false) => {
+        const pick = (face) => (blend && theirs(x, y, 1 + face) ? [blended.walls, wallUV(blendTex)] : [list, uv]);
+        const at = (face, a, b, pts, n) => {
+          const [l, u] = pick(face);
+          faceOf(l, x, y, face, a, b).quad(pts, n, u, c);
+        };
+        if (open(x, y - 1)) at(1, [x, y], [x + 1, y], [[x0, ya, z0], [x1, ya, z0], [x1, yb, z0], [x0, yb, z0]], [0, 0, 1]);
+        if (open(x, y + 1)) at(2, [x + 1, y + 1], [x, y + 1], [[x1, ya, z1], [x0, ya, z1], [x0, yb, z1], [x1, yb, z1]], [0, 0, -1]);
+        if (open(x - 1, y)) at(3, [x, y + 1], [x, y], [[x0, ya, z1], [x0, ya, z0], [x0, yb, z0], [x0, yb, z1]], [1, 0, 0]);
+        if (open(x + 1, y)) at(4, [x + 1, y], [x + 1, y + 1], [[x1, ya, z0], [x1, ya, z1], [x1, yb, z1], [x1, yb, z0]], [-1, 0, 0]);
       };
-      side(0, WALL_H, wuv, wc, inRoom ? walls : tunnelWalls, isWall);
+      side(0, WALL_H, wuv, wc, inRoom ? walls : tunnelWalls, isWall, true);
       // A channel's sides run from the floor down to its surface, under the walls at its ends and along its banks.
       // A chasm's are rock that fades to black as it falls away; its texture repeats every two metres down.
       if (sunk(t)) {
@@ -352,6 +370,11 @@ export function buildLevelMeshes(data) {
   surface(ceils, tex.ceiling, tex.ceilingGlow);
   surface(walls, tex.wall, tex.wallGlow);
   if (tunnelWalls !== walls) surface(tunnelWalls, tex.tunnelWall, tex.tunnelGlow);
+  if (blended) {
+    surface(blended.floors, blendTex.floor);
+    surface(blended.ceils, blendTex.ceiling, blendTex.ceilingGlow);
+    surface(blended.walls, blendTex.wall, blendTex.wallGlow);
+  }
   if (data.channels?.length) group.add(new THREE.Mesh(banks.build(), mat(tex.channel, tex.channelGlow)));
 
   const stoneMat = new THREE.MeshLambertMaterial({ map: variants(tex.floor)[0], color: 0xb0a898 });
@@ -464,15 +487,30 @@ export function buildLevelMeshes(data) {
   const haze = fill?.haze && data.channels?.length
     ? new Haze(group, data.channels.flatMap((c) => c.tiles.map((t) => ({ x: (t.x + 0.5) * TILE, z: (t.y + 0.5) * TILE }))), fill.haze, theme, fill.dark ? tex.abyss : null)
     : null;
-  // The theme's decorations (see decor.js). Puddles and cobwebs are drawn here; the rest are props.
-  const webMat = tex.cobweb && new THREE.MeshLambertMaterial({ map: tex.cobweb, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  // The theme's decorations (see decor.js). Puddles, cobwebs (the next theme's, where it's worked in: see `blend`) and an
+  // arena's `taint`, the Maledicted Ooze's filth, are drawn here; the rest are props.
+  const webTex = tex.cobweb ?? blendTex?.cobweb;
+  const webMat = webTex && new THREE.MeshLambertMaterial({ map: webTex, transparent: true, depthWrite: false, side: THREE.DoubleSide });
   const puddleMats = tex.puddles?.map((map) => new THREE.MeshPhongMaterial({
     map, transparent: true, depthWrite: false, shininess: 80, specular: 0x506050,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
   }));
+  let taintMat = null;
   for (const p of data.decor ?? []) {
     if (p.type === 'cobweb') {
       if (webMat) group.add(cobweb(p, webMat));
+      continue;
+    }
+    if (p.type === 'taint') {
+      taintMat ??= new THREE.MeshPhongMaterial({
+        map: taintTexture(), transparent: true, depthWrite: false, shininess: 90, specular: 0x6a3a7a,
+        polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3,
+      });
+      const m = new THREE.Mesh(PUDDLE_GEO, taintMat);
+      m.position.set(p.x * TILE, 0.006, p.y * TILE);
+      m.rotation.y = p.yaw;
+      m.scale.set(p.size, 1, p.size * 0.85);
+      group.add(m);
       continue;
     }
     if (p.type !== 'puddle') {
@@ -492,13 +530,13 @@ export function buildLevelMeshes(data) {
   const openStairs = new Set();
   for (const [s, way] of [[data.down, 'down'], [data.up, 'up']]) {
     if (!s) continue;
-    place({ type: s === data.up && data.depth === 1 ? 'stairs_surface' : `stairs_${way}_${theme.style}`, x: s.x + 0.5, y: s.y + 0.5, yaw: DIR_ANGLE[s.dir] });
-    const blocks = stairs.blocks?.[way];
+    place({ type: s === data.up && data.depth === 1 ? 'stairs_surface' : `stairs_${way}_${s.style ?? theme.style}`, x: s.x + 0.5, y: s.y + 0.5, yaw: DIR_ANGLE[s.dir] });
+    const blocks = stairsOf(s).blocks?.[way];
     if (!blocks) continue;
     openStairs.add(s.y * w + s.x);
     obstacles.push(...blocks.map((b) => stairsBlock(b, s)));
   }
-  const daylight = data.depth === 1 ? sunlight(group, data.up, stairs.up) : null;
+  const daylight = data.depth === 1 ? sunlight(group, data.up, stairsOf(data.up).up) : null;
   if (daylight) glowing.unshift(daylight.source);
   // The sun, shining down that way up. Every floor has it, parked in the dark on all but the first, so every floor has
   // the same lights and no shader needs recompiling between them (as with SCONCE_LIGHTS).
@@ -538,7 +576,7 @@ export function buildLevelMeshes(data) {
   }
 
   const doors = data.doors.map((d) => {
-    const built = buildDoor(d, doorModel(theme));
+    const built = buildDoor(d, d.model ?? doorModel(theme)); // (a door may be a model of its own: an arena's boss door)
     group.add(built.group);
     return built;
   });
@@ -683,6 +721,32 @@ function canvasTexture(canvas) {
   return t;
 }
 
+let taint = null;
+/**
+ * The Maledicted Ooze's filth, where it lies and where it has dragged itself (an arena's `taint`: see arenas.js): a
+ * ragged spill of dark purple slime, glossy, with paler skins drying at its edge, bubbles in it, and flecks of the taint
+ * glowing magenta.
+ */
+function taintTexture() {
+  if (taint) return taint;
+  const S = 48, rng = new RNG('taint'), edge = noise(rng, S, S, 5), body = noise(rng, S, S, 4), fleck = noise(rng, S, S, 12);
+  const bubbles = Array.from({ length: 7 }, () => [rng.range(12, 36), rng.range(12, 36), rng.range(1.2, 2.6)]);
+  taint = canvasTexture(paint(S, S, (x, y) => {
+    const d = Math.hypot(x - S / 2 + 0.5, y - S / 2 + 0.5) / (S / 2) + (edge(x, y) - 0.5) * 0.7;
+    if (d > 0.92) return [0, 0, 0, 0];
+    let col = mix(rgb('#1a0626'), rgb('#4a1666'), body(x, y));
+    if (d > 0.78) col = mix(col, rgb('#6a3a7a'), 0.55); // (its edge, drying)
+    for (const [bx, by, r] of bubbles) {
+      const b = Math.hypot(x - bx, y - by);
+      if (b < r && b > r - 1.1) col = mix(col, rgb('#9a5ab8'), 0.7);
+      else if (b < r && x < bx && y < by) col = mix(col, rgb('#2a0a3a'), 0.5);
+    }
+    if (fleck(x, y) > 0.86 && d < 0.7) col = rgb('#e040c0');
+    return [...col, d > 0.78 ? 215 : 240];
+  }));
+  return taint;
+}
+
 /**
  * Where water drips (see fx/drips.js): from every drain pipe's mouth, from the vault over half the puddles and
  * pools and a tile or two of each water channel, and from props' drip_N anchors (the caves' stalactites), given as
@@ -809,11 +873,18 @@ function buildPedestal(p, stoneMat) {
   return g;
 }
 
-/** The wall lights' flames, sconces and all (`violet`: burning violet). The shop's are marked `shop`. */
+/**
+ * The wall lights' flames, sconces and all (`violet`: burning violet). The shop's are marked `shop`. A room may bring
+ * its own (`sconces`, an arena's: see arenas.js), in place of one or two on its walls at random.
+ */
 function buildSconces(data, group, rng, isWall, rough, violet) {
   const spots = [];
   for (const r of data.rooms) {
     if (r.id === data.shop?.room) continue; // the shop brings its own
+    if (r.sconces) {
+      spots.push(...r.sconces);
+      continue;
+    }
     const cands = [];
     // Not on a wall that already has something on it (see decor.js).
     const free = (x, y, side) => !data.wallUsed?.has(faceKey(x, y, side));

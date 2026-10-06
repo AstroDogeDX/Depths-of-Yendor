@@ -42,6 +42,18 @@ body.blind #dark { opacity: 0.95; }
 #target-name .target-st { font-size: 13px; margin-left: 4px; }
 .tbar { height: 6px; background: rgba(0, 0, 0, 0.6); border: 1px solid #5a2020; }
 #target-fill { height: 100%; background: linear-gradient(#e04030, #901810); }
+/* A boss after you (see UI.updateBossBar): its name and health across the top, the target's bar moving down under it. */
+#boss { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: min(420px, 36vw); text-align: center; transition: opacity 1.2s 0.4s; }
+#boss-name { font-size: 19px; color: #f0c8e8; letter-spacing: 0.08em; margin-bottom: 5px; }
+#boss-name .target-st { font-size: 13px; letter-spacing: 0; margin-left: 6px; }
+.bbar { position: relative; height: 10px; background: rgba(0, 0, 0, 0.7); border: 1px solid #6a2a5a; box-shadow: 0 0 6px rgba(0, 0, 0, 0.8); }
+#boss-fill, #boss-trail { position: absolute; inset: 0 auto 0 0; }
+#boss-fill { background: linear-gradient(#c040b0, #6a1260); }
+#boss-trail { background: #e8c8d8; opacity: 0.55; }
+#boss.enraged #boss-fill { background: linear-gradient(#ff4a8a, #8a1040); }
+#boss.enraged .bbar { border-color: #a03060; }
+#boss.gone { opacity: 0; }
+#boss:not([hidden]) ~ #target { top: 64px; }
 
 #crosshair {
   position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px;
@@ -186,6 +198,8 @@ body.blind #dark { opacity: 0.95; }
 .popup.s-healing { color: #8cf08a; }
 .popup.s-doused { color: #d8e4ec; }
 .popup.s-thawed { color: #ffb070; }
+.popup.s-malediction { color: #f05ad0; }
+.popup.s-washed { color: #70b0ff; }
 
 /* --- Panels & overlays --- */
 .overlay {

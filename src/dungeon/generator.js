@@ -7,6 +7,7 @@ import { ROOM_TYPES } from './rooms.js';
 import { digChannels } from './channels.js';
 import { digPools, growPool, dryMask } from './pools.js';
 import { decorate, faceKey } from './decor.js';
+import { arenaFor } from './arenas.js';
 
 export { T };
 
@@ -43,8 +44,12 @@ const SIGN_OFF = 0.64; // tiles from the middle of a shop's door to each of the 
  *
  * A branch spec may name its parent room's type, e.g. { type: 'shop', parent: 'entrance' }, or with `offBranch` hang
  * off another branch where there is one. A `locked` branch is behind a locked door, and nothing hangs off it.
+ *
+ * A boss floor with an arena of its own (the Sewers' last: see arenas.js) is laid out by hand instead.
  */
 export function generateLevel(seed, depth, opts = {}) {
+  const arena = arenaFor(depth);
+  if (arena) return arena.build(seed, depth);
   const rng = new RNG(`${seed}:depth:${depth}`);
   for (let attempt = 0; attempt < 100; attempt++) {
     // Pools and the passages' dressing draw on streams of their own, so how they're laid never moves anything else on
@@ -60,7 +65,8 @@ function planRooms(rng, depth, opts) {
   const n = rng.int(5, 6) + (d >= 4 ? 1 : 0) + (d >= 8 ? 1 : 0);
   const loop = new Array(n).fill('standard');
   loop[0] = 'entrance';
-  // Boss floors (isBossDepth) are built like the rest for now; the last one holds the Amulet's vault.
+  // Boss floors (isBossDepth) without an arena of their own (see arenas.js) are built like the rest for now; the last
+  // one holds the Amulet's vault.
   loop[Math.floor(n / 2)] = depth >= MAX_DEPTH ? 'vault' : 'exit';
   const branches = [];
   // The shop goes first, so the room beside the entrance is still free for it. It opens straight off the entrance

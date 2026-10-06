@@ -16,7 +16,7 @@ No install needed: it runs in any modern desktop browser, with a keyboard and mo
 
 - **25 floors in five themes:** the Sewers, the Catacombs, the Caves, the Dwarven Ruins and the Underworld, each with its own look, sounds, doors, stairs, furnishings and hazards: water channels, spike pits, chasms, rifts and lava. Every floor is generated from a seed, and seeds can be shared.
 - **Rogue in real time:** an attack meter instead of turns, monsters that telegraph their blows so you can step out of reach, and sneak attacks on sleeping or unaware monsters. Monsters see you and hear your footsteps, so sprinting is fast but loud, and sneaking is slow but near-silent.
-- **13 monsters,** from rats and oozes to trolls, stone golems and the Warden of Yendor, each with its own strengths and weaknesses: a mace is the answer to skeletons, fire is the troll's bane. Some of the chests are mimics.
+- **14 monsters,** from rats and oozes to trolls and stone golems, each with its own strengths and weaknesses: a mace is the answer to skeletons, fire is the troll's bane. Some of the chests are mimics. And bosses: the Maledicted Ooze, which lairs at the bottom of the Sewers and spits a malediction only water washes off, and the Warden of Yendor.
 - **Unidentified items:** potions, scrolls, wands and rings look different every run, so you learn what they do by using them. Some equipment is cursed, and won't come off.
 - **Loot and gear:** weapons you can grip in one hand or two, shields to raise against blows, bows and arrows, stones, darts and knives to throw, armour, potions, scrolls, wands, rings and food, mostly found in chests, the best in locked ones. Artefacts of power wait in guarded shrines, and a shop opens on the first floor of each theme after the first.
 - **Traps, locked rooms and keys,** and floors that stay as you left them when you go back up.
@@ -73,7 +73,7 @@ The details of how everything works are in [`docs/`](docs/README.md):
 - [The dungeon](docs/dungeon.md): the themes and how floors are generated
 - [Blockbench models](docs/models.md): the models and the conventions the game relies on
 
-The game is a work in progress: for now the boss floors between themes are built like any other floor, except the last.
+The game is a work in progress: the Sewers have their boss, but for now the other boss floors between themes are built like any other floor, except the last.
 
 ## License
 

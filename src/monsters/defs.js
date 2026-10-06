@@ -4,7 +4,11 @@
 // dmgType: the kind of damage its melee blows deal (slash, stab or bash; generic if not given). resist: multipliers
 // on the damage each type does to it, physical or magical, e.g. { slash: 0.5, fire: 0 }. See damage.js. A ranged
 // attack's shots deal its own dmgType (arrows stab, bolts are magic, the imp's fire is fire).
-// traits: `bloodless` (can't bleed), `fluid` (always as good as wet, so cold freezes it solid). See status.js.
+// traits: `bloodless` (can't bleed), `fluid` (always as good as wet, so cold freezes it solid), `maledicted` (made of
+// the taint a malediction is: it can't be given one). See status.js.
+// Bosses (`boss`): `wake` and `death`, what the log says as one wakes and dies; `summons`, monsters it calls up once
+// it's down to half its health (the Warden); `ai`, its own way of fighting (see monsters/bosses.js), with its
+// `moves` (their windups, damage and how often) and what changes at half its health (`enrage`).
 
 export const MONSTERS = {
   rat: {
@@ -79,6 +83,29 @@ export const MONSTERS = {
     dmgType: 'stab', resist: { stab: 0.75, fire: 1.5 }, // bites; a point sticks in its wooden hide, and it burns like kindling
     xp: 8, depth: [3, 25], freq: 0, dodge: 0, def: 2, sleepChance: 0, grow: [0.25, 0.12],
   },
+  // The Sewers' boss, in its arena on their last floor (see dungeon/arenas.js): a vast ooze, tainted dark purple, too
+  // big for any doorway, so it never leaves its lair. Its blows and blades go as a green ooze's do (it's an ooze too,
+  // and frozen by cold alone), and it's quicker than one, for all its size. It slams what's in reach, swells up to blast
+  // everything round it back (`slam`), and spits globs of its taint that leave a malediction (`spit`; see status.js),
+  // which only water washes off. Past half its health, its taint boils too hot to freeze: cold only chills it, and it
+  // spits three globs at a time. When it dies it spills what it had swallowed, and the key to the way on.
+  maledicted_ooze: {
+    name: 'Maledicted Ooze', hp: 120, dmg: [5, 10], speed: 2.1, radius: 1.1, reach: 2.2, windup: 0.8, cooldown: 1.4,
+    dmgType: 'bash', resist: { slash: 1.25, stab: 0.75, bash: 0.5, fire: 1.25, poison: 0 },
+    xp: 45, depth: [99, 99], freq: 0, dodge: 0, def: 2, sleepChance: 1, boss: true, traits: ['bloodless', 'fluid', 'maledicted'],
+    wake: 'The Maledicted Ooze heaves itself up out of its filth, every eye in it turning to you.',
+    death: 'The Maledicted Ooze shudders, bursts, and spills across the floor.',
+    ai: 'ooze',
+    moves: {
+      // Swelling up (`windup` seconds, a ring on the floor showing how far it will reach), then a blast all round it:
+      // `dmg` to whatever's within `radius` metres that it can see, thrown `push` metres back. Every `every` seconds at
+      // most, when you're near.
+      slam: { windup: 1.5, radius: 4.5, dmg: [6, 11], push: 3.5, every: [6, 9] },
+      // A glob of its taint, lobbed `speed` metres a second: `dmg`, and a malediction. Every `every` seconds at most.
+      spit: { windup: 0.65, speed: 10, dmg: [3, 6], dmgType: 'magic', every: [2.6, 4], range: 18 },
+    },
+    enrage: { at: 0.5, volley: 3, spread: 0.24, say: 'The Maledicted Ooze boils up, steaming. No frost will set in it now!' },
+  },
   warden: {
     name: 'Warden of Yendor', hp: 230, dmg: [10, 22], speed: 2.9, radius: 0.6, reach: 2.4, windup: 0.75, cooldown: 1.3,
     dmgType: 'slash', resist: { slash: 0.7, stab: 0.8, bash: 1.25, fire: 0, holy: 1.25 }, // a halberd; clad in
@@ -86,6 +113,9 @@ export const MONSTERS = {
     xp: 120, depth: [99, 99], freq: 0, dodge: 0.05, def: 5, sleepChance: 1, boss: true,
     ranged: { speed: 8, keepAway: 0, maxRange: 16, color: 0xffc040, size: 0.22, kind: 'bolt', chance: 0.35, volley: 3,
               dmgType: 'magic' },
+    wake: 'The Warden of Yendor awakens. "You shall not take it."',
+    death: 'The Warden of Yendor crashes to the floor and is still.',
+    summons: { types: ['wraith', 'skeleton', 'skeleton'], say: 'The Warden of Yendor raises its halberd — the dead answer!' },
   },
 };
 

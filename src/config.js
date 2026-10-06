@@ -114,8 +114,9 @@ export const MAX_DEPTH = THEMES.length * FLOORS_PER_THEME;
 export const themeForDepth = (depth) => THEMES[Math.min(THEMES.length - 1, Math.floor((depth - 1) / FLOORS_PER_THEME))];
 
 /**
- * Each theme's last floor is its boss floor: 5, 10, 15, 20 and 25. For now they're built like any other
- * floor, except that the last holds the Amulet's vault and the Warden, its final boss.
+ * Each theme's last floor is its boss floor: 5, 10, 15, 20 and 25. The Sewers' is an arena laid out by hand, the
+ * Maledicted Ooze's lair (see dungeon/arenas.js). The rest are built like any other floor for now, except that the
+ * last holds the Amulet's vault and the Warden, its final boss.
  */
 export const isBossDepth = (depth) => depth % FLOORS_PER_THEME === 0;
 

@@ -10,6 +10,7 @@ import { Flame } from './flame.js';
 //   chilled      frost glittering about it, drifting down
 //   frozen       the same, thicker, and it's tinted blue (see STATUSES)
 //   poisoned     purple bubbles rising off its head and bursting
+//   malediction  the Maledicted Ooze's taint dripping off it, dark, and flecks of it glowing magenta, rising
 //   charmed      hearts circling its head (smitten too)
 //   heartbroken  now and then a cracked heart, sinking from its head
 //   confused     stars whirling round its head
@@ -48,7 +49,7 @@ const FRAME = Object.fromEntries(Object.keys(SPRITES).map((k, i) => [k, i]));
 const COLORS = {
   water: 0x8cc4ff, blood: 0xc81a24, oil: 0xa8822a, sweat: 0xe0f2ff, frost: 0xd8f2ff, poison: 0xb46ee8, heart: 0xff5aa6,
   broken: 0xc07898, star: 0xffe27a, starAlt: 0xe0a8ff, murk: 0x7c7694, weak: 0xc8603c, ember: 0xffd040, cinder: 0xa02008,
-  smoke: 0x3a3532, heal: 0x8cf08a, healGlint: 0xfff0a8, sparkle: 0xfff0b8,
+  smoke: 0x3a3532, heal: 0x8cf08a, healGlint: 0xfff0a8, sparkle: 0xfff0b8, taint: 0x4a1666, taintGlow: 0xf05ad0,
 };
 const rgb = (hex) => [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
 const C = Object.fromEntries(Object.entries(COLORS).map(([k, v]) => [k, rgb(v)]));
@@ -68,6 +69,7 @@ const SHOWS = {
   chilled: { every: 0.07, body: true, emit: (fx, m) => fx.frost(m, false) },
   frozen: { every: 0.045, body: true, emit: (fx, m) => fx.frost(m, true) },
   poisoned: { every: 0.18, emit: (fx, m) => fx.bubble(m) },
+  malediction: { every: 0.1, body: true, emit: (fx, m) => fx.taint(m) },
   charmed: { every: 0.5, emit: (fx, m) => fx.heart(m) },
   smitten: { every: 0.5, emit: (fx, m) => fx.heart(m) },
   heartbroken: { every: 1.5, emit: (fx, m) => fx.heartbreak(m) },
@@ -330,6 +332,17 @@ export class StatusFx {
       frame: flake ? FRAME.flake : FRAME.glint, alt: flake ? FRAME.glint : FRAME.flake, twinkle: rnd(4, 8),
       size: frozen ? rnd(0.11, 0.14) : rnd(0.09, 0.12), color: C.frost, life: rnd(0.8, 1.4), fadeIn: 0.15, fadeOut: 0.35,
     });
+  }
+
+  /** The taint of a malediction: a dark drop of it falling off, and now and then a fleck of it rising, glowing. */
+  taint(m) {
+    this.drip(m, C.taint, 4, 0.11);
+    if (Math.random() < 0.3 && this.bodyPoint(m, P, 2)) {
+      this.add({
+        x: P.x, y: P.y, z: P.z, vy: rnd(0.25, 0.45), wob: 0.03, wobF: 5,
+        frame: FRAME.spark, size: 0.07, color: C.taintGlow, life: rnd(0.7, 1.1), fadeIn: 0.1, fadeOut: 0.4,
+      });
+    }
   }
 
   /** A bubble rising off its head, swelling, and bursting. */
