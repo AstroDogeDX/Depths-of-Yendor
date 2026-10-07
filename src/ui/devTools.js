@@ -326,7 +326,9 @@ export class DevTools {
         break;
       }
       case 'special':
-        item = type === 'amulet' ? g.makeAmulet() : makeItem('key', { goldkey: 'gold', bosskey: 'boss' }[type] ?? 'iron', { depth: g.level.depth });
+        // (A boss key is this floor's boss's, if it has one: see BOSS_KEYS.)
+        item = type === 'amulet' ? g.makeAmulet() : makeItem('key', { goldkey: 'gold', bosskey: 'boss' }[type] ?? 'iron',
+          { depth: g.level.depth, boss: g.level.data.monsters?.find((m) => m.boss)?.type });
         if (type === 'amulet') g.amuletTaken = true;
         break;
       default: item = makeItem(kind, type);

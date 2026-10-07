@@ -5,16 +5,17 @@ import { MODEL_PX } from '../config.js';
 // Monster models are Blockbench projects in assets/models/monsters, rigged with groups ("bones") that the
 // animations below turn and move about their pivots, found by name: body, head, arm_left/right and
 // leg_left/right on bipeds, plus wing_*, tail, leg_front_*/leg_back_*, blob, and the mimic's lid, tongue and eye
-// on the others. A model's origin is at its feet and it faces +z.
+// on the others. A model's origin is at its feet and it faces +z, and its left and right are its own: its right at -x.
 //
-// buildMonsterModel returns { root, animate(s), materials, height, meshes, crown(out) }. animate(s) receives { t, walk,
-// windup, strike, move, reveal, asleep } where windup/strike are 0..1 progress or -1, `move` the boss move they're of
-// (see `moves` in defs.js), or null for its blow or shot, reveal the seconds since it gave itself away (a mimic waking,
-// the Maledicted Ooze heaving itself up) or -1, and `dying` (0..1) how far a boss with a death of its own is through it
-// (see bosses.js); a mimic passing for a chest gets { dormant: true, lick } instead (see Level.addChest).
-// materials are the monster's own lit materials, so it can be tinted (hurt, burning...) on its own. meshes are its
-// meshes, and crown(out) sets `out` to the top of its head in the world, as it stands now: for what shows on it and
-// over its head (see fx/statusFx.js).
+// buildMonsterModel returns { root, animate(s), materials, height, meshes, bones, crown(out) }. animate(s) receives { t,
+// walk, windup, strike, move, reveal, asleep } where windup/strike are 0..1 progress or -1, `move` the boss move they're
+// of (see `moves` in defs.js), or null for its blow or shot, reveal the seconds since it gave itself away (a mimic waking,
+// the Maledicted Ooze heaving itself up) or -1, and `dying` (0..1) how far a boss with a death of its own is through it,
+// with what a boss's own `pose` adds (see bosses.js); a mimic passing for a chest gets { dormant: true, lick } instead
+// (see Level.addChest). materials are the monster's own lit materials, so it can be tinted (hurt, burning...) on its own.
+// meshes are its meshes, bones its groups by name (and its empty ones, anchors: the Jailer's `chain_hand` and `lamp`),
+// and crown(out) sets `out` to the top of its head in the world, as it stands now: for what shows on it and over its head
+// (see fx/statusFx.js).
 
 const FILES = import.meta.glob('../../assets/models/monsters/*.bbmodel', { import: 'default', eager: true });
 // The render layer a living monster's meshes are on as well as the usual one, so mind vision can find them to outline
@@ -149,6 +150,65 @@ const ANIMATE = {
     turn(b.core, Math.sin(s.t * 0.37) * 0.12, s.t * 0.21, Math.sin(s.t * 0.29) * 0.1);
     move(b.core, 0, Math.sin(s.t * 0.9) * 0.04, 0);
   },
+  // The Forgotten Jailer (see bosses.js): a biped, hunched, his mace chopping as any biped's weapon does. Asleep at his
+  // post, he stands slumped, head bowed, and waking (`reveal`) he straightens and lifts it. Winding up his chain, he
+  // brings his arm up and swings the chain round in great loops at his side (there's no room over his head, under the
+  // vault), `turns` times, gathering speed, and as it comes over the top he flings it out in front of him; while it's
+  // out (`chainOut`) the chain he carries is gone from his hand. Throwing his flask, he draws his arm back and lobs it.
+  // Winding up a charge (or one out of hiding, `ambush`) he hunches down, head lowered; charging (`charging`) he leans
+  // into it, arms back. Hiding (`lurking`), he stands crouched, ready, his mace up.
+  jailer: (b) => {
+    const walk = biped(b, 0.12);
+    return (s) => {
+      const own = s.move === 'chain' || s.move === 'charge' || s.move === 'ambush' || s.move === 'flask';
+      walk({ ...s, windup: own ? -1 : s.windup, strike: own ? -1 : s.strike });
+      let head = 0, body = null, swing = 0; // (body null: as the walk, or his mace's blow, has it)
+      if (s.asleep) {
+        head = 0.55;
+        body = 0.3 + Math.sin(s.t * 0.7) * 0.02;
+        turn(b.arm_left, 0.1);
+        turn(b.arm_right, 0.15);
+      } else if (s.reveal >= 0) {
+        const r = Math.min(1, s.reveal / 1.2);
+        head = 0.55 * (1 - easeOut(r)) - 0.25 * Math.sin(Math.PI * r);
+        body = 0.3 - 0.18 * easeOut(r);
+      } else if (s.lurking) {
+        body = 0.22;
+        head = 0.05;
+        turn(b.arm_left, 0.15);
+        turn(b.arm_right, -0.7);
+      }
+      if (s.move === 'chain') {
+        if (s.windup >= 0) {
+          // His arm comes up over the first fifth of it, the chain hanging from his fist, and the chain goes round
+          // (`round`, back at the bottom and forward over the top), quickening to twice the pace it began at, `turns`
+          // times by the time he lets go (as the whirl's sound has it: see audio.js), his fist heaving it round.
+          const w = s.windup, up = easeOut(Math.min(1, w / 0.2));
+          const round = (Math.PI * 2 * s.turns * (2 * w + w * w)) / 3, arm = (-1.2 + 0.15 * Math.sin(round)) * up;
+          turn(b.arm_left, arm);
+          swing = round - arm;
+        } else if (s.strike >= 0) turn(b.arm_left, -1.6 + 0.6 * s.strike);
+      } else if (s.move === 'flask') {
+        if (s.windup >= 0) turn(b.arm_left, 0.9 * easeOut(s.windup));
+        else if (s.strike >= 0) turn(b.arm_left, 0.9 - 2.3 * easeOut(Math.min(1, s.strike * 2)));
+      } else if ((s.move === 'charge' || s.move === 'ambush') && s.windup >= 0) {
+        body = 0.12 + 0.4 * easeOut(s.windup);
+        head = 0.25 * s.windup;
+        turn(b.arm_left, 0.5 * s.windup);
+        turn(b.arm_right, 0.5 * s.windup);
+      }
+      if (s.charging) {
+        body = 0.5;
+        head = 0.2;
+        turn(b.arm_left, 0.7);
+        turn(b.arm_right, 0.6);
+      }
+      if (body !== null) turn(b.body, body);
+      turn(b.head, head);
+      turn(b.chain, swing);
+      if (b.chain) b.chain.visible = !s.chainOut;
+    };
+  },
   goblin: (b) => biped(b),
   skeleton: (b) => biped(b),
   orc: (b) => biped(b),
@@ -257,7 +317,7 @@ export function buildMonsterModel(type) {
   const height = new THREE.Box3().setFromObject(root).max.y;
   const crown = crowns.get(type), crownOn = crown.bone ? bones[crown.bone] : root;
   return {
-    root, animate: ANIMATE[type](bones, root), materials: [...own.values()], height, meshes,
+    root, animate: ANIMATE[type](bones, root), materials: [...own.values()], height, meshes, bones,
     crown: (out) => out.copy(crown.at).applyMatrix4(crownOn.matrixWorld),
   };
 }

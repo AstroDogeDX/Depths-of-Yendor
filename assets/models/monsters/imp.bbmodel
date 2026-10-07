@@ -13,7 +13,7 @@
 	},
 	"elements": [
 		{
-			"name": "leg_left",
+			"name": "leg_right",
 			"color": 0,
 			"origin": [0, 0, 0],
 			"rotation": [0, 0, 0],
@@ -275,7 +275,7 @@
 			"uuid": "c936b66c-8e50-4006-af00-07fbb9d156cb"
 		},
 		{
-			"name": "foot_left",
+			"name": "foot_right",
 			"box_uv": false,
 			"render_order": "default",
 			"locked": false,
@@ -316,7 +316,7 @@
 			"uuid": "52b812b8-c6c0-4f6f-a9a3-30ef10283155"
 		},
 		{
-			"name": "leg_right",
+			"name": "leg_left",
 			"color": 0,
 			"origin": [0, 0, 0],
 			"rotation": [0, 0, 0],
@@ -578,7 +578,7 @@
 			"uuid": "529e1bcf-fd3c-4920-a968-4f5a60174c2f"
 		},
 		{
-			"name": "foot_right",
+			"name": "foot_left",
 			"box_uv": false,
 			"render_order": "default",
 			"locked": false,
@@ -1495,7 +1495,7 @@
 			"uuid": "d94932ce-9410-46b7-aa97-de3560f9b239"
 		},
 		{
-			"name": "horn_left",
+			"name": "horn_right",
 			"color": 0,
 			"origin": [0, 0, 0],
 			"rotation": [0, 0, 0],
@@ -1625,7 +1625,7 @@
 			"uuid": "a2e981ce-66bf-4b4d-a356-431dc1d8f639"
 		},
 		{
-			"name": "horn_right",
+			"name": "horn_left",
 			"color": 0,
 			"origin": [0, 0, 0],
 			"rotation": [0, 0, 0],
@@ -1755,7 +1755,7 @@
 			"uuid": "7a6bc8c5-a7dc-4c42-ac70-2dcc74dbd628"
 		},
 		{
-			"name": "eye_left",
+			"name": "eye_right",
 			"box_uv": false,
 			"render_order": "default",
 			"locked": false,
@@ -1796,7 +1796,7 @@
 			"uuid": "fe30ac2b-4384-45ba-ae9c-a11767b075bf"
 		},
 		{
-			"name": "eye_right",
+			"name": "eye_left",
 			"box_uv": false,
 			"render_order": "default",
 			"locked": false,
@@ -1837,7 +1837,7 @@
 			"uuid": "7e5465f2-831e-4d29-a7e5-42d734c25614"
 		},
 		{
-			"name": "arm_left",
+			"name": "arm_right",
 			"color": 0,
 			"origin": [0, 0, 0],
 			"rotation": [0, 0, 0],
@@ -2099,7 +2099,7 @@
 			"uuid": "0cac4bc4-7fea-4bd8-a52f-20cd151afeae"
 		},
 		{
-			"name": "hand_left",
+			"name": "hand_right",
 			"box_uv": false,
 			"render_order": "default",
 			"locked": false,
@@ -2140,7 +2140,7 @@
 			"uuid": "413d5be0-5f4f-4bac-a7fa-b78ae42c4147"
 		},
 		{
-			"name": "arm_right",
+			"name": "arm_left",
 			"color": 0,
 			"origin": [0, 0, 0],
 			"rotation": [0, 0, 0],
@@ -2402,7 +2402,7 @@
 			"uuid": "a12f4378-abad-461d-aaa3-2e546a38cbc8"
 		},
 		{
-			"name": "hand_right",
+			"name": "hand_left",
 			"box_uv": false,
 			"render_order": "default",
 			"locked": false,
@@ -2443,7 +2443,7 @@
 			"uuid": "d4e9497c-e9fe-4e3c-a5f6-1bc271893418"
 		},
 		{
-			"name": "wing_left",
+			"name": "wing_right",
 			"color": 0,
 			"origin": [0, 0, 0],
 			"rotation": [0, 0, 0],
@@ -2493,7 +2493,7 @@
 			"uuid": "5337f9bf-f65d-42fe-a055-7936a70b0218"
 		},
 		{
-			"name": "wing_bone_left",
+			"name": "wing_bone_right",
 			"color": 0,
 			"origin": [0, 0, 0],
 			"rotation": [0, 0, 0],
@@ -2623,7 +2623,7 @@
 			"uuid": "a5c1f0a8-6041-40af-a45c-f2c70ef68b18"
 		},
 		{
-			"name": "wing_right",
+			"name": "wing_left",
 			"color": 0,
 			"origin": [0, 0, 0],
 			"rotation": [0, 0, 0],
@@ -2673,7 +2673,7 @@
 			"uuid": "024f6c56-2c5d-4aeb-ab60-c29f572b63a5"
 		},
 		{
-			"name": "wing_bone_right",
+			"name": "wing_bone_left",
 			"color": 0,
 			"origin": [0, 0, 0],
 			"rotation": [0, 0, 0],
@@ -2979,7 +2979,7 @@
 	],
 	"groups": [
 		{
-			"name": "leg_left",
+			"name": "leg_right",
 			"origin": [-6.4, 26.752, 0],
 			"color": 0,
 			"uuid": "baff6e6e-8ac4-4692-a257-5a7d2765b7ea",
@@ -2991,7 +2991,7 @@
 			"autouv": 0
 		},
 		{
-			"name": "leg_right",
+			"name": "leg_left",
 			"origin": [6.4, 26.752, 0],
 			"color": 0,
 			"uuid": "e250724a-42a2-450d-adc9-d00605d5c7d1",
@@ -3027,7 +3027,7 @@
 			"autouv": 0
 		},
 		{
-			"name": "arm_left",
+			"name": "arm_right",
 			"origin": [-13.42, 43.007999999999996, 0],
 			"color": 0,
 			"uuid": "e49af29c-b32d-4943-aaf5-c3029a02395e",
@@ -3039,7 +3039,7 @@
 			"autouv": 0
 		},
 		{
-			"name": "arm_right",
+			"name": "arm_left",
 			"origin": [13.42, 43.007999999999996, 0],
 			"color": 0,
 			"uuid": "22477a75-bac7-4c53-a52e-02d25713dd89",
@@ -3051,7 +3051,7 @@
 			"autouv": 0
 		},
 		{
-			"name": "wing_left",
+			"name": "wing_right",
 			"origin": [-3, 41.007999999999996, -6.4],
 			"color": 0,
 			"uuid": "184500aa-bc54-4be1-a68d-714663683bff",
@@ -3063,7 +3063,7 @@
 			"autouv": 0
 		},
 		{
-			"name": "wing_right",
+			"name": "wing_left",
 			"origin": [3, 41.007999999999996, -6.4],
 			"color": 0,
 			"uuid": "5efdedf1-fe35-4ca4-a744-ed76dfdb2ec4",

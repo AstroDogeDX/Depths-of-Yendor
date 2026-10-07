@@ -21,7 +21,7 @@ const CAVE_PAL = {
 };
 const VAULT = 179;
 
-const MATS = {
+export const MATS = {
   ...MAT,
   rock: (c) => ramp(CAVE_PAL.rock, 0.45 + 0.2 * patches(c.p, 1000, 0.4) + bevel(c, 0.15) + 0.1 * c.n.y, c.ax, c.ay),
   // Limestone grown drip by drip: faint rings, a wet sheen on the upper faces.
@@ -144,6 +144,56 @@ function ropeLadder(m, z, y0, y1, { hw = 12, every = 15, seed = 0 } = {}) {
     const tilt = wobble(4, i, seed, 1191);
     m.cube(`rung_${i}`, [-hw - 2, y - 1.3, z - 1.6], [hw + 2, y + 1.3, z + 1.6], { mat: 'shaftTimber', info: { along: 'x' }, origin: [0, y, z], rotation: [0, 0, tilt] });
   }
+}
+
+/**
+ * The Caves' door (see doorkit.mjs for how doors go together): knocked together from whatever boards were to hand, no
+ * two the same wood, width or length, a couple askew, held by crooked battens and a brace on one side and patched on
+ * the other, hung on leather straps, with a rope loop to pull it by. Its frame is mine timbers, leaning a little, braced
+ * in the corners under a sagging lintel, bare rock above. `lock(zs)` fills its lock group, and `extra(zs)` adds to its
+ * frame (`zs(s, a, b)`: a to b px out from the middle, on the side s faces).
+ */
+export function timberDoor(m, lock, extra = null) {
+  const zs = (s, a, b) => (s > 0 ? [a, b] : [-b, -a]);
+  m.group('frame', () => {
+    m.cube('post_left', [-HALF, 0, -13], [-52, 153, 13], { mat: 'timber', origin: [-58, 0, 0], rotation: [0, 0, 1.2] });
+    m.cube('post_right', [52, 0, -12], [HALF - 1, 150, 12], { mat: 'timber', origin: [57.5, 0, 0], rotation: [0, 0, -0.8] });
+    m.cube('lintel', [-HALF - 4, 149, -14], [HALF + 2, 162, 14], { mat: 'timber', info: { along: 'x' }, origin: [0, 155, 0], rotation: [0, 0, 1.5] });
+    m.mesh('brace_left', tube([[-51, 124, 0], [-34, 150, 0]], { half: 3.2, side: [0, 0, 1] }), { mat: 'timber' });
+    m.mesh('brace_right', tube([[51, 121, 0], [36, 150, 0]], { half: 3.2, side: [0, 0, 1] }), { mat: 'timber' });
+    m.cube('rock', [-HALF, 159, -16], [HALF, TOP, 16], { mat: 'rock' });
+    m.cube('sill', [-52, 0, -10], [52, 3, 10], { mat: 'timber', info: { along: 'x' } });
+    extra?.(zs);
+  });
+  m.group('leaf', () => {
+    // Six boards, their widths, tops, bottoms, thicknesses and set (forward or back) all different.
+    const W = [15, 19, 12, 17, 21, 14], tops = [146, 141, 148, 143, 147, 139], bots = [2, 4, 1.5, 3, 2, 5];
+    const thick = [5, 4, 5.5, 6, 4.5, 5], set = [0, 0.6, -0.4, 0.3, -0.6, 0.4], tilt = [0, 0, 0, 0.8, 0, -0.6];
+    let x = -51;
+    const mids = [];
+    W.forEach((w, k) => {
+      const t = thick[k] / 2 + set[k];
+      m.cube(`board_${k + 1}`, [x, bots[k], set[k] - thick[k] / 2], [x + w, tops[k], t], { mat: 'board', info: { k }, origin: [x + w / 2, 0, 0], rotation: [0, 0, tilt[k]] });
+      mids.push(x + w / 2);
+      x += w + 1;
+    });
+    // On the front, two battens and a brace, crooked; on the back, a board nailed over a split.
+    [[20, 1], [112, -1.2]].forEach(([y, turn], i) => m.cube(`batten_${i + 1}`, [-49, y, 2.6], [50, y + 8, 6.4],
+      { mat: 'board', info: { k: 10 + i, along: 'x', nails: mids, ny: y + 4 }, origin: [0, y + 4, 0], rotation: [0, 0, turn] }));
+    m.mesh('brace', tube([[-43, 28, 4.5], [43, 112, 4.5]], { half: 3.4, side: [0, 0, 1] }), { mat: 'board', info: { k: 13 } });
+    m.cube('patch', [-24, 58, -6.4], [8, 67, -3], { mat: 'board', info: { k: 14, along: 'x', nails: [-20, 4], ny: 62.5 }, origin: [-8, 62, -4.5], rotation: [0, 0, 11] });
+    // Leather hinges, each round a rolled knuckle on the hinge line.
+    for (const y of [24, 116]) {
+      bothFaces((s) => {
+        const [z0, z1] = zs(s, 2.8, 4.2);
+        m.cube(`hinge_${y < 60 ? 'low' : 'high'}_${s > 0 ? 'front' : 'back'}`, [-51, y, z0], [-37, y + 9, z1], { mat: 'strapLeather' });
+      });
+      m.mesh(`knuckle_${y < 60 ? 'low' : 'high'}`, revolve([[0, 0], [3.4, 0], [3.4, 9], [0, 9]], { sides: 6 }), { mat: 'strapLeather', origin: [-51, y, 0] });
+    }
+    m.mesh('handle_rope', tube([[36, 86, 3.4], [35, 78, 7], [39, 72, 8.5], [43, 78, 7], [42, 86, 3.4]], { half: 1.1, side: [0, 0, 1] }), { mat: 'rope' });
+    m.cube('handle_knob', [37, 76, -7], [43, 82, -2.8], { mat: 'board', info: { k: 15 } });
+  }, { origin: [-51, 0, 0] });
+  m.group('lock', () => lock(zs));
 }
 
 export const caves = {
@@ -359,50 +409,9 @@ export const caves = {
   }, { density: 1 }),
 
   door_caves: defineModel('door_caves', MATS, (m) => {
-    // A door knocked together from whatever boards were to hand (see doorkit.mjs for how doors go together):
-    // no two the same wood, width or length, a couple askew, held by crooked battens and a brace on one side and
-    // patched on the other, hung on leather straps, with a rope loop to pull it by. Its frame is mine timbers,
-    // leaning a little, braced in the corners under a sagging lintel, bare rock above. Locked, a rough beam lies
-    // across it in crude iron hooks on the posts, padlocked to one, on both sides.
-    const zs = (s, a, b) => (s > 0 ? [a, b] : [-b, -a]); // a to b out from the middle, on the side s faces
-    m.group('frame', () => {
-      m.cube('post_left', [-HALF, 0, -13], [-52, 153, 13], { mat: 'timber', origin: [-58, 0, 0], rotation: [0, 0, 1.2] });
-      m.cube('post_right', [52, 0, -12], [HALF - 1, 150, 12], { mat: 'timber', origin: [57.5, 0, 0], rotation: [0, 0, -0.8] });
-      m.cube('lintel', [-HALF - 4, 149, -14], [HALF + 2, 162, 14], { mat: 'timber', info: { along: 'x' }, origin: [0, 155, 0], rotation: [0, 0, 1.5] });
-      m.mesh('brace_left', tube([[-51, 124, 0], [-34, 150, 0]], { half: 3.2, side: [0, 0, 1] }), { mat: 'timber' });
-      m.mesh('brace_right', tube([[51, 121, 0], [36, 150, 0]], { half: 3.2, side: [0, 0, 1] }), { mat: 'timber' });
-      m.cube('rock', [-HALF, 159, -16], [HALF, TOP, 16], { mat: 'rock' });
-      m.cube('sill', [-52, 0, -10], [52, 3, 10], { mat: 'timber', info: { along: 'x' } });
-    });
-    m.group('leaf', () => {
-      // Six boards, their widths, tops, bottoms, thicknesses and set (forward or back) all different.
-      const W = [15, 19, 12, 17, 21, 14], tops = [146, 141, 148, 143, 147, 139], bots = [2, 4, 1.5, 3, 2, 5];
-      const thick = [5, 4, 5.5, 6, 4.5, 5], set = [0, 0.6, -0.4, 0.3, -0.6, 0.4], tilt = [0, 0, 0, 0.8, 0, -0.6];
-      let x = -51;
-      const mids = [];
-      W.forEach((w, k) => {
-        const t = thick[k] / 2 + set[k];
-        m.cube(`board_${k + 1}`, [x, bots[k], set[k] - thick[k] / 2], [x + w, tops[k], t], { mat: 'board', info: { k }, origin: [x + w / 2, 0, 0], rotation: [0, 0, tilt[k]] });
-        mids.push(x + w / 2);
-        x += w + 1;
-      });
-      // On the front, two battens and a brace, crooked; on the back, a board nailed over a split.
-      [[20, 1], [112, -1.2]].forEach(([y, turn], i) => m.cube(`batten_${i + 1}`, [-49, y, 2.6], [50, y + 8, 6.4],
-        { mat: 'board', info: { k: 10 + i, along: 'x', nails: mids, ny: y + 4 }, origin: [0, y + 4, 0], rotation: [0, 0, turn] }));
-      m.mesh('brace', tube([[-43, 28, 4.5], [43, 112, 4.5]], { half: 3.4, side: [0, 0, 1] }), { mat: 'board', info: { k: 13 } });
-      m.cube('patch', [-24, 58, -6.4], [8, 67, -3], { mat: 'board', info: { k: 14, along: 'x', nails: [-20, 4], ny: 62.5 }, origin: [-8, 62, -4.5], rotation: [0, 0, 11] });
-      // Leather hinges, each round a rolled knuckle on the hinge line.
-      for (const y of [24, 116]) {
-        bothFaces((s) => {
-          const [z0, z1] = zs(s, 2.8, 4.2);
-          m.cube(`hinge_${y < 60 ? 'low' : 'high'}_${s > 0 ? 'front' : 'back'}`, [-51, y, z0], [-37, y + 9, z1], { mat: 'strapLeather' });
-        });
-        m.mesh(`knuckle_${y < 60 ? 'low' : 'high'}`, revolve([[0, 0], [3.4, 0], [3.4, 9], [0, 9]], { sides: 6 }), { mat: 'strapLeather', origin: [-51, y, 0] });
-      }
-      m.mesh('handle_rope', tube([[36, 86, 3.4], [35, 78, 7], [39, 72, 8.5], [43, 78, 7], [42, 86, 3.4]], { half: 1.1, side: [0, 0, 1] }), { mat: 'rope' });
-      m.cube('handle_knob', [37, 76, -7], [43, 82, -2.8], { mat: 'board', info: { k: 15 } });
-    }, { origin: [-51, 0, 0] });
-    m.group('lock', () => {
+    // A door knocked together from whatever boards were to hand, in mine timbers (see timberDoor). Locked, a rough beam
+    // lies across it in crude iron hooks on the posts, padlocked to one, on both sides.
+    timberDoor(m, (zs) => {
       bothFaces((s) => {
         const side = s > 0 ? 'front' : 'back', [w0, w1] = zs(s, 9.5, 15.5), [k0, k1] = zs(s, 8.5, 17), [b0, b1] = zs(s, 16, 20.5);
         m.cube(`beam_${side}`, [-61, 62, w0], [61, 71, w1], { mat: 'board', info: { k: 16, along: 'x' }, origin: [0, 66.5, s * 12.5], rotation: [0, 0, -1.4] });

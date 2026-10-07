@@ -14,6 +14,8 @@ import { Flame } from './flame.js';
 //   charmed      hearts circling its head (smitten too)
 //   heartbroken  now and then a cracked heart, sinking from its head
 //   confused     stars whirling round its head
+//   stunned      yellow stars whirling fast and low round its head, and it shakes as a paralysed thing does
+//   shackled     the links of a chain dragging at its feet
 //   blind        murk swirling round its eyes
 //   feared       sweat flying off its head
 //   weakened     its strength draining out of it, sinking away
@@ -41,6 +43,7 @@ const SPRITES = {
   chevron: ['........', 'b.....b.', 'bb...bb.', '.bb.bb..', '..bbc...', '...c....', '........', '........'],
   spark: ['........', '........', '...a....', '..aWb...', '...b....', '........', '........', '........'],
   plus: ['........', '...ab...', '...bb...', '.abWbbc.', '.bbbbcc.', '...bc...', '...cc...', '........'],
+  link: ['........', '..abbb..', '.b....c.', '.b....c.', '.b....c.', '.b....c.', '..cccc..', '........'],
 };
 const SHADES = { a: 1.35, b: 1, c: 0.68, d: 0.42 };
 const FRAME = Object.fromEntries(Object.keys(SPRITES).map((k, i) => [k, i]));
@@ -50,6 +53,7 @@ const COLORS = {
   water: 0x8cc4ff, blood: 0xc81a24, oil: 0xa8822a, sweat: 0xe0f2ff, frost: 0xd8f2ff, poison: 0xb46ee8, heart: 0xff5aa6,
   broken: 0xc07898, star: 0xffe27a, starAlt: 0xe0a8ff, murk: 0x7c7694, weak: 0xc8603c, ember: 0xffd040, cinder: 0xa02008,
   smoke: 0x3a3532, heal: 0x8cf08a, healGlint: 0xfff0a8, sparkle: 0xfff0b8, taint: 0x4a1666, taintGlow: 0xf05ad0,
+  daze: 0xfff08a, iron: 0x8a8e96,
 };
 const rgb = (hex) => [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
 const C = Object.fromEntries(Object.entries(COLORS).map(([k, v]) => [k, rgb(v)]));
@@ -74,6 +78,8 @@ const SHOWS = {
   smitten: { every: 0.5, emit: (fx, m) => fx.heart(m) },
   heartbroken: { every: 1.5, emit: (fx, m) => fx.heartbreak(m) },
   confused: { every: 0.13, emit: (fx, m) => fx.star(m) },
+  stunned: { every: 0.09, emit: (fx, m) => fx.daze(m) },
+  shackled: { every: 0.12, emit: (fx, m) => fx.fetter(m) },
   blind: { every: 0.1, emit: (fx, m) => fx.murk(m) },
   feared: { every: 0.18, emit: (fx, m) => fx.sweat(m) },
   weakened: { every: 0.25, body: true, emit: (fx, m) => fx.drain(m) },
@@ -155,12 +161,13 @@ const SIZE = new THREE.Vector2();
 const FOG = new THREE.Color();
 
 /**
- * Paralysed (and not frozen solid), a monster strains against its locked limbs: it shakes in fits, as if trying to
- * break free, and trembles between them. Nudges its mesh off the pose it's been given this frame (see Monster.update).
+ * Paralysed or stunned (and not frozen solid), a monster strains against its locked limbs: it shakes in fits, as if
+ * trying to break free, and trembles between them. Nudges its mesh off the pose it's been given this frame (see
+ * Monster.update).
  */
 export function strain(m) {
   const s = m.status;
-  if (!(s.paralysed > 0) || s.frozen > 0 || m.dead) {
+  if (!(s.paralysed > 0 || s.stunned > 0) || s.frozen > 0 || m.dead) {
     m.mesh.rotation.z = 0;
     return;
   }
@@ -376,6 +383,19 @@ export class StatusFx {
   star(m) {
     this.circle(m, { r: 0.14 + m.radius * 0.4, w: 5.5, h: 0.04, tilt: 0.06 },
       { frame: FRAME.star, size: 0.12, color: Math.random() < 0.5 ? C.star : C.starAlt, life: 0.9, fadeIn: 0.15, fadeOut: 0.25 });
+  }
+
+  /** Stars whirling fast and low round its head, dazed. */
+  daze(m) {
+    this.circle(m, { r: 0.12 + m.radius * 0.45, w: 7.5, h: -0.04, tilt: 0.05 },
+      { frame: FRAME.star, size: 0.13, color: C.daze, life: 0.7, fadeIn: 0.1, fadeOut: 0.25 });
+  }
+
+  /** A link of the chain it drags, lying on the floor behind it a moment as it goes. */
+  fetter(m) {
+    const back = rnd(0.15, 0.9), side = rnd(-0.12, 0.12), fx = Math.sin(m.yaw), fz = Math.cos(m.yaw);
+    const x = m.x - fx * (m.radius * 0.4 + back) + fz * side, z = m.z - fz * (m.radius * 0.4 + back) - fx * side;
+    this.add({ x, y: this.level.surfaceY(x, z) + 0.04, z, frame: FRAME.link, size: 0.09, color: C.iron, life: 0.5, fadeIn: 0.05, fadeOut: 0.2 });
   }
 
   /** Murk swirling round its eyes, a little below the top of its head. */

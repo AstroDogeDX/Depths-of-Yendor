@@ -32,6 +32,7 @@ import { danger, WADE_WET } from './config.js';
 // kept a malediction off)), `wading` (standing in a pool: see wade), and `noFreeze` (nothing freezes it now).
 
 export const BOSS_STATUS = 0.5;
+export const SHACKLED_SPEED = 0.55; // Shackled, you (or a monster) move this much as fast
 // A potion of healing's Healing (see drinkPotion and potionSplash in items/use.js): how long it lasts, and how much of
 // your health (or a monster's) it mends over that time. Another adds its time to what's left.
 export const HEALING = { secs: 8, share: { player: 0.75, monster: 0.5 } };
@@ -65,6 +66,15 @@ export const STATUSES = {
   paralysed: {
     label: 'Paralysed', color: '#8fb0ff', harm: true,
     start: ['Your limbs lock rigid!', 'danger'], end: 'You can move again.',
+  },
+  // Stunned: knocked senseless (the Forgotten Jailer, charging into a wall: see monsters/bosses.js). As Paralysed: it
+  // can't move or act, and takes a blow as if unaware. Monsters only, for now.
+  stunned: { label: 'Stunned', color: '#f0e0a0', harm: true, mark: 'STUNNED', player: false },
+  // Shackled: a manacle round the ankle, its broken chain dragging (the Forgotten Jailer's chain: see
+  // monsters/bosses.js). You move at SHACKLED_SPEED and can't sprint; a monster moves at that and strikes as ever.
+  shackled: {
+    label: 'Shackled', color: '#a8b4c0', harm: true, mark: 'SHACKLED',
+    start: ['A manacle snaps shut round your ankle! You drag its chain.', 'danger'], end: 'The manacle falls open, and you kick it off.',
   },
   chilled: {
     label: 'Chilled', color: '#8fd8ff', harm: true, resist: 'ice', mark: 'CHILLED',

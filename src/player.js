@@ -12,7 +12,7 @@ import { updateGuard, shieldBash, shieldOf, shieldStats } from './shield.js';
 import { archer, updateBow, jabStats, bowOf, bowStats, quiverOf } from './bow.js';
 import { updateThrow, THROW_SLOW } from './thrown.js';
 import { damageType, damageMult } from './damage.js';
-import { STATUSES, blankStatus, restoreStatus, saveStatus, afflict, tickStatuses, wade } from './status.js';
+import { STATUSES, blankStatus, restoreStatus, saveStatus, afflict, tickStatuses, wade, SHACKLED_SPEED } from './status.js';
 import { rand } from './rng.js';
 import { round2 } from './save.js';
 import { SWING_AT } from './fx/viewmodel.js';
@@ -228,6 +228,7 @@ export class Player {
     let s = PLAYER_SPEED;
     if (this.status.hasted > 0) s *= 1.45;
     if (this.status.chilled > 0) s *= 0.6;
+    if (this.status.shackled > 0) s *= SHACKLED_SPEED; // (dragging a manacle's chain)
     s *= this.armorMult('speed');
     if (this.hasArtefact('boots')) s *= 1.33;
     const a = this.equip.armor;
@@ -432,10 +433,10 @@ export class Player {
     if (input.sprint || this.winded) this.sneaking = false;
     // Holding right-click raises a shield in your off hand (see shield.js), though not while you're held fast, or
     // holding something up from the hotbar. You can't sprint behind it, nor with an arrow nocked (see bow.js), nor with
-    // your arm drawn back to throw (see thrown.js).
+    // your arm drawn back to throw (see thrown.js), nor shackled.
     updateGuard(this, input.guard, !para && !game.hold, dt);
     let mode = para ? 'walk' : this.sneaking ? 'sneak'
-      : input.sprint && this.guard === 0 && this.nock === 0 && this.windup === 0 ? 'sprint' : 'walk';
+      : input.sprint && this.guard === 0 && this.nock === 0 && this.windup === 0 && !(this.status.shackled > 0) ? 'sprint' : 'walk';
     if (this.winded) mode = 'walk';
     this.mode = mode;
     this.crouch += ((mode === 'sneak' ? 1 : 0) - this.crouch) * Math.min(1, dt * 8);

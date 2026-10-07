@@ -5,7 +5,7 @@ import { generateLevel } from './dungeon/generator.js';
 import { Level } from './world/level.js';
 import { Player } from './player.js';
 import { Knowledge } from './items/identify.js';
-import { ARTEFACTS, WEAPONS, CONTAINERS } from './items/defs.js';
+import { ARTEFACTS, WEAPONS, CONTAINERS, bossKeyOf } from './items/defs.js';
 import { makeItem, randomItem, nextItemUid, reserveUids, arrows, soldByThePile } from './items/generate.js';
 import { itemActions, activateArtefact, toggleGrip, useOffhand } from './items/use.js';
 import { ViewModel, HOLD_RAISE, HOLD_USE, actTime } from './fx/viewmodel.js';
@@ -749,7 +749,7 @@ export class Game {
     }
     if (item.kind === 'key') {
       this.log(item.type === 'gold' ? 'You pick up a gold key. Somewhere on this floor, a locked chest is waiting for it.'
-        : item.type === 'boss' ? 'You pick up the boss key, still slick with filth. It will open the way on down.'
+        : item.type === 'boss' ? bossKeyOf(item).pickup
           : 'You pick up an iron key. Somewhere on this floor, a lock is waiting for it.', 'good');
       return;
     }
@@ -1040,12 +1040,12 @@ export class Game {
       p.gainXp(Math.round(m.def.xp * (1 + (m.maxHp / m.def.hp - 1) * 0.5)), this);
     }
     const level = this.level;
-    // A mimic spills what its chest held out of its maw, and a boss what it carried (the Maledicted Ooze, its key and
-    // what it had swallowed: see arenas.js), flung wider for its size. Anything else may have carried something, which
-    // falls where it died, or onto the bank if it flew over water.
+    // A mimic spills what its chest held out of its maw, and a boss what it carried (the key to its door and its spoils:
+    // see arenas.js), flung wider for its size, the key with a word of its own (`keyDrop`). Anything else may have
+    // carried something, which falls where it died, or onto the bank if it flew over water.
     if (m.loot) {
       level.spill(m.loot, m, m.boss ? { from: 0.6, delay: 0.5, out: m.radius, scatter: 0.6 } : { from: 0.4, delay: 0.3 });
-      if (m.boss && m.loot.some((it) => it.kind === 'key' && it.type === 'boss')) this.log('Something glints in what spills out of it: a key.', 'info');
+      if (m.boss && m.loot.some((it) => it.kind === 'key' && it.type === 'boss')) this.log(m.def.keyDrop ?? 'Something glints where it fell: a key.', 'info');
       return;
     }
     const at = level.landSpot(m.x, m.z);

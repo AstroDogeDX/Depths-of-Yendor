@@ -3,7 +3,7 @@ import { iconItemModel } from '../items/models.js';
 import { texturesLoaded } from '../items/bbmodel.js';
 import {
   WEAPONS, OFFHANDS, SHIELDS, BOWS, ARROWS, THROWN, ARMORS, POTIONS, SCROLLS, WANDS, RINGS, ARTEFACTS, FOOD, CONTAINERS,
-  POTION_COLORS, WAND_MATERIALS, RING_GEMS,
+  POTION_COLORS, WAND_MATERIALS, RING_GEMS, BOSS_KEYS,
 } from '../items/defs.js';
 import { PALETTE, OUTLINE, RUNES, RUNE_INK, MARK_ICONS } from './iconArt.js';
 
@@ -78,12 +78,12 @@ export function prepareIcons() {
 }
 
 /**
- * Every item with an icon, in every look it comes in: a potion in each colour, a scroll with each rune, both keys...
+ * Every item with an icon, in every look it comes in: a potion in each colour, a scroll with each rune, every key...
  * As { label, item, color, rune }, for the dev tools' sheet of them.
  */
 export function everyIcon() {
   const out = [];
-  const add = (kind, type, label = `${kind}: ${type}`, look = {}) => out.push({ label, item: { kind, type }, color: 0xffffff, rune: null, ...look });
+  const add = (kind, type, label = `${kind}: ${type}`, look = {}, extra = {}) => out.push({ label, item: { kind, type, ...extra }, color: 0xffffff, rune: null, ...look });
   for (const [kind, defs] of [['weapon', WEAPONS], ['offhand', OFFHANDS], ['shield', SHIELDS], ['bow', BOWS], ['arrow', ARROWS],
     ['thrown', THROWN], ['armor', ARMORS], ['artefact', ARTEFACTS], ['food', FOOD], ['container', CONTAINERS]]) {
     for (const type of Object.keys(defs)) add(kind, type);
@@ -94,14 +94,15 @@ export function everyIcon() {
   RUNES.forEach((_, rune) => add('scroll', Object.keys(SCROLLS)[0], `scroll: rune ${rune}`, { rune }));
   add('key', 'iron');
   add('key', 'gold');
-  add('key', 'boss');
+  for (const boss of Object.keys(BOSS_KEYS)) add('key', 'boss', `key: ${boss}`, {}, { boss });
   add('gold', 'gold', 'gold');
   add('amulet', 'yendor');
   return out;
 }
 
-/** What an icon depends on: the item's model, and its colour if the model takes one. */
-const lookOf = (item, color) => (TINTED.has(item.kind) ? `${item.kind}|${color}` : item.kind === 'scroll' ? 'scroll' : `${item.kind}:${item.type}`);
+/** What an icon depends on: the item's model (a boss key's, its boss's: see BOSS_KEYS), and its colour if the model takes one. */
+const lookOf = (item, color) => (TINTED.has(item.kind) ? `${item.kind}|${color}` : item.kind === 'scroll' ? 'scroll'
+  : `${item.kind}:${item.type}${item.boss ? `:${item.boss}` : ''}`);
 
 /** The camera, lights and renderer the icons are photographed with, made the first time they're wanted. */
 function setUp() {

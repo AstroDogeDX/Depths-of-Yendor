@@ -217,6 +217,24 @@ export const CONTAINERS = {
                       desc: 'A drawstring pouch of thick hide for things to throw. It holds ten piles of them, in their own slots, apart from your pack.' },
 };
 
+// Boss keys (kind 'key', type 'boss'): what a boss leaves when it dies, for the chained door out of its floor (see
+// dungeon/arenas.js). They open alike, but each boss's is its own (the key's `boss`: the monster's type), its gem
+// burning with the glow of its door's lock: its `model` (assets/models/items/), `color`, what it looks like (`desc`,
+// given the floor it's for), and what you see as you pick it up (`pickup`). A key without a `boss` is the ooze's.
+export const BOSS_KEYS = {
+  maledicted_ooze: {
+    model: 'key_boss', color: 0xe040c0,
+    desc: (depth) => `A great key of black iron, its bow a ring of spikes round a gem of the ooze's taint, still slick with it. It opens the chained door out of its lair on depth ${depth}, and the way on down.`,
+    pickup: 'You pick up the boss key, still slick with filth. It will open the way on down.',
+  },
+  jailer: {
+    model: 'key_boss_jailer', color: 0xa8c834,
+    desc: (depth) => `A great key of black iron off the Forgotten Jailer's ring, its bow a ring of spikes round a gem that burns with his sickly light. It opens the chained door out of his cells on depth ${depth}, and the way on down.`,
+    pickup: "You pick up the Jailer's key, cold as the grave. It will open the way on down.",
+  },
+};
+export const bossKeyOf = (item) => BOSS_KEYS[item.boss] ?? BOSS_KEYS.maledicted_ooze;
+
 // --- Unidentified appearances, shuffled per run ---
 
 export const POTION_COLORS = [

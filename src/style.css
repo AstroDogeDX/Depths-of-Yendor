@@ -199,6 +199,8 @@ body.blind #dark { opacity: 0.95; }
 .popup.s-doused { color: #d8e4ec; }
 .popup.s-thawed { color: #ffb070; }
 .popup.s-malediction { color: #f05ad0; }
+.popup.s-stunned { color: #f0e0a0; }
+.popup.s-shackled { color: #a8b4c0; }
 .popup.s-washed { color: #70b0ff; }
 
 /* --- Panels & overlays --- */

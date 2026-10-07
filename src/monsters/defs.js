@@ -95,6 +95,7 @@ export const MONSTERS = {
     xp: 45, depth: [99, 99], freq: 0, dodge: 0, def: 2, sleepChance: 1, boss: true, traits: ['bloodless', 'fluid', 'maledicted'],
     wake: 'The Maledicted Ooze heaves itself up out of its filth, every eye in it turning to you.',
     death: 'The Maledicted Ooze shudders, bursts, and spills across the floor.',
+    keyDrop: 'Something glints in what spills out of it: a key.',
     ai: 'ooze',
     moves: {
       // Swelling up (`windup` seconds, a ring on the floor showing how far it will reach), then a blast all round it:
@@ -105,6 +106,53 @@ export const MONSTERS = {
       spit: { windup: 0.65, speed: 10, dmg: [3, 6], dmgType: 'magic', every: [2.6, 4], range: 18 },
     },
     enrage: { at: 0.5, volley: 3, spread: 0.24, say: 'The Maledicted Ooze boils up, steaming. No frost will set in it now!' },
+  },
+  // The Catacombs' boss, keeping his cell block on their last floor (see dungeon/arenas.js): a huge jailer, long dead and
+  // half rotted to the bone, a chain wound round his left arm and a mace in his right. Undead, as a skeleton is: a mace
+  // is the answer to him. He beats you with the mace in reach, and throws his chain (`chain`) to catch you and reel you
+  // in, shackled (see status.js), wherever he can see you, backing off to make room to throw it now and then (`space`).
+  // Hurt (`hide`), he throws a flask of darkness at you (`flask`) and slips away to hide in a cell, to charge out at you
+  // as you pass its gate (`ambush`). Past half his health he charges in the open too (`charge`): straight at you,
+  // knocking you flying, or into a wall, where he's stunned. A lantern at his belt lights his way round the cells. When
+  // he dies he leaves his keys, the boss key among them, and what he took from his prisoners.
+  jailer: {
+    name: 'Forgotten Jailer', hp: 190, dmg: [8, 15], speed: 2.4, radius: 0.7, reach: 2.3, windup: 0.7, cooldown: 1.3,
+    dmgType: 'bash', resist: { slash: 0.85, stab: 0.6, bash: 1.3, poison: 0, holy: 1.5 }, // a mace; bones a point slips
+    // between and a blow shatters, no blood to poison, and undead
+    xp: 70, depth: [99, 99], freq: 0, dodge: 0, def: 4, sleepChance: 1, boss: true, traits: ['bloodless'],
+    wake: 'The Forgotten Jailer lifts his head. Keys rattle at his belt. "Back... in your cell."',
+    death: 'The Forgotten Jailer crashes down, his chain rattling slack.',
+    keyDrop: 'His keys scatter across the floor, and one of them glows a sickly green.',
+    ai: 'jailer',
+    moves: {
+      // His chain, whirled `turns` times over his head (`windup` seconds) and flung straight at you, `speed` metres a
+      // second, as far as `range`: caught, you take `dmg` and are reeled in to him, and shackled for `shackle` seconds. A
+      // raised shield catches it. Every `every` seconds at most, while he can see you.
+      chain: { windup: 1, turns: 1.5, speed: 22, range: 11, dmg: [2, 4], shackle: 3.5, every: [5, 8] },
+      // Past half his health: head down (`windup`), then a charge straight at where you were, `speed` metres a second, as
+      // far as `range`: `dmg` and thrown `push` metres if he hits you; into a wall, he's stunned for `stun` seconds.
+      charge: { windup: 0.8, speed: 10, range: 14, dmg: [10, 17], push: 3, stun: 1.8, every: [6, 9] },
+      // His charge out of hiding at you passing his cell's gate: poised for it, he's off sooner, at where you'll be, and
+      // once he's out through the gate he wheels round at where you'll be by then, as much as `turn` radians, and on.
+      ambush: { windup: 0.35, speed: 10, range: 14, turn: 1.4, dmg: [10, 17], push: 3, stun: 1.8 },
+      // A flask of darkness, lobbed at you `speed` metres a second: it bursts, and blinds you `blind` seconds if you're in
+      // `splash` metres of it.
+      flask: { windup: 0.6, speed: 11, blind: 8, splash: 2.6 },
+    },
+    // Making room to throw his chain: with it ready and you too close to throw it at, now and then (`chance`, at most
+    // every `every` seconds) he backs away from you, quicker than he comes on (`speed` times), for `secs` seconds at
+    // most or till you're `far` metres off, and throws it.
+    space: { chance: 0.45, every: 2, speed: 1.15, secs: 1.1, far: 5 },
+    // Hurt, down to each share of his health in `at`, he throws a flask of darkness at you, if he can see you, and
+    // while you're blind, he goes to hide in one of his cells with a gate onto the aisle (see `hides` in arenas.js),
+    // watching the gate to charge out at you if you pass it. The first time, he watches only the gate, so you can steal
+    // up on him through a hole in the wall and take him unawares; the second, every way in (`watch`). He waits `wait`
+    // seconds at most, then comes looking for you.
+    hide: {
+      at: [0.5, 0.25], watch: ['gate', 'all'], wait: 40, speed: 1.2,
+      say: ['The Forgotten Jailer bellows, and snatches a black flask from his belt!', 'The Forgotten Jailer staggers, and snatches another flask from his belt!'],
+    },
+    enrage: { at: 0.5, speed: 1.15 },
   },
   warden: {
     name: 'Warden of Yendor', hp: 230, dmg: [10, 22], speed: 2.9, radius: 0.6, reach: 2.4, windup: 0.75, cooldown: 1.3,

@@ -10,13 +10,13 @@ import { round2 } from '../save.js';
 import { DAMAGE_TYPES, damageType, damageMult, isPhysical } from '../damage.js';
 import {
   STATUSES, blankStatus, restoreStatus, saveStatus, afflict as applyStatus, tickStatuses, damageTakenMult, hitStatuses,
-  breakCharm, wade,
+  breakCharm, wade, SHACKLED_SPEED,
 } from '../status.js';
 
 const BLOOD = {
   rat: 0x901010, bat: 0x901010, slime: 0x40c040, goblin: 0x902010, archer: 0x902010, skeleton: 0xe0d8c0,
   orc: 0x801010, wraith: 0x6040a0, imp: 0xff6010, troll: 0x406020, golem: 0x909090, mimic: 0x7a1830,
-  maledicted_ooze: 0x5a1a78, warden: 0xffc040,
+  maledicted_ooze: 0x5a1a78, jailer: 0xc8c0a8, warden: 0xffc040,
 };
 
 const STRIKE_TIME = 0.3;
@@ -51,6 +51,7 @@ export class Monster {
     this.boss = !!(opts.boss ?? def.boss);
     this.ai = def.ai ? BOSS_AI[def.ai] : null; // a boss's own way of fighting (see bosses.js)
     this.enraged = false; // down to its `enrage` share of its health, a boss with an `ai` fights harder (see bosses.js)
+    this.roused = false; // a boss, once it's woken to you (its `wake` line: see notice), which it does only the once
     this.noFreeze = false; // nothing freezes it now (see Frozen in status.js)
     this.guardian = !!opts.guardian;
     this.state = (opts.asleep ?? rand.chance(def.sleepChance)) ? 'sleep' : 'wander';
@@ -105,7 +106,7 @@ export class Monster {
       type: this.type, x: round2(this.x), z: round2(this.z), yaw: round2(this.yaw), hp: round2(this.hp), maxHp: this.maxHp,
       danger: this.danger, dmgMult: this.dmgMult, state: this.state, seen: this.seen || undefined, status,
       boss: this.boss || undefined, guardian: this.guardian || undefined, summoned: this.summoned || undefined,
-      enraged: this.enraged || undefined, weakBase: this.weakBase ?? undefined, loot: this.loot ?? undefined,
+      enraged: this.enraged || undefined, roused: this.roused || undefined, weakBase: this.weakBase ?? undefined, loot: this.loot ?? undefined,
     };
   }
 
@@ -120,6 +121,7 @@ export class Monster {
     this.dmgMult = s.dmgMult;
     this.state = s.state;
     this.seen = !!s.seen;
+    this.roused = !!s.roused;
     this.summoned = !!s.summoned;
     this.loot = s.loot ?? null;
     if (s.enraged) this.ai?.enrage(this, null, { quiet: true });
@@ -141,8 +143,8 @@ export class Monster {
   /** A trait from its def: `bloodless` (can't bleed), `fluid` (always as good as wet: cold freezes it solid). */
   hasTrait(trait) { return !!this.def.traits?.includes(trait); }
 
-  /** Paralysed or frozen: it can't move or strike, and it's open to an unaware blow. */
-  held() { return this.status.paralysed > 0 || this.status.frozen > 0; }
+  /** Paralysed, frozen or stunned: it can't move or strike, and it's open to an unaware blow. */
+  held() { return this.status.paralysed > 0 || this.status.frozen > 0 || this.status.stunned > 0; }
 
   /** Charmed or smitten: it won't fight you (see status.js). */
   charmed() { return this.status.charmed > 0 || this.status.smitten > 0; }
@@ -227,7 +229,8 @@ export class Monster {
     }
 
     const speedMult = this.status.chilled > 0 ? 0.5 : 1;
-    const moveMult = speedMult * (this.wading ? WADE_SPEED : 1); // (wading slows its steps, not its blows)
+    // (Wading slows its steps, not its blows, and so does a manacle's chain.)
+    const moveMult = speedMult * (this.wading ? WADE_SPEED : 1) * (this.status.shackled > 0 ? SHACKLED_SPEED : 1);
     let moving = false;
     if (this.held()) {
       this.attack.phase = 'none';
@@ -253,6 +256,7 @@ export class Monster {
       move: a.phase === 'none' ? null : a.move, // a boss's own move (see bosses.js), or null for its blow or shot
       reveal: this.revealT ?? -1,
       asleep: this.state === 'sleep',
+      ...this.ai?.pose?.(this), // (a boss's own: the Jailer's chain out, his charge)
     });
     strain(this);
     this.updateTint(dt);
@@ -406,8 +410,12 @@ export class Monster {
     this.lostT = 0;
     if (mark && game.level.isVisibleWorld(this.x, this.z)) game.popup(this.headPos(), '!', 'alert');
     game.audio.alert(this.boss ? 0.4 : 1 + (1.2 - this.height) * 0.4);
-    if (this.boss) game.log(this.def.wake ?? `The ${this.name} awakens.`, 'danger');
-    this.ai?.wake?.(this, game);
+    // A boss makes its entrance the first time only, not each time it comes on you again after losing you.
+    if (this.boss && !this.roused) {
+      this.roused = true;
+      game.log(this.def.wake ?? `The ${this.name} awakens.`, 'danger');
+      this.ai?.wake?.(this, game);
+    }
   }
 
   think(dt, game, level, dist, dx, dz, speedMult) {

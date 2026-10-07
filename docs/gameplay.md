@@ -5,7 +5,7 @@ How the game plays and the rules behind it: what's in it, the controls, the pack
 ## What's in it
 
 - **25 floors in 5 themes** of five floors each: Sewers, Catacombs, Caves, Dwarven Ruins and the Underworld. Seeded layouts with pillared halls, wall sconces, doors and hidden traps (spike, poison gas, teleport, alarm). See [The dungeon](dungeon.md).
-- **14 monsters:** rat, bat, ooze, goblin, goblin archer, skeleton, orc, wraith, fire imp, troll, stone golem, the **mimic**, which passes for a chest until you reach for it, and two bosses: the **Maledicted Ooze**, in its lair at the bottom of the Sewers, and the **Warden of Yendor**, who fires bolt volleys and raises the dead at half health. See [Bosses](#bosses).
+- **15 monsters:** rat, bat, ooze, goblin, goblin archer, skeleton, orc, wraith, fire imp, troll, stone golem, the **mimic**, which passes for a chest until you reach for it, and three bosses: the **Maledicted Ooze**, in its lair at the bottom of the Sewers, the **Forgotten Jailer**, in his cell block at the bottom of the Catacombs, and the **Warden of Yendor**, who fires bolt volleys and raises the dead at half health. See [Bosses](#bosses).
 - **Items:** 7 weapons with different reach, speed and damage types (spears out-reach swords, hammers hit hard but recover slowly), each to be gripped in one hand or both, the lantern, a **shield** or a **bow** (with **arrows** in your quiver) in your off hand, **thrown weapons** (stones, darts and throwing knives), 5 armours with strength requirements, 10 potions, 10 scrolls, 5 wands, 6 rings, food. Most are found in **chests**, and the best in locked ones. See [Chests and mimics](dungeon.md#chests-and-mimics).
 - **A shop** on the first floor of each theme after the first (floors 6, 11, 16 and 21). See [The shop](dungeon.md#the-shop).
 - **6 artefacts**, 5 per run in guarded shrines on the third floor of each theme (3, 8, 13, 18 and 23): Chalice of Crimson Thirst (lifesteal), Eye of the Deep (see all monsters, even through walls, and traps), Horn of Thunder (stun blast), Cloak of Shadows (invisibility), Boots of the Wind (speed), Emberheart (burning strikes, fire immunity). You have two attunement slots.
@@ -181,9 +181,10 @@ Each monster's blows fit what it fights with, and most resist some kinds of dama
 | Stone golem | bash (fists) | −50% | −50% | +50% | magic +25%, fire −50%, lightning −50%, poison immune |
 | Mimic | stab (bite) | | −25% | | fire +50% |
 | Maledicted Ooze | bash (slam, blast), magic (globs) | +25% | −25% | −50% | fire +25%, poison immune; past half its health, cold only chills it |
+| Forgotten Jailer | bash (mace, chain, charge) | −15% | −40% | +30% | holy +50%, poison immune |
 | Warden of Yendor | slash (halberd), magic (bolts) | −30% | −20% | +25% | holy +25%, fire immune |
 
-So a mace is the answer to skeletons, golems and the Warden but little use against oozes, wraiths and trolls. A spear or dagger runs through orcs, imps and trolls, but not the undead. Fire is the troll's bane, and magic is the golem's. Carrying a second weapon, and the right wand, pays. The dev tools' monster buttons list these as tooltips.
+So a mace is the answer to skeletons, golems, the Jailer and the Warden but little use against oozes, wraiths and trolls. A spear or dagger runs through orcs, imps and trolls, but not the undead. Fire is the troll's bane, and magic is the golem's. Carrying a second weapon, and the right wand, pays. The dev tools' monster buttons list these as tooltips.
 
 You can see when a type matters. A hit on a monster's weakness shows a bigger number tagged **WEAK!**, and a melee hit on a weakness lands with a crunch. A resisted hit shows a smaller number tagged **RESISTED**, and a resisted melee hit lands with a dull clank. For physical hits the number itself turns orange or grey. A monster immune to the damage shows **IMMUNE**, including when you try to poison or burn it. Burning and poison ticks aren't tagged; the hit that started them was. The first time in a run you see a kind of monster resist a type or be weak to it, the log says so, e.g. "The troll is weak to fire!" or "Poison can't harm the skeleton!". A hit on one of your armour's weaknesses is tagged **WEAK SPOT**, and one it resists is tagged **RESISTED**.
 
@@ -225,14 +226,15 @@ Statuses afflict you and monsters alike, by one set of rules (`status.js`): what
   - **Poisoned:** purple bubbles rise off its head and burst. **Malediction:** dark taint drips off it, and flecks of it rise, glowing magenta.
   - **Charmed or smitten:** hearts circle its head. **Heartbroken:** now and then a cracked heart sinks from it.
   - **Confused:** stars whirl round its head. **Blind:** murk swirls round its eyes. **Feared:** sweat flies off its head. **Weakened:** red chevrons sink down it as its strength drains.
-  - **Paralysed:** it strains against its locked limbs, shaking in fits.
+  - **Paralysed:** it strains against its locked limbs, shaking in fits. **Stunned:** the same, with yellow stars whirling fast and low round its head.
+  - **Shackled:** the links of a chain drag at its feet.
   - **Healing:** green crosses rise off it, with glints of gold.
 - **Yours show over your view** too (`fx/screenFx.js`), in the same chunky pixels, fading in and out, as well as under your health:
   - **Burning:** a fiery glow round the edges, flames licking up from the bottom (higher at the sides), embers, and the air shimmering low down.
   - **Chilled:** frost creeps in from the edges and corners, snow drifts down, and the view cools. **Frozen:** thick frost, the view grey-blue and cracked across like ice.
   - **Poisoned:** a throbbing sickly purple round the edges, the view swimming, bubbles rising up the sides. **Malediction:** a dark purple ichor round the edges, the colour soured, and thick drips of the taint creeping down from the top, magenta at their tips. **Bleeding:** red round the edges, beating, with blood running down from the top.
   - **Wet:** drops of water by the edges, each a little lens on the view, sliding down. **Oiled:** a dark amber smear with an oily sheen.
-  - **Weakened:** the colour drains, the edges darken. **Confused:** the view swims and doubles. **Paralysed:** grey and blue, with static crackling at the edges and the view jolting as you strain.
+  - **Weakened:** the colour drains, the edges darken. **Confused:** the view swims and doubles. **Paralysed:** grey and blue, with static crackling at the edges and the view jolting as you strain. **Shackled:** the foot of the view darkens, as if weighed down, and the chain you drag lies across it, sagging and swaying.
   - **Charmed:** a rosy glow, hearts floating up the sides. **Heartbroken:** a cold grey edge. **Healing:** a warm green glow round the edges, swelling and ebbing, and green crosses rising up the sides.
   - **Hasted:** streaks rushing out past the edges. **Mind vision:** violet edges, rings rippling out, and every creature on the floor outlined in violet, even through walls (fainter the further off; a mimic passing for a chest too). Attuned to the Eye of the Deep, you see the same outlines for as long as you wear it, without the violet edges. **Invisible:** the edges shimmer, and your own hands and what's in them turn see-through.
   - **Hunger:** famished, the colour drains toward the edges; starving, more, the edges darker, and now and then everything swims as you nearly faint. **Hunted** (carrying the Amulet): the edges darken red with a heartbeat. **Winded:** the edges darken and lighten with your breath. **Wounded:** below 45% of your health (`WOUNDED`), your heart pounds in red at the edges, quicker as you weaken, the colour drains and the dark closes in; near death, dark veins creep in from the edges, throbbing with it. (Blindness darkens all but the middle of the view, as before.)
@@ -251,9 +253,11 @@ Statuses afflict you and monsters alike, by one set of rules (`status.js`): what
 | Wet | wading through a pool (see [Pools](dungeon.md#pools)): it lasts as long as you wade, and wears off over 10 s once you're out (`WADE_WET`) | won't burn, and lightning does half as much damage again |
 | Oiled | nothing yet (oil flasks and traps, to come) | fire does half as much damage again, and set alight, it burns twice as long |
 | Paralysed | paralysis potions, the Horn of Thunder | as Frozen, but its resistances stay |
+| Stunned | the Forgotten Jailer charging into a wall (see [Bosses](#bosses)) | monsters only: as Paralysed |
+| Shackled | the Forgotten Jailer's chain | you move at 55% speed (`SHACKLED_SPEED`) and can't sprint; a monster moves at 55% speed |
 | Weakened | nothing yet | you: 3 less strength. A monster: 3/4 of its damage and of its health |
 | Confused | confusion potions | you stagger. Monsters stagger, shoot wide, and half the time lay into another monster in reach |
-| Blind | potions of darkness | you see almost nothing; a monster sees only about a tile around it, so it hunts by ear (below) |
+| Blind | potions of darkness, and the Forgotten Jailer's flask of it | you see almost nothing; a monster sees only about a tile around it, so it hunts by ear (below) |
 | Feared | scrolls of terror | monsters run from you |
 | Charmed | nothing yet | you can't fight: no swinging, zapping, throwing or Horn. A monster takes your side (see *Allies* below); a boss just stops fighting. Striking a charmed monster breaks the charm |
 | Smitten | nothing yet (the Bard, to come) | monsters only: a charm that never wears off. On a boss it's an ordinary charm |
@@ -292,7 +296,7 @@ How they meet (`afflict` in `status.js`):
 
 ## Bosses
 
-A boss is a monster with a floor of its own, at the end of a theme. It never gives up the hunt (see *Hunting by ear*), takes any hostile status for half as long, and can't be terrified, teleported away or knocked back. While one is after you, its name, what afflicts it and its health show across the top of your view, a pale trail behind its health showing what your last blows took (`UI.updateBossBar`). Bosses that fight in ways of their own have them in `monsters/bosses.js` (a def's `ai` and `moves` in `monsters/defs.js`). Two so far:
+A boss is a monster with a floor of its own, at the end of a theme. It never gives up the hunt (see *Hunting by ear*), takes any hostile status for half as long, and can't be terrified, teleported away or knocked back. It wakes with words of its own (`wake` in its def), the first time it sees you only, however often it loses you after. While one is after you, its name, what afflicts it and its health show across the top of your view, a pale trail behind its health showing what your last blows took (`UI.updateBossBar`). When it dies, it leaves its own key to the door on (`BOSS_KEYS` in `items/defs.js`). Bosses that fight in ways of their own have them in `monsters/bosses.js` (a def's `ai` and `moves` in `monsters/defs.js`). Three so far:
 
 **The Maledicted Ooze** lies asleep in its lair at the bottom of the Sewers (see [The Sewers' boss floor](dungeon.md#the-sewers-boss-floor)): a vast ooze, 2.6 m across and 2 m high, of near-black purple gel, its many eyes glowing magenta and the bones of those it took drifting in it, 120 health. It wakes when it sees you within 9 m, or hears you, and heaves itself up out of its filth.
 
@@ -303,6 +307,21 @@ A boss is a monster with a floor of its own, at the end of a theme. It never giv
 - **Half its health gone,** its taint boils up: no cold will freeze it from then on, only chill it (any ice on it bursts off), it glows faintly, and it spits three globs at a time, in a spread. Its bar turns red.
 - **It never leaves its lair:** too big for any doorway, it won't follow you out of the hall, but it watches you from inside, and spits at you while it can see you. Lose it behind a pillar, or out of the hall, and it goes back to the middle to wait.
 - **When it dies,** it bursts and slumps into a puddle, and spills what it had swallowed: the boss key to the door on, a treasure as a locked chest holds, gold, and something more.
+
+**The Forgotten Jailer** stands asleep at his post in his cell block at the bottom of the Catacombs (see [The Catacombs' boss floor](dungeon.md#the-catacombs-boss-floor)): a huge jailer, 2.5 m tall, long dead, his left side rotted to the bone (half his face a bare skull, his ribs bare), under a tattered hood, his eyes burning a sickly green. A chain is wound round his left arm, a great flanged mace is in his right fist, and at his hip hangs a lantern of the same green light, which lights the cells round him as he goes. 190 health. He wakes when he sees you within 9 m, or hears you, and lifts his head.
+
+- **He's undead:** blows break his bones (+30% bash), blades and points do less (−15% slash, −40% stab), holy light burns him (+50%), poison can't touch him, and he can't bleed. He walks a little slower than you (2.4 m a second).
+- **His mace:** in reach (2.3 m), 8–15 bash.
+- **His chain:** with you 3 to 11 m off and in sight, he swings it round in great loops at his side for a second, a turn and a half, quicker and quicker (you hear each pass), then flings it straight at you over the top. If it catches you, it wrenches you for 2–4 (whatever armour you wear), reels you in to just short of his reach, and shackles you for 3.5 s: you move at 55% speed and can't sprint, and he swings at once. Step aside as it flies, or raise your shield to it: it wraps round the shield, and you wrench it free for 14 stamina. He can't throw at what he can't see, so keep walls between you. He throws it a moment after he wakes, then every 5 to 8 s at most.
+- **He makes room for it:** with you too close to throw at and his chain ready, now and then (a bit under half the times he could swing, every 2 s at most) he backs off from you for a second or so, quicker than he comes on, to 5 m if you let him, then swings it round and throws it, however near you've kept. Not while it holds you, though: then he just swings the mace.
+- **Hurt, he hides.** At half his health he bellows and snatches a black flask from his belt, and if he can see you, lobs it at you: a potion of darkness, which bursts and blinds you for 8 s if you're within 2.6 m of it (and teaches you the potion). While you're blind, he goes to hide in one of the four cells with a gate onto the aisle, the furthest from you by the way there, and waits at the back of it, watching the gate. His bar goes while he hides, but his lantern still shows where he is.
+  - **Pass the gate in his sight,** and he bursts out at you, quicker off than in the open, and wheels round, once he's out, at where you'll be by the time he gets there. Keep walking and he has you; stop, turn back or dodge aside, and he can miss, perhaps into a wall.
+  - **Steal up on him through a hole in the wall** from the next cell, and keep out from in front of him, and he doesn't know you're there, unless you run: your first blow takes him unawares, for double damage.
+  - At a quarter of his health he does it all again, in another cell, but this time he watches every way in, and hears your footsteps as he would anywhere: he turns on you as you come through the hole, his chain ready.
+  - Hurting him, a noise near him, or a long wait (40 s) brings him out to look for you.
+- **Half his health gone,** he also charges in the open: head down for a moment, then straight at where you stood, 10 m a second for as far as 14 m, if nothing's in his way. Caught, you take 10–17 and are thrown 3 m. But once he's off he can't turn: step aside, and if he runs into a wall (or anything solid: his table, a cage), he's stunned for 1.8 s, open to your blows as if he never saw you coming. He charges every 6 to 9 s at most, and goes 15% quicker. His bar turns red.
+- **He walks his rounds:** lose him, and he goes to where he last saw you, then walks the cells from one to the next, slowly, stopping to listen, until he sees or hears you again. He doesn't keep to the block, though: he'll follow you anywhere.
+- **When he dies,** he crashes down, his chain rattling slack, and his keys scatter: the boss key to the door on, its gem glowing green, with what he took from his prisoners (a treasure as a locked chest holds, gold, and something more).
 
 **The Warden of Yendor** keeps the Amulet's vault on the last floor: halberd blows, volleys of bolts, and at half its health, the dead answer its call.
 

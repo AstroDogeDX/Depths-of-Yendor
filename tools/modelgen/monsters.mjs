@@ -1,6 +1,6 @@
 // Monsters, rigged for the game's animation: every moving part is a group ("bone") pivoting at its joint,
 // found by name (body, head, arm_left, arm_right, leg_left, leg_right, plus wing_*, tail, leg_* and blob on
-// the odd ones out). Origin = between the feet, facing +z (south).
+// the odd ones out). Origin = between the feet, facing +z (south). Left and right are the creature's own (see pair).
 import { defineModel, loft, lathe, revolve, tube, apex, latheRing, octRingZ, noise3, rand, fract, ramp } from './lib.mjs';
 import { MAT, PAL, P, clamp01, patches, bevel } from './materials.mjs';
 
@@ -33,6 +33,11 @@ const MON_PAL = {
   taint: P('#4a0a3a', '#7a1462', '#b0228c', '#e040c0', '#ff7ae0', '#ffd0f4'),
   stainedBone: P('#1e1a18', '#2e2824', '#403830', '#54493c', '#685a48'),
   rust: P('#1e120c', '#2e1a10', '#442614', '#5a341c', '#704426'),
+  // The Forgotten Jailer: grey-green dead flesh, leather stained near black, and a sickly green light in his eyes and
+  // his lantern.
+  rot: P('#1c1f17', '#2a2e22', '#3a3f2f', '#4b523d', '#5e664c', '#737b5d'),
+  jailerLeather: P('#120d09', '#1c140e', '#271c13', '#33251a', '#3f2f21', '#4c3929'),
+  graveGlow: P('#2a3606', '#4a600c', '#78961a', '#a8c834', '#d4ee70', '#f4ffc8'),
   robe: P('#08060e', '#0f0b1a', '#171126', '#1f1834', '#282042'),
   wood: PAL.wood,
   steel: PAL.steel,
@@ -143,6 +148,30 @@ const MATS = {
   // Its taint, glowing: its eyes' irises and the knots of it in its core.
   taint: (c) => ramp(MON_PAL.taint, 0.55 + 0.3 * Math.max(0, c.n.z) + 0.15 * patches(c.p, 526, 0.5), c.ax, c.ay),
   rust: (c) => ramp(MON_PAL.rust, 0.45 + 0.2 * patches(c.p, 527, 0.3) + bevel(c, 0.2), c.ax, c.ay),
+  // The Forgotten Jailer. Dead flesh, mottled, with dark sores.
+  rot(c) {
+    let v = 0.5 + 0.18 * patches(c.p, 540, 0.2) + bevel(c, 0.1) + 0.06 * c.n.y;
+    if (noise3(c.p.x * 0.15, c.p.y * 0.15, c.p.z * 0.15, 541) > 0.68) v -= 0.25;
+    return ramp(MON_PAL.rot, v, c.ax, c.ay);
+  },
+  jailerLeather(c) {
+    let v = 0.45 + 0.15 * patches(c.p, 545, 0.3) + bevel(c, 0.12);
+    if (rand(c.ax, c.ay, 546) > 0.97) v -= 0.15;
+    return ramp(MON_PAL.jailerLeather, v, c.ax, c.ay);
+  },
+  // His left side (x > 0: see pair) is rotted to the bone: half his face a bare skull, his ribs bare
+  // (the dark of him showing between them: `info.base` and `info.pitch` space them), bone breaking through his left
+  // arm. A strap crosses his chest from his right shoulder (`info.strapY` where it crosses his middle).
+  halfSkull: (c) => (c.p.x > 0.5 ? MATS.bone(c) : MATS.rot(c)),
+  jailerTorso(c) {
+    const { p, info } = c;
+    if (p.x > 1.5) return fract((p.y - info.base) / info.pitch) > 0.58 ? ramp(MON_PAL.black, 0.5, c.ax, c.ay) : MATS.bone(c);
+    if (p.z > 0 && Math.abs(p.y - info.strapY + p.x * 1.1) < 3.4) return MATS.jailerLeather(c);
+    return MATS.rot(c);
+  },
+  jailerArm: (c) => (c.p.x > 0 && noise3(c.p.x * 0.2, c.p.y * 0.2, c.p.z * 0.2, 547) > 0.4 ? MATS.bone(c) : MATS.rot(c)),
+  apron: (c) => MATS.jailerLeather(c),
+  graveFlame: (c) => ramp(MON_PAL.graveGlow, 0.72 + 0.22 * patches(c.p, 548, 1), c.ax, c.ay),
   // Bone, stained dark by long soaking in it.
   stainedBone: (c) => ramp(MON_PAL.stainedBone, 0.5 + 0.2 * patches(c.p, 528, 0.4) + bevel(c, 0.15) + 0.08 * c.n.y, c.ax, c.ay),
   // Wraith robe, see-through, its hem ragged: texels below a wavy line are cut away.
@@ -163,20 +192,24 @@ const MATS = {
   eyeOrange: glowing('eyeOrange'),
   eyeCyan: glowing('eyeCyan'),
   eyeGold: glowing('eyeGold'),
+  eyeGrave: glowing('graveGlow'),
   ember: glowing('ember'),
 };
 
 // Ellipse of `n` points in the x-y plane at depth z: half width w, half height h, centred at height yc.
 const ringXY = (z, w, h, yc, n = 8) => latheRing(0, w, h, n).map(([x, , y]) => [x, yc + y, z]);
 const shift = (polys, [dx, dy, dz]) => polys.map((p) => ({ ...p, pts: p.pts.map(([x, y, z]) => [x + dx, y + dy, z + dz]) }));
-const pair = (fn) => [-1, 1].forEach((s) => fn(s, s < 0 ? 'left' : 'right'));
+// A part each side: `s` its side's sign in x, `side` its name. Left and right are the creature's own: facing +z, its
+// right is at -x (on your left as it faces you) and its left at +x.
+const pair = (fn) => [-1, 1].forEach((s) => fn(s, s < 0 ? 'right' : 'left'));
 const eyes = (m, mat, y, z, spread, size) => pair((s, side) =>
   m.cube(`eye_${side}`, [s * spread - size / 2, y - size / 2, z - size * 0.3], [s * spread + size / 2, y + size / 2, z + size * 0.3], { mat }));
 
 /**
  * The shared biped. Sizes are in metres like the old primitive models, converted to pixels here.
  * `headParts(m, neckY, headS)`, `rightHand(m, x, y, z)`, `leftHand(...)` and `extras(m, dims)` add the
- * creature's own parts inside the right groups.
+ * creature's own parts inside the right groups. Its right (its `rightHand`, `arm_right` and `leg_right`) is its own,
+ * at -x (see pair), so its weapon is in its right hand.
  */
 function humanoid(m, o) {
   const H = o.h * 64, bulk = o.bulk ?? 1;
@@ -207,7 +240,7 @@ function humanoid(m, o) {
       m.mesh(`arm_${side}`, shift(lathe([[shY + r * 1.2, r * 0.9], [shY, r * 1.1], [shY - armLen * 0.5, r * 0.9], [shY - armLen + 2.5, r * 0.75]], { sides: 6 }), [x, 0, 0]), { mat: mats.arms });
       const fist = o.fist ?? 0.9;
       m.cube(`hand_${side}`, [x - r * fist, shY - armLen - r * fist * 0.6, -r * fist], [x + r * fist, shY - armLen + 2.5, r * fist], { mat: o.hands ?? mats.skin });
-      const hand = o[s > 0 ? 'rightHand' : 'leftHand'];
+      const hand = o[`${side}Hand`];
       if (hand) hand(m, x, shY - armLen + 0.5, 0, dims);
     }, { origin: [s * sx, shY, 0] }));
     if (o.extras) o.extras(m, dims);
@@ -253,7 +286,7 @@ const monsters = {
       const path = Array.from({ length: 7 }, (_, i) => [Math.sin(i * 0.9) * 2, 12 - i * 1.2 + (i > 3 ? (i - 3) * 0.8 : 0), -17 - i * 5]);
       m.mesh('tail', tube(path, { half: (f) => 1.4 - 1.1 * f }), { mat: 'pink' });
     }, { origin: [0, 12, -17] });
-    for (const [name, x, z] of [['leg_front_left', -6, 8], ['leg_front_right', 6, 8], ['leg_back_left', -6.5, -9], ['leg_back_right', 6.5, -9]]) {
+    for (const [name, x, z] of [['leg_front_left', 6, 8], ['leg_front_right', -6, 8], ['leg_back_left', 6.5, -9], ['leg_back_right', -6.5, -9]]) {
       m.group(name, () => {
         m.mesh(name, shift(lathe([[11, 2.2], [4, 1.6], [1.5, 1.3]], { sides: 6 }), [x, 0, z]), { mat: 'rat' });
         m.cube(`${name}_paw`, [x - 1.6, 0, z - 1.4], [x + 1.6, 1.6, z + 2.6], { mat: 'pink' });
@@ -323,8 +356,8 @@ const monsters = {
         m.cube(`${name}_pupil`, [c[0] - size * 0.17, c[1] - size * 0.66, c[2] - size * 0.3], [c[0] + size * 0.17, c[1] + size * 0.66, c[2] + size * 0.3],
           { mat: 'void', origin: c, rotation: [0, turn, 0] });
       };
-      eye('eye_left', -0.32, 74, 9);
-      eye('eye_right', 0.3, 76, 10);
+      eye('eye_right', -0.32, 74, 9);
+      eye('eye_left', 0.3, 76, 10);
       eye('eye_small_1', -0.75, 92, 4.5);
       eye('eye_small_2', 0.66, 98, 5);
       eye('eye_small_3', 0.02, 104, 4);
@@ -355,6 +388,85 @@ const monsters = {
       }, { origin: [0, 52, 0] });
     }, { origin: [0, 0, 0] });
   }, { translucent: ['taintGel'], glow: ['taint'], density: 0.75 }),
+
+  jailer: defineModel('jailer', MATS, (m) => {
+    // The Forgotten Jailer, the Catacombs' boss: a huge jailer, long dead and hunched, his left side rotted to the bone
+    // (half his face a bare skull, his ribs bare, bone breaking through his arm), under a tattered leather hood, his eyes
+    // burning a sickly green. A rusted iron collar at his throat, a strap across his chest, a broad belt with a ring of
+    // keys at his right hip and a lantern of the same sickly light hung at his left, a leather apron. A chain wound round
+    // his left forearm hangs from his fist almost to the floor, an open manacle on its end (`chain`, which the game
+    // hides while he has it out; `chain_hand` marks where it leaves his hand); a great flanged mace in his right fist.
+    // `lamp` marks his lantern's flame.
+    const link = (name, at, flat) => {
+      const [x, y, z] = at, a = 1.7, b = 2.7;
+      const pts = flat ? [[x - a, y - b, z], [x + a, y - b, z], [x + a, y + b, z], [x - a, y + b, z]] : [[x, y - b, z - a], [x, y - b, z + a], [x, y + b, z + a], [x, y + b, z - a]];
+      m.mesh(name, tube(pts, { half: 0.65, closed: true, side: flat ? [0, 0, 1] : [1, 0, 0] }), { mat: 'rust' });
+    };
+    humanoid(m, {
+      h: 2.5, bulk: 1.7, limb: 0.15, skin: 'rot', cloth: 'jailerLeather', torso: 'jailerTorso', legs: 'jailerLeather', arms: 'jailerArm',
+      head: 0.32, eyes: 'eyeGrave', armFactor: 0.42, fist: 1.2,
+      torsoInfo: { base: 80, pitch: 5.2, strapY: 96 },
+      headParts: (m, neckY, S) => {
+        const w = S / 2;
+        m.mesh('head', loft([[neckY, w * 0.55], [neckY + 1.5, w * 0.85], [neckY + S * 0.45, w], [neckY + S * 0.85, w * 0.95], [neckY + S, w * 0.55]]
+          .map(([y, rr]) => latheRing(y, rr, rr * 0.95, 8))), { mat: 'halfSkull' });
+        // His jaw hangs a little open.
+        m.cube('jaw', [-w * 0.62, neckY - 2, w * 0.05], [w * 0.62, neckY + S * 0.26, w * 1.08], { mat: 'halfSkull', origin: [0, neckY + S * 0.26, w * 0.1], rotation: [12, 0, 0] });
+        // A tattered hood over the back of his head, open at the face.
+        const half = (y, rr, back) => Array.from({ length: 5 }, (_, k) => { const a = Math.PI * (0.05 + (k / 4) * 0.9); return [rr * Math.cos(a), y, -back * rr * Math.sin(a) + S * 0.18]; });
+        m.mesh('hood', loft([half(neckY - 3, S * 0.72, 1), half(neckY + S * 0.6, S * 0.68, 1.1), half(neckY + S * 1.05, S * 0.52, 1.2), apex(5, [0, neckY + S * 1.3, -S * 0.3])], { capStart: false, caps: [[0, 1, 2, 3], [0, 3, 4]] }), { mat: 'apron' });
+      },
+      rightHand: (m, x, y, z) => {
+        // The mace: an iron haft, bound in leather at the grip, and a great flanged head with a spike.
+        m.mesh('mace_haft', tube([[x, y, z - 6], [x, y, z + 42]], { half: 1.5, sides: 6 }), { mat: 'ironDark' });
+        m.mesh('mace_grip', tube([[x, y, z - 4], [x, y, z + 6]], { half: 1.9, sides: 6 }), { mat: 'jailerLeather' });
+        const hz = z + 47;
+        m.mesh('mace_head', revolve([[0, -7], [5.5, -5.5], [7, -1.5], [7, 1.5], [5.5, 5.5], [0, 7]], { sides: 8 }), { mat: 'ironDark', origin: [x, y, hz], rotation: [90, 0, 0] });
+        for (let k = 0; k < 6; k++) {
+          m.cube(`mace_flange_${k + 1}`, [x - 0.9, y, hz - 7], [x + 0.9, y + 10.5, hz + 7], { mat: 'ironDark', origin: [x, y, hz], rotation: [0, 0, k * 60 + 30] });
+        }
+        m.mesh('mace_spike', loft([latheRing(0, 2.2, 2.2, 4), apex(4, [0, 9, 0])]), { mat: 'ironDark', origin: [x, y, hz + 6], rotation: [90, 0, 0] });
+      },
+      leftHand: (m, x, y, z) => {
+        // Wound round his forearm, then hanging from his fist to just off the floor, an open manacle on its end.
+        for (let k = 0; k < 3; k++) {
+          const yy = y + 9 + k * 6, R = 10.5 - k * 0.6;
+          m.mesh(`chain_wound_${k + 1}`, tube(Array.from({ length: 8 }, (_, i) => [x + Math.cos((i / 8) * Math.PI * 2) * R, yy + Math.sin((i / 8) * Math.PI * 2) * 1.2, z + Math.sin((i / 8) * Math.PI * 2) * R]), { half: 1.1, closed: true, side: [0, 1, 0] }), { mat: 'rust' });
+        }
+        m.group('chain', () => {
+          let yy = y - 5, k = 0;
+          for (; yy > 14; yy -= 4.6, k++) link(`chain_link_${k + 1}`, [x, yy, z + 1], k % 2 === 0);
+          m.mesh('chain_manacle', tube(Array.from({ length: 8 }, (_, i) => [x + Math.cos((i / 8) * Math.PI * 2) * 4.2, yy - 2, z + 1 + Math.sin((i / 8) * Math.PI * 2) * 4.2]), { half: 1.1, closed: true, side: [0, 1, 0] }), { mat: 'rust' });
+        }, { origin: [x, y, z] });
+        m.group('chain_hand', undefined, { origin: [x, y - 3, z + 2] });
+      },
+      extras: (m, d) => {
+        m.mesh('collar', tube(Array.from({ length: 10 }, (_, i) => [Math.cos((i / 10) * Math.PI * 2) * d.rx * 0.5, d.neckY - 1, Math.sin((i / 10) * Math.PI * 2) * d.rz * 0.75]), { half: 1.8, closed: true, side: [0, 1, 0] }), { mat: 'rust' });
+        m.mesh('belt', lathe([[d.legLen - 2, d.rx * 0.9, d.rz * 0.95], [d.legLen + 3.5, d.rx * 0.88, d.rz * 0.93]], { sides: 8 }), { mat: 'jailerLeather' });
+        m.cube('buckle', [-3.5, d.legLen - 2.5, d.rz * 0.92], [3.5, d.legLen + 4, d.rz * 0.92 + 1.6], { mat: 'rust' });
+        // The apron, from his belt to his knees.
+        m.mesh('apron', [{ pts: [[-d.rx * 0.78, d.legLen + 1, d.rz + 1.2], [d.rx * 0.78, d.legLen + 1, d.rz + 1.2], [d.rx * 0.7, d.legLen - 34, d.rz + 3.5], [-d.rx * 0.7, d.legLen - 34, d.rz + 3.5]] }], { mat: 'apron' });
+        // A pauldron of rusted iron over his mace arm.
+        m.mesh('pauldron', revolve([[d.r * 2.6, -3], [d.r * 2.5, 2], [d.r * 1.6, 6], [0, 7]], { sides: 8 }), { mat: 'rust', origin: [-d.sx, d.shY + 2, 0], rotation: [0, 0, 18] });
+        // His keys, on a ring at his right hip.
+        const kx = -d.rx * 0.72, ky = d.legLen - 4, kz = d.rz * 0.82;
+        m.mesh('key_ring', tube(Array.from({ length: 8 }, (_, i) => [kx + Math.cos((i / 8) * Math.PI * 2) * 3.4, ky + Math.sin((i / 8) * Math.PI * 2) * 3.4, kz + 1.5]), { half: 0.55, closed: true, side: [0, 0, 1] }), { mat: 'rust' });
+        [[-2.6, 0.18], [-0.6, -0.08], [1.6, 0.12], [3.2, -0.2]].forEach(([dx, tilt], i) => {
+          const top = [kx + dx, ky - 2.5, kz + 2 + i * 0.4], bot = [kx + dx + tilt * 14, ky - 12, kz + 2 + i * 0.4];
+          m.mesh(`key_${i + 1}`, tube([top, bot], { half: 0.6, sides: 4 }), { mat: 'ironDark' });
+          m.cube(`key_bit_${i + 1}`, [bot[0], bot[1], bot[2] - 0.5], [bot[0] + 2.2, bot[1] + 2.6, bot[2] + 0.5], { mat: 'ironDark' });
+        });
+        // His lantern, hung at his left hip: an iron cage round a sickly green flame.
+        const lx = d.rx * 0.55, ly = d.legLen - 13, lz = d.rz + 4;
+        m.mesh('lantern_hook', tube([[lx, d.legLen, lz - 3], [lx, ly + 7, lz]], { half: 0.6, sides: 4 }), { mat: 'rust' });
+        m.cube('lantern_cap', [lx - 4, ly + 5, lz - 4], [lx + 4, ly + 7.5, lz + 4], { mat: 'rust' });
+        m.cube('lantern_base', [lx - 4, ly - 6, lz - 4], [lx + 4, ly - 4, lz + 4], { mat: 'rust' });
+        for (const [cx, cz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) m.cube(`lantern_bar_${cx < 0 ? 'w' : 'e'}${cz < 0 ? 'n' : 's'}`, [lx + cx * 3.6 - 0.6, ly - 4, lz + cz * 3.6 - 0.6], [lx + cx * 3.6 + 0.6, ly + 5, lz + cz * 3.6 + 0.6], { mat: 'rust' });
+        m.mesh('lantern_flame', revolve([[0, -3.5], [2.4, -2], [2.6, 0.5], [1.4, 3], [0, 4.5]], { sides: 6 }), { mat: 'graveFlame', origin: [lx, ly, lz] });
+        m.group('lamp', undefined, { origin: [lx, ly, lz] });
+      },
+    });
+  }, { glow: ['eyeGrave', 'graveFlame'], double: ['apron'], density: 1 }),
 
   goblin: defineModel('goblin', MATS, (m) => {
     humanoid(m, {
@@ -423,8 +535,8 @@ const monsters = {
         pair((s, side) => m.mesh(`tusk_${side}`, loft([latheRing(0, 1.1, 1.1, 4), apex(4, [0, 5, 0.8])]), { mat: 'bone', origin: [s * S * 0.26, neckY + S * 0.3, S * 0.58] }));
       },
       extras: (m, d) => {
-        // An iron pauldron on the left shoulder and a belt.
-        m.mesh('pauldron', revolve([[d.r * 2.6, -2], [d.r * 2.5, 2], [d.r * 1.6, 5], [0, 6]], { sides: 8 }), { mat: 'ironDark', origin: [-d.sx, d.shY + 1, 0], rotation: [0, 0, 20] });
+        // An iron pauldron on the left shoulder, away from his axe, and a belt.
+        m.mesh('pauldron', revolve([[d.r * 2.6, -2], [d.r * 2.5, 2], [d.r * 1.6, 5], [0, 6]], { sides: 8 }), { mat: 'ironDark', origin: [d.sx, d.shY + 1, 0], rotation: [0, 0, -20] });
         m.mesh('belt', lathe([[d.legLen - 1, d.rx * 0.9, d.rz * 0.95], [d.legLen + 2.5, d.rx * 0.88, d.rz * 0.93]], { sides: 8 }), { mat: 'ironDark' });
       },
       rightHand: (m, x, y, z) => axe(m, x, y, z, 0.8),

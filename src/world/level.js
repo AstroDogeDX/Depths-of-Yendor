@@ -164,8 +164,10 @@ export class Level {
   populate() {
     const data = this.data;
     for (const m of data.monsters) {
-      // (A boss may carry what it spills when it dies: see arenas.js.)
-      this.addMonster(m.type, (m.x + 0.5) * TILE, (m.y + 0.5) * TILE, { asleep: m.asleep, boss: m.boss, guardian: m.guardian }).loot = m.loot ?? null;
+      // (A boss may carry what it spills when it dies, and stand facing a way of its own: see arenas.js.)
+      const mon = this.addMonster(m.type, (m.x + 0.5) * TILE, (m.y + 0.5) * TILE, { asleep: m.asleep, boss: m.boss, guardian: m.guardian });
+      mon.loot = m.loot ?? null;
+      if (m.yaw !== undefined) mon.yaw = m.yaw;
     }
     for (const it of data.items) {
       this.addItem(it.item, (it.x + 0.5 + rand.range(-0.2, 0.2)) * TILE, (it.y + 0.5 + rand.range(-0.2, 0.2)) * TILE);

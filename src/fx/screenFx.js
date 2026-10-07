@@ -17,6 +17,7 @@ import { SENSED_LAYER } from '../monsters/models.js';
 //   weakened     the colour drains out, and the edges darken
 //   confused     the view swims, and a second image of it drifts about the first, lilac at the edges
 //   paralysed    grey and blue, static crackling round the edges, the view jolting in fits as you strain
+//   shackled     the foot of the view darkened, as if weighed down, and the chain you drag lying across it, swaying
 //   charmed      a rosy glow, pink at the edges, hearts floating up the sides
 //   heartbroken  a cold grey round the edges, the colour drained a little
 //   hasted       streaks rushing out past the edges
@@ -55,6 +56,7 @@ const EFFECTS = {
   uWeak: { show: (g, p) => p.status.weakened > 0, in: 1, out: 1 },
   uConfused: { show: (g, p) => p.status.confused > 0, in: 0.8, out: 1.2 },
   uParalysed: { show: (g, p) => p.status.paralysed > 0, in: 0.2, out: 0.6 },
+  uShackled: { show: (g, p) => p.status.shackled > 0, in: 0.2, out: 0.6 },
   uCharmed: { show: (g, p) => p.status.charmed > 0, in: 0.8, out: 1 },
   uHeartbroken: { show: (g, p) => p.status.heartbroken > 0, in: 1, out: 1.5 },
   uHaste: { show: (g, p) => p.status.hasted > 0, in: 0.5, out: 0.8 },
@@ -342,6 +344,17 @@ void main() {
   // Paralysed: static crackling round the edges, worst as you strain.
   if (uParalysed > 0.001 && hash(px + floor(t * 14.0) * 17.0) > 1.0 - 0.06 * smoothstep(0.85, 1.3, rv) * (0.3 + 0.7 * fit) * uParalysed) {
     col = vec3(0.75, 0.85, 1.0);
+  }
+  // Shackled: the foot of the view weighed down dark, and across it the chain you drag, its links six pixels long, flat
+  // and edge on by turns, sagging and swaying as you go.
+  if (uShackled > 0.001) {
+    col = mix(col, vec3(0.06, 0.06, 0.08), steps((1.0 - smoothstep(0.0, 0.3, uv.y)) * 0.5 * uShackled, 4.0));
+    float line = (0.07 + 0.02 * sin(uv.x * 5.0 + t * 1.6) - 0.03 * sin(uv.x * 3.14159)) * grid.y;
+    float dy = px.y - floor(line), k = floor(px.x / 6.0), f = fract(px.x / 6.0);
+    bool face = mod(k, 2.0) < 1.0; // (a link seen flat, and not edge on)
+    if (uShackled > 0.25 && (face ? abs(dy) <= 2.0 && (abs(dy) >= 1.0 || f < 0.2 || f > 0.75) : abs(dy) < 0.5)) {
+      col = mix(col, face && dy >= 1.0 ? vec3(0.62, 0.64, 0.68) : vec3(0.33, 0.34, 0.37), 0.92);
+    }
   }
   // Charmed: hearts floating up the sides.
   if (uCharmed > 0.001 && sprite(30.0, vec2(floor(sin(t * 0.8) * 3.0), floor(t * 14.0)), 0.2 * uCharmed, 21.0, 0.3, d) && heart(d)) {

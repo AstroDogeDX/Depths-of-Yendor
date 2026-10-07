@@ -1137,7 +1137,7 @@
 			"uuid": "945df454-43b4-4c62-a54e-1f8134348234"
 		},
 		{
-			"name": "eye_left",
+			"name": "eye_right",
 			"color": 0,
 			"origin": [-8, 26, 22],
 			"rotation": [0, 0, 0],
@@ -1403,7 +1403,7 @@
 			"uuid": "fe347b79-25dd-4331-aa30-3c65827dc08d"
 		},
 		{
-			"name": "eye_right",
+			"name": "eye_left",
 			"color": 0,
 			"origin": [8, 26, 22],
 			"rotation": [0, 0, 0],

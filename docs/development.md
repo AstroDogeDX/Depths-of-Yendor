@@ -22,7 +22,7 @@ For testing by hand, press **`** (the key left of 1) during a run to open the de
 
 - **Travel:** jump straight to any of the 25 floors, arriving at its entrance as if you'd walked down (boss floors are marked red, shop floors gold). **New layout** builds the floor you're on again from a new seed, for a quick look at another layout. **Reveal map** maps the whole floor and shows its hidden traps, and **To the stairs down** puts you at its exit.
 - **You:** god mode (nothing can hurt you), health and maximum health, strength, levelling up, gold, **Restore** (full health and stamina, fed, every status cleared) and **Kill every monster**.
-- **Items:** make any weapon, off-hand thing (the lantern), armour, potion, scroll, wand, ring, artefact or food, or the Amulet, or an iron, gold or boss key for this floor, with the +N (a charge more each, for a wand), quantity, curse (none, weakened or full), enchantment and identification you choose. It goes in your pack, or on the floor in front of you when the pack is full. **Identify everything** teaches you every potion, scroll, wand and ring, and identifies what you carry.
+- **Items:** make any weapon, off-hand thing (the lantern), armour, potion, scroll, wand, ring, artefact or food, or the Amulet, or an iron, gold or boss key for this floor (a boss key is this floor's boss's own, if it has one), with the +N (a charge more each, for a wand), quantity, curse (none, weakened or full), enchantment and identification you choose. It goes in your pack, or on the floor in front of you when the pack is full. **Identify everything** teaches you every potion, scroll, wand and ring, and identifies what you carry.
 - **Monsters:** spawn any monster a few steps in front of you, awake or asleep. The mimic comes awake, as a monster: to meet one passing for a chest, use *Chests*.
 - **Traps:** lay a trap of any kind on the floor in front of you, found and armed, to step on.
 - **Chests:** set a chest, a locked chest or a mimic (passing for a chest) down in front of you, facing you, holding what one on this floor might.
@@ -59,7 +59,8 @@ src/
   save.js              the saved run in local storage, and the helpers floors are saved with
   dungeon/generator.js pure data: plans the loop and branches, lays out rooms, routes corridors, populates (seeded)
   dungeon/rooms.js     room types (entrance, exit, standard, vault, shrine, shop): sizes, door style, furnishing
-  dungeon/arenas.js    boss floors laid out by hand: the Sewers' last, the Maledicted Ooze's lair, and its crossing into the Catacombs
+  dungeon/arenas.js    boss floors laid out by hand and their crossings into the next theme: the Maledicted Ooze's lair (the Sewers'
+                       last), the Forgotten Jailer's cell block (the Catacombs' last)
   dungeon/tiles.js     tile types
   dungeon/levelBuilder.js  merged wall/floor/ceiling geometry with baked corner AO, stairwells, wall lights, doors
   dungeon/roughRock.js  rough-hewn rock: splits surfaces into pieces and moves them with 3D noise, flat by doors and fittings (and in built rooms)
@@ -80,9 +81,10 @@ src/
   world/trapModels.js  the traps' models: their armed, active and used states, and how they move going off
   monsters/defs.js     bestiary stats, the floors each monster appears on, spawn tables
   monsters/monster.js  AI state machine (sleep → wander → hunt by sight or by ear, fear, ranged kiting), allies and brawls, attacks
-  monsters/bosses.js   bosses' own ways of fighting: the Maledicted Ooze's blast, globs, lair and fury at half its health
+  monsters/bosses.js   bosses' own ways of fighting: the Maledicted Ooze's blast, globs, lair and fury at half its health; the
+                       Forgotten Jailer's chain, charge, rounds, hiding and ambushes, and lantern
   monsters/models.js   loads the rigged Blockbench monsters and animates their bones
-  items/defs.js        item catalog and unidentified appearances
+  items/defs.js        item catalog (each boss's key too) and unidentified appearances
   items/identify.js    per-run appearance shuffle, naming, descriptions
   items/generate.js    random items by depth, their + and curses, what's in chests, shop stock, what things are worth
   items/enchant.js     Enchantments and Curses of ___ on weapons and armour, and what a curse's strength means

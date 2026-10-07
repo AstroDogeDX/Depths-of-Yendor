@@ -79,6 +79,21 @@ export function blockHit(game, p, dmg, from, attacker = null) {
   return took;
 }
 
+/** Whether your shield is up against something coming from `from` ({ x, z }): raised, and it in front of you, in its arc. */
+export function raisedAgainst(p, from) {
+  const item = shieldOf(p);
+  if (!item || !p.guarding) return false;
+  const dx = from.x - p.x, dz = from.z - p.z, d = Math.hypot(dx, dz);
+  return d > 1e-4 && (dx * -Math.sin(p.yaw) + dz * -Math.cos(p.yaw)) / d >= Math.cos(shieldStats(item).arc);
+}
+
+/** What holding your shield up against something costs you (`cost` stamina), which may break your guard. */
+export function strainGuard(game, p, cost) {
+  p.stamina = Math.max(0, p.stamina - cost);
+  p.staminaRestT = 0;
+  if (p.stamina <= 0) breakGuard(game, p);
+}
+
 /** Your guard breaks: out of stamina, you're winded, and your shield drops until you've your breath back. */
 function breakGuard(game, p) {
   p.winded = true;

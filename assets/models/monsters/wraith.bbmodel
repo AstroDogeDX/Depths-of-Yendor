@@ -1278,7 +1278,7 @@
 			"uuid": "7f557cb1-f2ce-499f-aa6b-8683123464ca"
 		},
 		{
-			"name": "eye_left",
+			"name": "eye_right",
 			"box_uv": false,
 			"render_order": "default",
 			"locked": false,
@@ -1319,7 +1319,7 @@
 			"uuid": "bd9315e0-c344-4061-a654-65d268c7aaca"
 		},
 		{
-			"name": "eye_right",
+			"name": "eye_left",
 			"box_uv": false,
 			"render_order": "default",
 			"locked": false,
@@ -1360,7 +1360,7 @@
 			"uuid": "7e47948d-80b3-4ade-a5d1-83b5f26eacf6"
 		},
 		{
-			"name": "sleeve_left",
+			"name": "sleeve_right",
 			"color": 0,
 			"origin": [0, 0, 0],
 			"rotation": [0, 0, 0],
@@ -1490,7 +1490,7 @@
 			"uuid": "120ac5ea-a7a4-4765-aaa3-4079f4ef2ed3"
 		},
 		{
-			"name": "claw_left_a",
+			"name": "claw_right_a",
 			"color": 0,
 			"origin": [0, 0, 0],
 			"rotation": [0, 0, 0],
@@ -1576,7 +1576,7 @@
 			"uuid": "b8f30e3e-656a-424c-adad-9b6580262104"
 		},
 		{
-			"name": "claw_left_b",
+			"name": "claw_right_b",
 			"color": 0,
 			"origin": [0, 0, 0],
 			"rotation": [0, 0, 0],
@@ -1662,7 +1662,7 @@
 			"uuid": "c01244f8-489c-4be2-ad83-8daae36939ca"
 		},
 		{
-			"name": "sleeve_right",
+			"name": "sleeve_left",
 			"color": 0,
 			"origin": [0, 0, 0],
 			"rotation": [0, 0, 0],
@@ -1792,7 +1792,7 @@
 			"uuid": "a2922a6e-53cc-411d-ab17-450d9c97c270"
 		},
 		{
-			"name": "claw_right_a",
+			"name": "claw_left_a",
 			"color": 0,
 			"origin": [0, 0, 0],
 			"rotation": [0, 0, 0],
@@ -1878,7 +1878,7 @@
 			"uuid": "4baa8fa8-0d83-4988-ae88-0aec3783515b"
 		},
 		{
-			"name": "claw_right_b",
+			"name": "claw_left_b",
 			"color": 0,
 			"origin": [0, 0, 0],
 			"rotation": [0, 0, 0],
@@ -1978,7 +1978,7 @@
 			"autouv": 0
 		},
 		{
-			"name": "arm_left",
+			"name": "arm_right",
 			"origin": [-16, 80, 3],
 			"color": 0,
 			"uuid": "b91dc794-caa2-4865-a975-fdbe38ad9d80",
@@ -1990,7 +1990,7 @@
 			"autouv": 0
 		},
 		{
-			"name": "arm_right",
+			"name": "arm_left",
 			"origin": [16, 80, 3],
 			"color": 0,
 			"uuid": "095603e0-cec0-470e-a7da-995d51376c20",

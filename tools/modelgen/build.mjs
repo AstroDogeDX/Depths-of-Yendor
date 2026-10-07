@@ -28,6 +28,7 @@ import { dwarven } from './dwarven.mjs';
 import { underworld } from './underworld.mjs';
 import { traps } from './traps.mjs';
 import { chests, mimic } from './chests.mjs';
+import { bossDoors } from './bossdoors.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const MODELS = {
@@ -41,7 +42,7 @@ const MODELS = {
   throwing_knife: { file: 'throwing_knife.bbmodel', build: throwingKnife },
   sconce: { file: 'sconce.bbmodel', build: sconce },
   ...Object.fromEntries(Object.entries({ ...monsters, mimic }).map(([name, build]) => [name, { file: `monsters/${name}.bbmodel`, build }])),
-  ...Object.fromEntries(Object.entries({ ...props, ...chests, ...sewers, ...catacombs, ...caves, ...dwarven, ...underworld }).map(([name, build]) => [name, { file: `props/${name}.bbmodel`, build }])),
+  ...Object.fromEntries(Object.entries({ ...props, ...chests, ...sewers, ...catacombs, ...caves, ...dwarven, ...underworld, ...bossDoors }).map(([name, build]) => [name, { file: `props/${name}.bbmodel`, build }])),
   ...Object.fromEntries(Object.entries(npcs).map(([name, build]) => [name, { file: `npcs/${name}.bbmodel`, build }])),
   ...Object.fromEntries(Object.entries(traps).map(([name, build]) => [name, { file: `traps/${name.replace('trap_', '')}.bbmodel`, build }])),
   ...Object.fromEntries(Object.entries({ ...items, ...armors, ...artefacts }).map(([name, build]) => [name, { file: `items/${name}.bbmodel`, build }])),

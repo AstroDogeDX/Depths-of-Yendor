@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { WEAPONS, OFFHANDS, SHIELDS, BOWS, ARROWS, THROWN } from './defs.js';
+import { WEAPONS, OFFHANDS, SHIELDS, BOWS, ARROWS, THROWN, bossKeyOf } from './defs.js';
 import { buildBBModel } from './bbmodel.js';
 import { MODEL_PX, ITEM_MIN_SIZE } from '../config.js';
 
@@ -37,12 +37,13 @@ export function buildWeaponMesh(model) {
 }
 
 // Floor items are Blockbench projects too: one per kind, except armour and artefacts (one per type), food and pack
-// expansions (one per type) and keys (the iron key's `key`, `key_gold` and `key_boss`).
+// expansions (one per type) and keys (the iron key's `key`, `key_gold`, and each boss's own: see BOSS_KEYS).
 const ITEM_FILES = import.meta.glob('../../assets/models/items/*.bbmodel', { import: 'default', eager: true });
 const itemCache = new Map();
 const itemModelName = (item) =>
   item.kind === 'armor' ? `armor_${item.type}` : ['food', 'artefact', 'container'].includes(item.kind) ? item.type
-    : item.kind === 'key' && item.type !== 'iron' ? `key_${item.type}` : item.kind;
+    : item.kind === 'key' && item.type === 'boss' ? bossKeyOf(item).model
+      : item.kind === 'key' && item.type !== 'iron' ? `key_${item.type}` : item.kind;
 // Parts on a "_tint" texture are painted in greys and take the item's colour; some also glow in it.
 const TINT_GLOW = { potion: 0.25, ring: 0.6 };
 // Lowest point of an item lying in the world, relative to the height it is placed (and bobs) at.

@@ -216,6 +216,18 @@ function gridHash(depth, x, y, salt) {
   return (h ^ (h >>> 15)) >>> 0;
 }
 
+/**
+ * How much of the next theme is worked in at (x, z), in metres, on a boss floor that does (see `blend` in arenas.js): its
+ * tiles' shares, run smoothly from one tile's middle to the next.
+ */
+function blendShare({ w, h, blend }) {
+  const at = (i, j) => (i < 0 || j < 0 || i >= w || j >= h ? 0 : blend.mix[j * w + i]);
+  return (x, z) => {
+    const fx = x / TILE - 0.5, fz = z / TILE - 0.5, i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j;
+    return (at(i, j) * (1 - u) + at(i + 1, j) * u) * (1 - v) + (at(i, j + 1) * (1 - u) + at(i + 1, j + 1) * u) * v;
+  };
+}
+
 /** A theme's door: a prop with moving parts (see tools/modelgen/doorkit.mjs, and buildDoor). */
 const doorModel = (theme) => `door_${theme.style}`;
 
@@ -252,14 +264,16 @@ export function buildLevelMeshes(data) {
 
   // Rough rock (see roughRock.js), calm round whatever is fixed flat to a wall or stands across a passage from wall to
   // wall, the chests backed up against them, and about the shop. A theme whose `rough` is 'tunnels' is a temple dug
-  // into the rock: rough passages between rooms of masonry.
-  const rough = theme.rough ? roughRock(data, [
+  // into the rock: rough passages between rooms of masonry. Where a boss floor works in the next theme and its rock is
+  // rough, it's rough there, as much as that theme is worked in (see `blend`).
+  const blendRough = !theme.rough && data.blend?.theme.rough ? blendShare(data) : null;
+  const rough = theme.rough || blendRough ? roughRock(data, [
     ...(data.decor ?? []).filter((p) => p.wall).map((p) => ({ x: p.x * TILE, z: p.y * TILE, r: 1.6 })),
     ...(data.decor ?? []).filter((p) => p.span).map((p) => ({ x: p.x * TILE, z: p.y * TILE, r: 2.1 })),
     ...(data.chests ?? []).map((c) => ({ x: c.px * TILE, z: c.py * TILE, r: 1.5 })),
     ...(data.shop ? [...data.shop.props, data.shop.keeper].map((p) => ({ x: p.x * TILE, z: p.y * TILE, r: 2 })) : []),
     ...(data.shop?.sconces ?? []).map((s) => ({ x: s.x, z: s.z, r: 1.4 })),
-  ], { builtRooms: theme.rough === 'tunnels' }) : null;
+  ], { builtRooms: theme.rough === 'tunnels', region: blendRough }) : null;
   // The walls, floors and vaults come in variants of their textures (see variants in texturePaint.js), each a mesh of
   // its own. Every corner of the grid has a flavour (one lattice of them for the floors, another for the vaults and
   // another for the walls), and a tile of floor or vault takes the variant painted with its four corners' flavours
@@ -875,7 +889,8 @@ function buildPedestal(p, stoneMat) {
 
 /**
  * The wall lights' flames, sconces and all (`violet`: burning violet). The shop's are marked `shop`. A room may bring
- * its own (`sconces`, an arena's: see arenas.js), in place of one or two on its walls at random.
+ * its own (`sconces`, an arena's: see arenas.js), in place of one or two on its walls at random, each the theme's kind
+ * of fitting or its own (`kind`: a FITTINGS name).
  */
 function buildSconces(data, group, rng, isWall, rough, violet) {
   const spots = [];
@@ -926,7 +941,7 @@ function buildSconces(data, group, rng, isWall, rough, violet) {
   const lightsOf = data.theme.lights;
   const flames = [];
   for (const s of spots) {
-    const kind = s.blue || !lightsOf ? 'sconce' : rng.pick(lightsOf), fit = FITTINGS[kind];
+    const kind = s.kind ?? (s.blue || !lightsOf ? 'sconce' : rng.pick(lightsOf)), fit = FITTINGS[kind];
     const template = kind !== 'sconce' ? propTemplate(kind) : s.blue ? blueSconceTemplate : sconceTemplate;
     const sg = template.clone();
     const fire = new THREE.Vector3().fromArray(template.userData.anchors.flame);
@@ -990,7 +1005,8 @@ function lightUp(l, src, w) {
  * behind the rest fades out, then fades in again at the nearest one without a light; one whose source is still about
  * as near as the others stays put, so they don't shuffle back and forth. The first call gives them out at once. Call
  * it every frame; a flame's own flicker sets its light's strength (times `userData.w`, how far faded in). The shop's
- * blue flames count as nearer than they are, while you're near them (SHOP_PULL).
+ * blue flames count as nearer than they are, while you're near them (SHOP_PULL). A source may move (`moving`: the
+ * Forgotten Jailer's lantern, whose light goes with it), or go (`gone`: its light fades out, to be given elsewhere).
  */
 export function shareLights(lights, share, x, z, dt) {
   const dist = (src) => {
@@ -1009,9 +1025,10 @@ export function shareLights(lights, share, x, z, dt) {
     return;
   }
   for (const l of lights) {
-    const u = l.userData, stay = u.src && dist(u.src) <= share.near;
+    const u = l.userData, stay = u.src && !u.src.gone && dist(u.src) <= share.near;
     u.w = stay ? Math.min(1, u.w + dt * LIGHT_FADE) : Math.max(0, u.w - dt * LIGHT_FADE);
     if (u.w === 0) lightUp(l, share.want.find((src) => !src.light) ?? null, 0);
+    if (u.src?.moving) l.position.copy(u.src.pos);
     if (u.src && !u.src.flame) l.intensity = u.base * u.w;
   }
 }

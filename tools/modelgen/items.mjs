@@ -26,6 +26,7 @@ const ITEM_PAL = {
   moss: P('#041406', '#0a260c', '#124016', '#1e5e22', '#348232', '#7abc6a'),
   blackIron: P('#0a0b0e', '#14161a', '#1f2227', '#2c3036', '#3c4148', '#50565f', '#6a717b'),
   taint: P('#3a0630', '#6a0e56', '#a01c84', '#d836b4', '#ff6ad8', '#ffc8f0'),
+  grave: P('#2a3606', '#4a600c', '#78961a', '#a8c834', '#d4ee70', '#f4ffc8'), // the Jailer's sickly light (see bossdoors.mjs)
 };
 
 const MATS = {
@@ -84,6 +85,7 @@ const MATS = {
   gemTint: gem(PAL.grey),
   ruby: gem(ITEM_PAL.ruby),
   taintGem: gem(ITEM_PAL.taint),
+  graveGem: gem(ITEM_PAL.grave),
   blackIron: (c) => ramp(ITEM_PAL.blackIron, 0.42 + 0.14 * patches(c.p, 175, 0.6) + bevel(c, 0.25) + 0.1 * c.n.y, c.ax, c.ay),
   apple(c) {
     const { p, n } = c;
@@ -214,6 +216,27 @@ const roundLoop = (a, b, r, to3) => {
 const DEG = Math.PI / 180;
 const axisOf = (rotation) => new THREE.Vector3(0, 1, 0).applyEuler(new THREE.Euler(...rotation.map((d) => d * DEG), 'ZYX')).toArray();
 
+/**
+ * A boss key, standing on edge (see key_boss): a great key of black iron, its bow a ring of spikes round a glowing gem
+ * (`gem`, its material), a double collar, a long shaft and a heavy bit cut with three wards.
+ */
+function bossKey(m, gem) {
+  const bow = [-10, 0, 0];
+  m.mesh('bow', tube(circle(3.3, 12, bow), { half: 0.75, side: [0, 0, 1], closed: true }), { mat: 'blackIron' });
+  [Math.PI, Math.PI / 2, -Math.PI / 2, (3 * Math.PI) / 4, (-3 * Math.PI) / 4].forEach((a, i) => {
+    const c = Math.cos(a), s = Math.sin(a);
+    m.mesh(`spike_${i + 1}`, tube([[bow[0] + c * 3.6, s * 3.6, 0], [bow[0] + c * 6.4, s * 6.4, 0]], { half: (f) => 0.75 * (1 - f) + 0.08, side: [0, 0, 1] }), { mat: 'blackIron' });
+  });
+  m.mesh('gem', loft([apex(6, [bow[0], 0, -1.3]), circle(2.1, 6, bow), apex(6, [bow[0], 0, 1.3])]), { mat: gem });
+  m.mesh('collar', tube([[-6.6, 0, 0], [-5.4, 0, 0]], { half: 1.15, sides: 8 }), { mat: 'blackIron' });
+  m.mesh('collar_2', tube([[-4.4, 0, 0], [-3.7, 0, 0]], { half: 0.95, sides: 8 }), { mat: 'blackIron' });
+  m.mesh('shaft', tube([[-6.7, 0, 0], [10.6, 0, 0]], { half: 0.7, sides: 8 }), { mat: 'blackIron' });
+  m.cube('bit', [6.4, -3.6, -0.45], [10.4, -0.4, 0.45], { mat: 'blackIron' });
+  m.cube('ward_1', [6.4, -5.0, -0.45], [7.3, -3.6, 0.45], { mat: 'blackIron' });
+  m.cube('ward_2', [8.0, -4.6, -0.45], [8.8, -3.6, 0.45], { mat: 'blackIron' });
+  m.cube('ward_3', [9.5, -5.0, -0.45], [10.4, -3.6, 0.45], { mat: 'blackIron' });
+}
+
 export const items = {
   potion: defineModel('potion', MATS, (m) => {
     // Round-bottomed flask, walked from the bottom up and over the cork: liquid fills the bowl up to y 1.6,
@@ -296,25 +319,10 @@ export const items = {
     m.cube('tooth', [5.6, -3.4, -0.35], [6.4, -2.6, 0.35], { mat: 'iron' });
   }),
 
-  key_boss: defineModel('key_boss', MATS, (m) => {
-    // The boss key the Maledicted Ooze leaves, for the chained door out of its lair: a great key of black iron standing on
-    // edge, its bow a ring of spikes round a glowing gem of the ooze's taint, a double collar, a long shaft and a heavy bit
-    // cut with three wards.
-    const bow = [-10, 0, 0];
-    m.mesh('bow', tube(circle(3.3, 12, bow), { half: 0.75, side: [0, 0, 1], closed: true }), { mat: 'blackIron' });
-    [Math.PI, Math.PI / 2, -Math.PI / 2, (3 * Math.PI) / 4, (-3 * Math.PI) / 4].forEach((a, i) => {
-      const c = Math.cos(a), s = Math.sin(a);
-      m.mesh(`spike_${i + 1}`, tube([[bow[0] + c * 3.6, s * 3.6, 0], [bow[0] + c * 6.4, s * 6.4, 0]], { half: (f) => 0.75 * (1 - f) + 0.08, side: [0, 0, 1] }), { mat: 'blackIron' });
-    });
-    m.mesh('gem', loft([apex(6, [bow[0], 0, -1.3]), circle(2.1, 6, bow), apex(6, [bow[0], 0, 1.3])]), { mat: 'taintGem' });
-    m.mesh('collar', tube([[-6.6, 0, 0], [-5.4, 0, 0]], { half: 1.15, sides: 8 }), { mat: 'blackIron' });
-    m.mesh('collar_2', tube([[-4.4, 0, 0], [-3.7, 0, 0]], { half: 0.95, sides: 8 }), { mat: 'blackIron' });
-    m.mesh('shaft', tube([[-6.7, 0, 0], [10.6, 0, 0]], { half: 0.7, sides: 8 }), { mat: 'blackIron' });
-    m.cube('bit', [6.4, -3.6, -0.45], [10.4, -0.4, 0.45], { mat: 'blackIron' });
-    m.cube('ward_1', [6.4, -5.0, -0.45], [7.3, -3.6, 0.45], { mat: 'blackIron' });
-    m.cube('ward_2', [8.0, -4.6, -0.45], [8.8, -3.6, 0.45], { mat: 'blackIron' });
-    m.cube('ward_3', [9.5, -5.0, -0.45], [10.4, -3.6, 0.45], { mat: 'blackIron' });
-  }, { glow: ['taintGem'] }),
+  // The boss keys (BOSS_KEYS in src/items/defs.js): the Maledicted Ooze's, its gem of the ooze's taint, and the Forgotten
+  // Jailer's, burning with his grave light, each the glow of its door's lock (see bossdoors.mjs).
+  key_boss: defineModel('key_boss', MATS, (m) => bossKey(m, 'taintGem'), { glow: ['taintGem'] }),
+  key_boss_jailer: defineModel('key_boss_jailer', MATS, (m) => bossKey(m, 'graveGem'), { glow: ['graveGem'] }),
 
   key_gold: defineModel('key_gold', MATS, (m) => {
     // A gold key standing on edge, for a locked chest, finely wrought: a trefoil bow set with a ruby, a ringed collar,

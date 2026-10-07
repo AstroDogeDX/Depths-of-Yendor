@@ -16,15 +16,14 @@ const CAT_PAL = {
   void: P('#030303', '#08080a', '#0e0e10'),
   blood: P('#1a0806', '#2e0e0a', '#44150f'),
   oak: P('#0e0a07', '#17110b', '#211810', '#2c2016', '#382a1c', '#453423', '#53402c'), // old oak, near black
-  taint: P('#4a0a3a', '#7a1462', '#b0228c', '#e040c0', '#ff7ae0', '#ffd0f4'),
-  ooze: P('#0e0316', '#1c0729', '#2c0c3e', '#3e1456', '#55206f', '#8a4aa6'),
+  parchment: P('#4a3e2a', '#685a40', '#887a58', '#a69772', '#c0b28c'),
 };
 const PIT = -96; // the floor of a spike pit
 const VAULT = 179; // the ceiling
 
 const shadeBone = (c, lift = 0) => ramp(CAT_PAL.bone, 0.5 + 0.18 * patches(c.p, 900, 0.6) + bevel(c, 0.15) + lift, c.ax, c.ay);
 
-const MATS = {
+export const MATS = {
   ...MAT,
   bone: (c) => shadeBone(c),
   // A skull: bone, with eye sockets and a nose hole on its face (`info.inv` takes a point into the skull's own
@@ -138,20 +137,18 @@ const MATS = {
     const iron = flat ? u < 0.95 && (u > 0.45 || f < 0.22 || f > 0.78) : u < 0.3;
     return iron ? MAT.rustyIron(c) : [0, 0, 0, 0];
   },
-  // The Maledicted Ooze's taint, glowing (the boss door's keyhole), and its filth, seeped under the door.
-  taintGlow: (c) => ramp(CAT_PAL.taint, 0.6 + 0.3 * patches(c.p, 970, 1), c.ax, c.ay),
-  ooze(c) {
-    const { p } = c;
-    let v = 0.4 + 0.25 * patches(p, 971, 0.2) + 0.2 * c.n.y;
-    if (noise3(p.x * 0.3, 0, p.z * 0.3, 972) > 0.7) v = 0.85; // a wet glint
-    return ramp(CAT_PAL.ooze, v, c.ax, c.ay);
+  // A ledger's pages, yellowed, ruled with lines of faded ink (on its upper faces).
+  parchment(c) {
+    const { p, n } = c;
+    if (n.y > 0.7 && fract(p.z / 2.2) < 0.3 && rand(Math.floor(p.z / 2.2), Math.floor(p.x / 3), 975) > 0.25) return ramp(CAT_PAL.parchment, 0.2, c.ax, c.ay);
+    return ramp(CAT_PAL.parchment, 0.6 + 0.15 * patches(p, 976, 0.5), c.ax, c.ay);
   },
 };
 
 // ---------------------------------------------------------------- shared parts
 
 /** A skull `s` pixels across at `at`, turned by `rot` (degrees, as Blockbench rotations), facing +z. */
-function skull(m, name, at, { s = 9, rot = [0, 0, 0] } = {}) {
+export function skull(m, name, at, { s = 9, rot = [0, 0, 0] } = {}) {
   const inv = new THREE.Matrix4().compose(new THREE.Vector3(...at),
     new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot.map((d) => (d * Math.PI) / 180), 'ZYX')), new THREE.Vector3(1, 1, 1)).invert();
   m.mesh(`${name}_cranium`, revolve([[0, -0.25 * s], [0.45 * s, -0.3 * s], [0.58 * s, 0.05 * s], [0.6 * s, 0.35 * s], [0.45 * s, 0.62 * s], [0, 0.72 * s]], { sides: 8 }),
@@ -202,7 +199,7 @@ function facing(pts, out) {
  * middle, in `runs` straight runs `w` either side of its line, on the side `s` (±1) faces: links painted on strips
  * (chainRun in MATS), each run going on where the last left off. `name(i)` names the i-th run (from 1).
  */
-function chainRun(m, name, a, b, s, { sag = 0, runs = 6, w = 2.2 } = {}) {
+export function chainRun(m, name, a, b, s, { sag = 0, runs = 6, w = 2.2 } = {}) {
   const pt = (t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t - sag * 4 * t * (1 - t), s * (a[2] + (b[2] - a[2]) * t)];
   let off = 0;
   for (let j = 0; j < runs; j++) {
@@ -220,7 +217,7 @@ function chainRun(m, name, a, b, s, { sag = 0, runs = 6, w = 2.2 } = {}) {
  * points, with studs between them and a heavy ring to pull it by. `lock(zs)` fills its lock group, and `extra(zs)`
  * adds to its frame (`zs(s, a, b)`: a to b px out from the middle, on the side s faces).
  */
-function oakDoor(m, lock, extra = null) {
+export function oakDoor(m, lock, extra = null) {
   const OW = 53, SPRING = 124, RISE = 28, BACK = 40; // the opening, where its arch springs, and the arch's rise inside and out
   const zs = (s, a, b) => (s > 0 ? [a, b] : [-b, -a]);
   m.group('frame', () => {
@@ -505,31 +502,77 @@ export const catacombs = {
     }));
   }, { density: 1 }),
 
-  door_boss: defineModel('door_boss', MATS, (m) => {
-    // The door out of a boss's lair (an arena's: see src/dungeon/arenas.js), opened only by the key its boss leaves:
-    // the Catacombs' door, where the Sewers give way to them, chained shut. Two heavy chains cross it on each side,
-    // from staples high and low in the jambs, and meet at a great padlock, a skull on its face and its keyhole
-    // glowing with the Maledicted Ooze's taint. Its filth has seeped under the door, and pools on the floor before it
-    // on its side (-z).
-    oakDoor(m, (zs) => bothFaces((s) => {
-      const side = s > 0 ? 'front' : 'back', [b0, b1] = zs(s, 9, 16);
-      for (const [x0, y0, x1, y1, k] of [[-58, 140, 58, 24, 1], [58, 140, -58, 24, 2]]) {
-        for (const [x, y] of [[x0, y0], [x1, y1]]) {
-          m.mesh(`staple_${k}_${x < 0 ? 'left' : 'right'}_${y > 80 ? 'top' : 'bottom'}_${side}`,
-            tube([[x - 3, y - 3, s * 18], [x - 3, y + 3, s * 20], [x + 3, y + 3, s * 20], [x + 3, y - 3, s * 18]], { half: 1.1, side: [0, 0, 1] }), { mat: 'rustyIron' });
-        }
-        // Each chain from its upper staple down to the padlock, and on from it to the lower one.
-        chainRun(m, (i) => `chain_${k}_upper_${i}_${side}`, [x0, y0, 19], [0, 82, 12], s, { sag: 4, runs: 4, w: 2.6 });
-        chainRun(m, (i) => `chain_${k}_lower_${i}_${side}`, [0, 82, 12], [x1, y1, 19], s, { sag: 4, runs: 4, w: 2.6 });
+  // --- The Forgotten Jailer's cell block (the Catacombs' boss floor: see src/dungeon/arenas.js). The gates and breaches
+  // stand in the gaps through its walls, as doors do in doorways: their origin on the floor at the middle of the gap,
+  // its passage along z. Nothing of them is solid, and they leave the way clear for the Jailer, 2.5 m tall.
+
+  cell_gate: defineModel('cell_gate', MATS, (m) => {
+    // A cell's doorway, at the end of the gap toward the aisle (+z): stone jambs against the gap's sides and a lintel
+    // across its top, and its barred iron gate thrown open on its hinges and hanging back against the aisle's wall, the
+    // bars rusted where they stand.
+    for (const s of [-1, 1]) m.cube(`jamb_${s < 0 ? 'left' : 'right'}`, [s < 0 ? -64 : 54, 0, 48], [s < 0 ? -54 : 64, 168, 66], { mat: 'voussoir', info: { block: 50 + s } });
+    m.cube('lintel', [-64, 168, 47], [64, 179, 66], { mat: 'voussoir', info: { block: 52 } });
+    m.cube('sill', [-54, 0, 50], [54, 1.5, 64], { mat: 'voussoir', info: { block: 53 } });
+    // (The gate, made shut across the opening and swung round on its hinges at the left jamb, back against the wall.)
+    const hinge = { origin: [-53, 0, 67], rotation: [0, -173, 0] };
+    for (let k = 0; k < 8; k++) {
+      const x = -46 + k * 13;
+      m.cube(`bar_${k + 1}`, [x - 1.3, 3, 63.7], [x + 1.3, 158, 66.3], { mat: 'rustyIron', ...hinge });
+    }
+    for (const y of [12, 82, 150]) m.cube(`strap_${y}`, [-53, y - 3, 63.2], [53, y + 3, 66.8], { mat: 'rustyIron', ...hinge });
+    m.cube('stile_hinge', [-53, 3, 63.2], [-49, 158, 66.8], { mat: 'rustyIron', ...hinge });
+    m.cube('stile_lock', [49, 3, 63.2], [53, 158, 66.8], { mat: 'rustyIron', ...hinge });
+    m.cube('lock_box', [37, 70, 61.5], [50, 86, 67], { mat: 'rustyIron', ...hinge });
+    for (const y of [20, 140]) m.cube(`hinge_${y}`, [-59, y - 4, 62], [-51, y + 4, 69], { mat: 'rustyIron' });
+  }, { density: 1 }),
+
+  breach: defineModel('breach', MATS, (m) => {
+    // A hole knocked through a wall between two cells: blocks broken off short jutting from its sides, a ragged edge left
+    // along its top, and the rubble heaped either side of it and strewn through it.
+    let n = 0;
+    for (const s of [-1, 1]) {
+      for (let row = 0; row < 8; row++) {
+        const k = row * 2 + (s > 0 ? 1 : 0), y0 = row * 21;
+        if (rand(k, 983) < 0.3) continue;
+        const out = 3 + rand(k, 980) * 9, z0 = -64 + rand(k, 981) * 30, z1 = 64 - rand(k, 982) * 30;
+        m.cube(`stub_${++n}`, [s < 0 ? -64 : 64 - out, y0 + 1, z0], [s < 0 ? -64 + out : 64, Math.min(168, y0 + 20), z1],
+          { mat: 'ashlar', origin: [s * 64, y0 + 10, 0], rotation: [0, (rand(k, 984) - 0.5) * 8, (rand(k, 985) - 0.5) * 10] });
       }
-      m.cube(`padlock_${side}`, [-9, 66, b0], [9, 86, b1], { mat: 'lockIron', info: { kx: 0, ky: 200 } });
-      m.mesh(`padlock_shackle_${side}`, tube([[-6, 85, s * 12.5], [-6, 93, s * 12.5], [0, 97, s * 12.5], [6, 93, s * 12.5], [6, 85, s * 12.5]], { half: 1.6, side: [0, 0, 1] }), { mat: 'rustyIron' });
-      skull(m, `padlock_skull_${side}`, [0, 79.5, s * 16.2], { s: 7, rot: s > 0 ? [0, 0, 0] : [0, 180, 0] });
-      const [g0, g1] = zs(s, 16, 16.6);
-      m.cube(`keyhole_${side}`, [-1.2, 67.5, g0], [1.2, 72.5, g1], { mat: 'taintGlow' });
-    }), () => {
-      m.mesh('ooze', revolve([[0, 0], [30, 0], [27, 0.8], [12, 1.3], [0, 1.5]], { sides: 10 }), { mat: 'ooze', origin: [6, 0, -27] });
-      m.mesh('ooze_2', revolve([[0, 0], [14, 0], [12, 0.7], [0, 1.1]], { sides: 8 }), { mat: 'ooze', origin: [-30, 0, -22] });
-    });
-  }, { density: 1, glow: ['taintGlow'], double: ['chainRun', 'ooze'] }),
+    }
+    for (let i = 0; i < 6; i++) {
+      const x = -55 + i * 22 + rand(i, 986) * 6, d = 4 + rand(i, 987) * 7;
+      m.cube(`lip_${i + 1}`, [x - 9, 179 - d, -60 + rand(i, 988) * 20], [x + 9, 179, 60 - rand(i, 989) * 20], { mat: 'ashlar' });
+    }
+    [[-78, 34], [76, 30], [4, 16]].forEach(([z, r], i) => m.mesh(`heap_${i + 1}`,
+      revolve([[0, 0], [r, 0], [r * 0.7, r * 0.18], [r * 0.3, r * 0.3], [0, r * 0.34]], { sides: 7 }), { mat: 'dust', origin: [rand(i, 990) * 30 - 15, 0, z] }));
+    for (let i = 0; i < 14; i++) {
+      const x = (rand(i, 991) - 0.5) * 100, z = (rand(i, 992) - 0.5) * 200, s = 5 + rand(i, 993) * 9;
+      m.cube(`block_${i + 1}`, [x - s, 0, z - s * 0.7], [x + s, s * 1.1, z + s * 0.7],
+        { mat: 'voussoir', info: { block: 60 + i }, origin: [x, 0, z], rotation: [(rand(i, 994) - 0.5) * 30, rand(i, 995) * 180, (rand(i, 996) - 0.5) * 30] });
+    }
+  }, { density: 1 }),
+
+  jailer_table: defineModel('jailer_table', MATS, (m) => {
+    // The Forgotten Jailer's post: a heavy table of dark planks, his ledger open on it (the names of those he kept), an
+    // inkpot and quill, a tankard, a candle burning down on a dish, and a stool drawn up to it.
+    const H = 50;
+    m.cube('top', [-50, H - 4, -24], [50, H, 24], { mat: 'oak' });
+    for (const [x, z] of [[-44, -18], [44, -18], [-44, 18], [44, 18]]) m.cube(`leg_${x < 0 ? 'w' : 'e'}${z < 0 ? 'n' : 's'}`, [x - 3, 0, z - 3], [x + 3, H - 4, z + 3], { mat: 'oak' });
+    m.cube('rail_front', [-44, 8, 15], [44, 13, 21], { mat: 'oak' });
+    m.cube('rail_back', [-44, 8, -21], [44, 13, -15], { mat: 'oak' });
+    m.cube('ledger_cover', [-24, H, -12], [8, H + 1, 10], { mat: 'leather' });
+    m.cube('ledger_page_left', [-23, H + 1, -11], [-8.5, H + 2.4, 9], { mat: 'parchment', origin: [-8, H + 1, 0], rotation: [0, 0, 4] });
+    m.cube('ledger_page_right', [-7.5, H + 1, -11], [7, H + 2.4, 9], { mat: 'parchment', origin: [-8, H + 1, 0], rotation: [0, 0, -4] });
+    m.mesh('inkpot', revolve([[0, 0], [3, 0], [3.2, 3], [1.5, 4.5], [1.5, 5.5], [0, 5.5]], { sides: 6 }), { mat: 'void', origin: [16, H, -10] });
+    m.mesh('quill', tube([[16, H + 5, -10], [22, H + 15, -14]], { half: (f) => 0.4 + 1.1 * f, side: [0, 0, 1] }), { mat: 'wax' });
+    m.mesh('tankard', revolve([[0, 0], [4.5, 0], [4.2, 10], [3.6, 10], [3.8, 1.2], [0, 1.2]], { sides: 8 }), { mat: 'rustyIron', origin: [30, H, 8] });
+    m.mesh('tankard_handle', tube([[34, H + 8, 8], [37, H + 6, 8], [37, H + 3, 8], [34, H + 2, 8]], { half: 0.8, side: [0, 0, 1] }), { mat: 'rustyIron' });
+    m.mesh('dish', revolve([[0, 0], [6, 0], [6.5, 1.5], [5.5, 1.5], [0, 0.8]], { sides: 8 }), { mat: 'brass', origin: [36, H, -12] });
+    candle(m, 1, [36, H + 1, -12], 7, 1.8);
+    m.mesh('stool_seat', revolve([[0, 0], [12, 0], [12, 3], [0, 3]], { sides: 8 }), { mat: 'oak', origin: [-6, 30, 40] });
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 + 0.3;
+      m.mesh(`stool_leg_${i + 1}`, tube([[-6 + Math.cos(a) * 8, 30, 40 + Math.sin(a) * 8], [-6 + Math.cos(a) * 11, 0, 40 + Math.sin(a) * 11]], { half: 1.5, sides: 4 }), { mat: 'oak' });
+    }
+  }, { density: 1 }),
 };

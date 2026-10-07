@@ -288,6 +288,52 @@ export class Sfx {
     this.noise({ dur: 1.4, vol: 0.3, freq: 1200, freq2: 150, q: 0.9, delay: 0.2 });
     for (let i = 0; i < 5; i++) this.noise({ dur: 0.18, vol: 0.14, freq: 500 + Math.random() * 600, freq2: 200, q: 2, delay: 0.5 + i * 0.22 });
   }
+  // The Forgotten Jailer (see monsters/bosses.js), each `vol` 0..1 by how near he is: his chain whirled over his head
+  // for `dur` seconds, `turns` times, quickening (a whoosh each half turn, as his model swings it: see monsters/models.js),
+  // flung out rattling, clanking off stone, and yanked taut on what it caught; his bellow, his stamp as he sets off on a
+  // charge, and his crash into a wall; and his collapse, bones and chain clattering.
+  whirl(vol = 1, dur = 1, turns = 1.5) {
+    const n = Math.round(turns * 2);
+    for (let k = 1; k <= n; k++) {
+      const at = dur * (Math.sqrt(1 + (1.5 * k) / turns) - 1);
+      this.noise({ dur: 0.2, vol: 0.09 * vol * (0.6 + 0.4 * (k / n)), freq: 450 + k * 70, freq2: 1200 + k * 90, q: 2, delay: Math.max(0, at - 0.06) });
+    }
+  }
+  chainOut(vol = 1) {
+    for (let i = 0; i < 6; i++) this.noise({ dur: 0.05, vol: 0.12 * vol, freq: 2400 + Math.random() * 1600, q: 3, delay: i * 0.035 });
+    this.noise({ dur: 0.25, vol: 0.12 * vol, freq: 900, freq2: 2600, q: 1 });
+  }
+  clank(vol = 1) {
+    this.tone({ f: 1250, f2: 980, dur: 0.18, type: 'triangle', vol: 0.12 * vol });
+    this.tone({ f: 2400, dur: 0.08, type: 'triangle', vol: 0.05 * vol });
+    this.noise({ dur: 0.12, vol: 0.2 * vol, freq: 2600, q: 1.5 });
+  }
+  yank() {
+    this.noise({ dur: 0.14, vol: 0.3, freq: 1800, freq2: 600, q: 1.2 });
+    for (let i = 0; i < 4; i++) this.noise({ dur: 0.04, vol: 0.14, freq: 2800 + Math.random() * 1200, q: 3, delay: 0.05 + i * 0.04 });
+    this.tone({ f: 180, f2: 90, dur: 0.18, type: 'square', vol: 0.12 });
+  }
+  bellow(vol = 1) {
+    this.tone({ f: 82, f2: 58, dur: 1.1, type: 'sawtooth', vol: 0.2 * vol });
+    this.tone({ f: 123, f2: 86, dur: 0.9, type: 'sawtooth', vol: 0.1 * vol });
+    this.noise({ dur: 1.0, vol: 0.16 * vol, freq: 420, freq2: 220, q: 3 });
+  }
+  stomp(vol = 1) {
+    for (const d of [0, 0.16]) {
+      this.tone({ f: 70, f2: 40, dur: 0.18, type: 'sine', vol: 0.3 * vol, delay: d });
+      this.noise({ dur: 0.1, vol: 0.18 * vol, freq: 260, type: 'lowpass', q: 0.8, delay: d });
+    }
+  }
+  crash(vol = 1) {
+    this.tone({ f: 70, f2: 30, dur: 0.6, type: 'sine', vol: 0.4 * vol });
+    this.noise({ dur: 0.5, vol: 0.36 * vol, freq: 700, freq2: 160, type: 'lowpass', q: 0.7 });
+    for (let i = 0; i < 4; i++) this.noise({ dur: 0.08, vol: 0.12 * vol, freq: 1200 + Math.random() * 1500, q: 2, delay: 0.1 + i * 0.07 + Math.random() * 0.04 });
+  }
+  rattle() {
+    this.bellow(0.6);
+    for (let i = 0; i < 10; i++) this.noise({ dur: 0.06, vol: 0.12, freq: 1800 + Math.random() * 2600, q: 2.5, delay: 0.25 + i * 0.07 + Math.random() * 0.05 });
+    this.noise({ dur: 0.35, vol: 0.3, freq: 300, type: 'lowpass', q: 0.8, delay: 0.55 });
+  }
   /** A malediction taking hold of you: a low, sour chord, falling. */
   maledict() {
     [196, 233, 277].forEach((f, i) => this.tone({ f, f2: f * 0.7, dur: 0.9, type: 'triangle', vol: 0.06, delay: i * 0.05 }));

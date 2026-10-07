@@ -3481,7 +3481,7 @@
 			"uuid": "25941330-7a01-4b75-a775-c9d332954b4f"
 		},
 		{
-			"name": "eye_left_iris",
+			"name": "eye_right_iris",
 			"color": 0,
 			"origin": [-21.577019154261276, 74, 65.11076942746914],
 			"rotation": [90, -18.334649444186343, 0],
@@ -3829,7 +3829,7 @@
 			"uuid": "c535f9e6-e107-4411-a404-1ff0dbe50897"
 		},
 		{
-			"name": "eye_left_pupil",
+			"name": "eye_right_pupil",
 			"box_uv": false,
 			"render_order": "default",
 			"locked": false,
@@ -3870,7 +3870,7 @@
 			"uuid": "9922245d-7532-4d33-aa30-33644f052db8"
 		},
 		{
-			"name": "eye_right_iris",
+			"name": "eye_left_iris",
 			"color": 0,
 			"origin": [20.004396046491777, 76, 64.66877409853183],
 			"rotation": [90, 17.188733853924695, 0],
@@ -4218,7 +4218,7 @@
 			"uuid": "e6dd8cea-465b-44f8-a3b1-2ae47bc8f191"
 		},
 		{
-			"name": "eye_right_pupil",
+			"name": "eye_left_pupil",
 			"box_uv": false,
 			"render_order": "default",
 			"locked": false,
