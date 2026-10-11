@@ -3,7 +3,7 @@ import { TILE, MAX_DEPTH, THEMES, themeForDepth, isShopDepth, danger } from '../
 import { MONSTERS, spawnTable } from '../monsters/defs.js';
 import { randomItem, makeItem, chestLoot, goldPile } from '../items/generate.js';
 import { T } from './tiles.js';
-import { ROOM_TYPES } from './rooms.js';
+import { ROOM_TYPES, oublietteDesign } from './rooms.js';
 import { digChannels } from './channels.js';
 import { digPools, growPool, dryMask } from './pools.js';
 import { decorate, faceKey } from './decor.js';
@@ -24,6 +24,7 @@ const FIXTURES = new Set([T.STAIRS_UP, T.STAIRS_DOWN, T.PEDESTAL]);
 const CHEST_BACK = 0.25; // tiles a chest stands back from the middle of its tile, toward the wall behind it
 const SPRAWL = 0.6; // the chance of each extra side room a theme may add (see planRooms)
 const SIGN_OFF = 0.64; // tiles from the middle of a shop's door to each of the blue flames beside it (see shopSigns)
+const OUBLIETTE = 0.35; // the chance of an oubliette on each Catacombs floor that may have one (see oubliette)
 
 /**
  * Pixel Dungeon-style layout, built graph-first:
@@ -41,6 +42,7 @@ const SIGN_OFF = 0.64; // tiles from the middle of a shop's door to each of the 
  * opts.artefact       artefact type for this floor's shrine, if any
  * opts.wares          what its shop has on its plinths, if it has a shop: { container, artefact } (see shopStock)
  * opts.extraBranches  extra branch specs, e.g. [{ type: 'standard', locked: true }]
+ * opts.allSpecial     every special room the floor could have (see specialRooms), as the dev tools ask
  *
  * A branch spec may name its parent room's type, e.g. { type: 'shop', parent: 'entrance' }, or with `offBranch` hang
  * off another branch where there is one. A `locked` branch is behind a locked door, and nothing hangs off it.
@@ -51,6 +53,9 @@ export function generateLevel(seed, depth, opts = {}) {
   const arena = arenaFor(depth);
   if (arena) return arena.build(seed, depth);
   const rng = new RNG(`${seed}:depth:${depth}`);
+  const all = !!opts.allSpecial;
+  const design = (d) => (oubliette(seed, d, all) ? oublietteDesign(seed, d) : null);
+  opts = { ...opts, special: specialRooms(seed, depth, all), oubliette: design(depth), oublietteBelow: design(depth + 1) };
   for (let attempt = 0; attempt < 100; attempt++) {
     // Pools and the passages' dressing draw on streams of their own, so how they're laid never moves anything else on
     // the floor (the traps a save keeps track of, say).
@@ -84,7 +89,82 @@ function planRooms(rng, depth, opts) {
   // side room where there is one, so the deeper floors grow wings of rooms off the loop.
   const sprawl = THEMES.indexOf(themeForDepth(depth));
   for (let i = 0; i < sprawl; i++) if (rng.chance(SPRAWL)) branches.push({ type: 'standard', offBranch: true });
+  // Special rooms (see specialRooms), side rooms of their own kind, if there's room for them; and an oubliette's cell,
+  // behind its locked door, or the room over it whose floor has fallen in (see oubliette), which there must be, each
+  // the shape of the oubliette's design.
+  for (const type of opts.special ?? []) branches.push({ type });
+  if (opts.oubliette) branches.push({ type: 'oubliette', required: true, locked: true, design: opts.oubliette });
+  if (opts.oublietteBelow) branches.push({ type: 'oubliette_mouth', required: true, design: opts.oublietteBelow });
   return { loop, branches };
+}
+
+/**
+ * Generates floor `depth` (see generateLevel; `optsFor(depth)` gives each floor's opts), and where it has one of an
+ * oubliette's two rooms, what's to be seen of the other, on the floor above or below, as that floor is laid out: the
+ * cell under the room whose floor has fallen in (`below`), or that room over the cell (`above`). Each is that room alone
+ * (see roomView), and how far it's shifted to line up with this floor's: `dx`, `dy` tiles across, and `up`, a floor up
+ * (1) or down (-1). The level builder builds it where it is (see buildLevelMeshes).
+ */
+export function generateFloor(seed, depth, optsFor = () => ({})) {
+  const data = generateLevel(seed, depth, optsFor(depth));
+  const other = (d, type, here, there, up, reach) => {
+    const o = generateLevel(seed, d, optsFor(d)), room = o.rooms.find((r) => r.type === type), at = o[there];
+    if (!room || !at) return null; // (laid out with other opts since: the dev tools')
+    return { data: roomView(o, room, there, reach), dx: here.x - at.x, dy: here.y - at.y, up };
+  };
+  if (data.pit) data.below = other(depth + 1, 'oubliette', data.pit, 'vaultHole', -1, 0);
+  if (data.vaultHole) data.above = other(depth - 1, 'oubliette_mouth', data.vaultHole, 'pit', 1, 2);
+  return data;
+}
+
+/**
+ * Floor `data` with nothing on it but `room`: its tiles, its walls and its doorways, `reach` tiles of passage beyond
+ * each, what dresses it, its doors, lights and chests, and its share of the oubliette (`keep`: 'pit' or 'vaultHole').
+ * The rest is wall.
+ */
+function roomView(data, room, keep, reach) {
+  const { w, h } = data, mine = new Uint8Array(w * h);
+  for (let y = room.y; y < room.y + room.h; y++) for (let x = room.x; x < room.x + room.w; x++) mine[y * w + x] = 1;
+  let edge = room.doorways.map((d) => ({ x: d.x, y: d.y }));
+  for (const d of edge) mine[d.y * w + d.x] = 1;
+  for (let step = 0; step < reach; step++) {
+    edge = edge.flatMap(({ x, y }) => STEPS.map(([sx, sy]) => ({ x: x + sx, y: y + sy })))
+      .filter(({ x, y }) => !mine[y * w + x] && data.grid[y * w + x] !== T.WALL);
+    for (const t of edge) mine[t.y * w + t.x] = 1;
+  }
+  const near = (x, y) => x >= room.x - 0.01 && y >= room.y - 0.01 && x <= room.x + room.w + 0.01 && y <= room.y + room.h + 0.01;
+  const door = (d) => room.doorways.some((r) => r.x === d.x && r.y === d.y);
+  return {
+    ...data, view: true,
+    grid: data.grid.map((t, i) => (mine[i] ? t : T.WALL)),
+    rooms: [room], doorways: data.doorways.filter(door), doors: data.doors.filter(door),
+    decor: data.decor.filter((p) => near(p.x, p.y)), chests: data.chests.filter((c) => near(c.px, c.py)),
+    up: null, down: null, drop: null, amulet: null, shrine: null, shop: null, channels: [], pools: [],
+    pit: keep === 'pit' ? data.pit : null, vaultHole: keep === 'vaultHole' ? data.vaultHole : null,
+    monsters: [], items: [], traps: [],
+  };
+}
+
+/**
+ * Which special rooms (`special` in rooms.js) floor `depth` has: each it may have (on its theme's floors, from its first
+ * floor on), by its `chance`, or every one of them if `all`. Thrown on a stream of their own, so a floor that has none
+ * is laid out as it would be without them.
+ */
+function specialRooms(seed, depth, all) {
+  const rng = new RNG(`${seed}:depth:${depth}:special`), style = themeForDepth(depth).style;
+  return Object.entries(ROOM_TYPES).filter(([, r]) => r.special && depth >= (r.special.from ?? 1) && (!r.themes || r.themes.includes(style)))
+    .filter(([, r]) => rng.chance(r.special.chance) || all).map(([type]) => type);
+}
+
+/**
+ * Whether floor `depth` has an oubliette (rooms.js): on a Catacombs floor below another (neither of them an arena), by
+ * OUBLIETTE, or for certain if `all`. Thrown from the seed and the depth alone, so the floor above, which must have the
+ * room whose floor has fallen in over it, knows without the floor below being built.
+ */
+function oubliette(seed, depth, all) {
+  const style = themeForDepth(depth).style;
+  if (depth < 2 || depth > MAX_DEPTH || style !== 'catacombs' || themeForDepth(depth - 1).style !== style || arenaFor(depth) || arenaFor(depth - 1)) return false;
+  return all || new RNG(`${seed}:oubliette:${depth}`).chance(OUBLIETTE);
 }
 
 function attemptLevel(rng, depth, opts, stream) {
@@ -302,12 +382,12 @@ function attemptLevel(rng, depth, opts, stream) {
       const parents = rooms.filter((r) => ROOM_TYPES[r.type].branchable && !r.locked && (!spec.parent || r.type === spec.parent));
       const loopParents = parents.filter((r) => r.onLoop), sideParents = spec.offBranch ? parents.filter((r) => !r.onLoop) : [];
       const parent = sideParents.length ? rng.pick(sideParents) : rng.pick(rng.chance(0.7) && loopParents.length ? loopParents : parents);
-      const { w, h } = def.size(rng, depth);
+      const { w, h } = def.size(rng, depth, spec.design);
       const a = rng.range(0, Math.PI * 2);
       const dist = (Math.max(parent.w, parent.h) + Math.max(w, h)) / 2 + rng.int(GAP + 1, GAP + 5);
       const x = Math.round(parent.cx + Math.cos(a) * dist - w / 2), y = Math.round(parent.cy + Math.sin(a) * dist - h / 2);
       if (!fits(x, y, w, h)) continue;
-      const r = makeRoom(spec.type, x, y, w, h, { onLoop: false, locked: !!spec.locked, sprawl: !!spec.offBranch, parent: parent.id });
+      const r = makeRoom(spec.type, x, y, w, h, { onLoop: false, locked: !!spec.locked, sprawl: !!spec.offBranch, parent: parent.id, design: spec.design });
       rooms.push(r);
       claim(r, r.id);
       if (connect(parent, r, 'branch', spec.locked)) placed = true;
@@ -330,7 +410,7 @@ function attemptLevel(rng, depth, opts, stream) {
 
   const ctx = {
     rng, depth, artefact: opts.artefact, wares: opts.wares ?? {},
-    up: null, down: null, amulet: null, shrine: null, shop: null, monsters: [],
+    up: null, down: null, pit: null, vaultHole: null, drop: null, amulet: null, shrine: null, shop: null, monsters: [],
     get: (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? T.WALL : grid[idx(x, y)]),
     set: (x, y, v) => { if (x > 0 && y > 0 && x < W - 1 && y < H - 1) grid[idx(x, y)] = v; },
     roomTiles(room, pred) {
@@ -385,7 +465,7 @@ function attemptLevel(rng, depth, opts, stream) {
   const occupied = new Set([idx(ctx.up.x, ctx.up.y)]);
   if (ctx.down) occupied.add(idx(ctx.down.x, ctx.down.y));
   for (const m of ctx.monsters) occupied.add(idx(m.x, m.y));
-  const decor = decorate({ style: theme.style, rng, tunnelRng: stream('tunnels'), grid, w: W, rooms, channels, occupied });
+  const decor = decorate({ style: theme.style, rng, tunnelRng: stream('tunnels'), grid, w: W, rooms, channels, occupied, dress: (r) => ROOM_TYPES[r.type].dress });
   for (const f of signs?.faces ?? []) decor.wallUsed.add(f);
 
   // --- 6: populate ---
@@ -440,9 +520,25 @@ function attemptLevel(rng, depth, opts, stream) {
     const kind = room.type !== 'entrance' && rng.chance(mimicChance) ? 'mimic' : 'chest';
     chests.push({ ...at, kind, items: chestLoot(rng, depth, kind) });
   }
-  // Behind each locked door, a stash worth its key: a chest or two (never a mimic), and a heap of gold.
-  const lockedRooms = rooms.filter((r) => r.locked);
-  for (const room of lockedRooms) {
+  // Behind each locked door, a stash worth its key: a chest or two (never a mimic), and a heap of gold; but a special
+  // room stocks itself (see `stock` in rooms.js), behind a lock or not.
+  const lockedRooms = rooms.filter((r) => r.locked), stashRooms = lockedRooms.filter((r) => !ROOM_TYPES[r.type].stock);
+  const stocking = {
+    rng, depth,
+    /** A chest (of `kind`, holding `items`) against a wall of `room`; false if there's no wall free for it. */
+    chest(room, kind = 'chest', items = chestLoot(rng, depth, kind)) {
+      const at = chestSpot(room);
+      if (at) chests.push({ ...at, kind, items });
+      return !!at;
+    },
+    /** `item` lying loose in `room`, or anywhere in the room at all if every tile's taken. */
+    loose(room, item) {
+      const t = freeTileIn(room) ?? { x: room.cx, y: room.cy };
+      items.push({ item, ...t });
+    },
+  };
+  for (const room of rooms) ROOM_TYPES[room.type].stock?.(stocking, room);
+  for (const room of stashRooms) {
     for (let i = rng.int(1, 2); i > 0; i--) {
       const at = chestSpot(room);
       if (at) chests.push({ ...at, kind: 'chest', items: chestLoot(rng, depth, 'chest') });
@@ -453,7 +549,7 @@ function attemptLevel(rng, depth, opts, stream) {
   if (itemRooms.length && rng.chance(0.3 + d * 0.02)) {
     // Likeliest in a side room, and half the time, where there is one, behind a locked door too.
     const side = itemRooms.filter((r) => !r.onLoop);
-    const room = lockedRooms.length && rng.chance(0.5) ? rng.pick(lockedRooms) : rng.pick(side.length ? side : itemRooms);
+    const room = stashRooms.length && rng.chance(0.5) ? rng.pick(stashRooms) : rng.pick(side.length ? side : itemRooms);
     const at = chestSpot(room);
     if (at) {
       const key = makeItem('key', 'gold', { depth });
@@ -523,7 +619,7 @@ function attemptLevel(rng, depth, opts, stream) {
   return {
     depth, w: W, h: H, grid, rooms, edges, doorways,
     doors: doorways.filter((d) => d.style === 'door'),
-    up: ctx.up, down: ctx.down, amulet: ctx.amulet, shrine: ctx.shrine, shop: ctx.shop,
+    up: ctx.up, down: ctx.down, pit: ctx.pit, vaultHole: ctx.vaultHole, drop: ctx.drop, amulet: ctx.amulet, shrine: ctx.shrine, shop: ctx.shop,
     channels, pools, decor: decor.props, wallUsed: decor.wallUsed,
     monsters, items, chests, traps, theme,
   };

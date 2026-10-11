@@ -20,7 +20,7 @@ A shared link to the site shows a preview card (Open Graph tags in `index.html`,
 
 For testing by hand, press **`** (the key left of 1) during a run to open the dev tools panel. It's always there under `npm run dev`. A built copy has it only when opened with `?dev` in the address (e.g. `http://localhost:4173/?dev`), and players who don't ask for it never download it (`ui/devTools.js` loads on demand from `main.js`). The game waits while the panel is open. Press ` or Esc to close it.
 
-- **Travel:** jump straight to any of the 25 floors, arriving at its entrance as if you'd walked down (boss floors are marked red, shop floors gold). **New layout** builds the floor you're on again from a new seed, for a quick look at another layout. **Reveal map** maps the whole floor and shows its hidden traps, and **To the stairs down** puts you at its exit.
+- **Travel:** jump straight to any of the 25 floors, arriving at its entrance as if you'd walked down (boss floors are marked red, shop floors gold). **New layout** builds the floor you're on again from a new seed, for a quick look at another layout. **Every special room** gives each floor built from then on every special room it could have (see [Special rooms](dungeon.md#special-rooms)). **Reveal map** maps the whole floor and shows its hidden traps, and **To the stairs down** puts you at its exit.
 - **You:** god mode (nothing can hurt you), health and maximum health, strength, levelling up, gold, **Restore** (full health and stamina, fed, every status cleared) and **Kill every monster**.
 - **Items:** make any weapon, off-hand thing (the lantern), armour, potion, scroll, wand, ring, artefact or food, or the Amulet, or an iron, gold or boss key for this floor (a boss key is this floor's boss's own, if it has one), with the +N (a charge more each, for a wand), quantity, curse (none, weakened or full), enchantment and identification you choose. It goes in your pack, or on the floor in front of you when the pack is full. **Identify everything** teaches you every potion, scroll, wand and ring, and identifies what you carry.
 - **Monsters:** spawn any monster a few steps in front of you, awake or asleep. The mimic comes awake, as a monster: to meet one passing for a chest, use *Chests*.
@@ -57,8 +57,10 @@ src/
                        synthesizer they're played on (synth.js); and their playing (music.js), rendered in a worker as
                        the game starts (worker.js)
   save.js              the saved run in local storage, and the helpers floors are saved with
-  dungeon/generator.js pure data: plans the loop and branches, lays out rooms, routes corridors, populates (seeded)
-  dungeon/rooms.js     room types (entrance, exit, standard, vault, shrine, shop): sizes, door style, furnishing
+  dungeon/generator.js pure data: plans the loop and branches, lays out rooms, routes corridors, populates (seeded); and
+                       generateFloor, which hands a floor with one of an oubliette's rooms what's to be seen of the other
+  dungeon/rooms.js     room types (entrance, exit, standard, vault, shrine, shop, and the special rooms: the sentinel's hall,
+                       storeroom, pipework, oubliette and the room over it): sizes, door style, furnishing, dressing, stock
   dungeon/arenas.js    boss floors laid out by hand and their crossings into the next theme: the Maledicted Ooze's lair (the Sewers'
                        last), the Forgotten Jailer's cell block (the Catacombs' last)
   dungeon/tiles.js     tile types
@@ -110,7 +112,7 @@ Balance numbers live in `monsters/defs.js`, `items/defs.js` and `config.js`. `wi
 
 ## Possible next steps
 
-- Specialist side rooms behind locked doors (treasuries, libraries, armouries), secret doors
+- More special rooms (treasuries, libraries, armouries), the other themes' own, secret doors
 - More furniture for other room types
 - More level shapes: caves via cellular automata, chasms that drop you a floor, rooms designed round their pools (a flooded crypt, a cistern, a bathhouse)
 - Arenas for the other themes' boss floors, and their bosses (see `dungeon/arenas.js` and `monsters/bosses.js`)

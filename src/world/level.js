@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { TILE, VIEW_RADIUS_TILES, MAX_DEPTH, PLAYER_RADIUS, POOL, danger } from '../config.js';
 import { T } from '../dungeon/tiles.js';
-import { buildLevelMeshes, flowWater, poseDoor, shareLights } from '../dungeon/levelBuilder.js';
+import { buildLevelMeshes, flowWater, poseDoor, shareLights, CHEST_MODEL } from '../dungeon/levelBuilder.js';
 import { propRig } from '../dungeon/props.js';
 import { TrapView, loadTraps, trapsLoaded } from './trapModels.js';
 import { buildItemModel } from '../items/models.js';
@@ -36,6 +36,8 @@ const LICK_TIME = 1.6;
 const LICK_WAIT = [15, 35];
 const SMASH = 0.5; // the chance each thing in a chest you smash is lost with it (gold and keys never are)
 const footprints = new Map();
+// (Each kind of chest's model is CHEST_MODEL's: a chest, a locked one, or the body of someone who died in a cell (see
+// the oubliette in dungeon/rooms.js), searched as a chest is opened. A mimic's is its own: see addChest.)
 
 /** A chest's size where it stands (not counting the wreck a smashed one leaves): its model's bounds, without `broken`. */
 function chestBounds(type) {
@@ -168,6 +170,7 @@ export class Level {
       const mon = this.addMonster(m.type, (m.x + 0.5) * TILE, (m.y + 0.5) * TILE, { asleep: m.asleep, boss: m.boss, guardian: m.guardian });
       mon.loot = m.loot ?? null;
       if (m.yaw !== undefined) mon.yaw = m.yaw;
+      mon.arm(); // (a sentinel's weapon in its hand)
     }
     for (const it of data.items) {
       this.addItem(it.item, (it.x + 0.5 + rand.range(-0.2, 0.2)) * TILE, (it.y + 0.5 + rand.range(-0.2, 0.2)) * TILE);
@@ -270,7 +273,7 @@ export class Level {
     const t = this.tile(tx, ty);
     if (t === T.DOOR) return !this.doorAt(tx, ty).open;
     if ((t === T.STAIRS_DOWN || t === T.STAIRS_UP) && this.openStairs.has(this.idx(tx, ty))) return false;
-    return t === T.WALL || t === T.STAIRS_DOWN || t === T.STAIRS_UP || (t === T.CHANNEL && !flying);
+    return t === T.WALL || t === T.STAIRS_DOWN || t === T.STAIRS_UP || t === T.PIT || (t === T.CHANNEL && !flying);
   }
 
   blocksSight(tx, ty) {
@@ -285,7 +288,7 @@ export class Level {
   blocksPath(tx, ty, flying = false) {
     const t = this.tile(tx, ty);
     if (t === T.DOOR) return this.doorAt(tx, ty).locked;
-    return t === T.WALL || t === T.STAIRS_DOWN || t === T.STAIRS_UP || (t === T.CHANNEL && !flying);
+    return t === T.WALL || t === T.STAIRS_DOWN || t === T.STAIRS_UP || t === T.PIT || (t === T.CHANNEL && !flying);
   }
 
   /** Grid line of sight between two world points. */
@@ -377,14 +380,15 @@ export class Level {
   }
 
   /**
-   * Where something dropped at (x, z) comes to rest: there, or if that's over a channel, the nearest point of
-   * the nearest tile beside it.
+   * Where something dropped at (x, z) comes to rest: there, or if that's over a channel or where the floor's fallen in,
+   * the nearest point of the nearest tile beside it.
    */
   landSpot(x, z) {
-    const tx = this.toTile(x), ty = this.toTile(z);
-    if (this.tile(tx, ty) !== T.CHANNEL) return { x, z };
+    const tx = this.toTile(x), ty = this.toTile(z), t = this.tile(tx, ty);
+    if (t !== T.CHANNEL && t !== T.PIT) return { x, z };
     let best = null, bestD = Infinity;
-    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+    const r = t === T.PIT ? 4 : 2; // (a hole's wider than a channel)
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
       if (this.isSolid(tx + dx, ty + dy)) continue;
       const x0 = (tx + dx) * TILE + 0.3, x1 = (tx + dx + 1) * TILE - 0.3, z0 = (ty + dy) * TILE + 0.3, z1 = (ty + dy + 1) * TILE - 0.3;
       const px = Math.max(x0, Math.min(x, x1)), pz = Math.max(z0, Math.min(z, z1)), d = Math.hypot(px - x, pz - z);
@@ -601,7 +605,7 @@ export class Level {
   // --- Chests ---
 
   /**
-   * Sets a chest down: { x, z (metres), yaw, kind: 'chest' | 'locked' | 'mimic', state: 'closed' | 'open' | 'broken',
+   * Sets a chest down: { x, z (metres), yaw, kind: 'chest' | 'locked' | 'mimic' | 'corpse', state: 'closed' | 'open' | 'broken',
    * items }. Its model's parts move and show by name (see tools/modelgen/chests.mjs): its `lid`, a locked chest's
    * `lock`, and the `broken` wreck a smashed one leaves in place of its `body` and lid. A mimic is a chest like any
    * other until something wakes it (see wakeMimic): its model is the mimic's own, at rest (but for the odd lick of its
@@ -609,7 +613,7 @@ export class Level {
    */
   addChest({ x, z, yaw, kind, state = 'closed', items = [] }) {
     const model = kind === 'mimic' ? buildMonsterModel('mimic') : null;
-    const root = model ? model.root : propRig(kind === 'locked' ? 'chest_locked' : 'chest').clone();
+    const root = model ? model.root : propRig(CHEST_MODEL[kind]).clone();
     const parts = {};
     root.traverse((o) => {
       if (!o.isGroup || !o.name) return;
@@ -619,7 +623,7 @@ export class Level {
     root.position.set(x, 0, z);
     root.rotation.y = yaw;
     this.group.add(root);
-    const bounds = chestBounds(kind === 'locked' ? 'chest_locked' : 'chest');
+    const bounds = chestBounds(CHEST_MODEL[kind] ?? 'chest');
     const c = Math.cos(yaw), s = Math.sin(yaw);
     const mx = (bounds.min.x + bounds.max.x) / 2, mz = (bounds.min.z + bounds.max.z) / 2;
     const hw = (bounds.max.x - bounds.min.x) / 2, hd = (bounds.max.z - bounds.min.z) / 2;

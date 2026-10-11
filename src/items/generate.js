@@ -107,6 +107,18 @@ export function goldPile(rng, depth, mult = 1) {
 }
 
 /**
+ * The weapon a stone sentinel holds (see the sentinel room in dungeon/rooms.js): from a little deeper than the floor,
+ * +1 at least (more, now and then, deeper down), never cursed (and known not to be), and a third of the time enchanted.
+ */
+export function sentinelWeapon(rng, depth) {
+  const d = danger(depth);
+  const plus = 1 + (rng.chance(0.25 + d * 0.04) ? 1 : 0) + (d >= 6 && rng.chance(0.25) ? 1 : 0);
+  const it = makeItem('weapon', pickTiered(rng, WEAPONS, depth + 2), { hitsToId: 20, plus, curseKnown: true });
+  if (rng.chance(0.35)) it.enchant = randomEnchant(rng, 'weapon');
+  return it;
+}
+
+/**
  * What a chest holds (see generator.js): a chest, or a mimic (which drops it when it dies), one thing most often, two
  * now and then and three rarely, with a pile of gold about a third of the time; a locked chest a treasure and a bigger
  * pile of gold.

@@ -417,7 +417,7 @@ export class UI {
     const t = g.target && !(g.target.boss && g.target === this.boss) ? g.target : null;
     $('target').hidden = !t;
     if (t) {
-      const tag = t.isAlly() ? ' (fighting for you)' : t.charmed() ? '' : t.state === 'sleep' ? ' (asleep)' : t.state !== 'hunt' ? ' (unaware)'
+      const tag = t.isAlly() ? ' (fighting for you)' : t.charmed() ? '' : t.dormant ? ' (motionless)' : t.state === 'sleep' ? ' (asleep)' : t.state !== 'hunt' ? ' (unaware)'
         : !t.seen ? ' (searching)' : '';
       const sts = Object.entries(STATUSES).filter(([key]) => t.status[key] > 0)
         .map(([, def]) => `<span style="color:${def.color}">${def.label}</span>`).join(' ');
@@ -515,6 +515,7 @@ export class UI {
         let c;
         if (t === T.WALL) c = '#857b6b';
         else if (t === T.STAIRS_DOWN) c = '#5aa0ff';
+        else if (t === T.PIT) c = '#141110';
         else if (t === T.STAIRS_UP) c = '#ffd27a';
         else if (t === T.PEDESTAL) c = '#d0a040';
         else if (t === T.CHANNEL) c = CHANNEL_COLORS[lvl.theme.channels.fill]?.[lvl.visible[i] ? 0 : 1] ?? (lvl.visible[i] ? '#1c1916' : '#121010');

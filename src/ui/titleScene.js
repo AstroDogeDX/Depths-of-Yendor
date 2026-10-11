@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { THEMES, FLOORS_PER_THEME, TILE, EYE_H } from '../config.js';
-import { generateLevel } from '../dungeon/generator.js';
+import { generateFloor } from '../dungeon/generator.js';
 import { buildLevelMeshes, disposeGroup, flowWater, propsForTheme, poseDoor, stairsDescent, shareLights } from '../dungeon/levelBuilder.js';
 import { loadProps } from '../dungeon/props.js';
 import { T } from '../dungeon/tiles.js';
@@ -73,7 +73,7 @@ export class TitleScene {
     const first = this.themeIndex * FLOORS_PER_THEME + 1;
     let data = null, points = null;
     for (let i = 0; i < 10 && !points; i++) {
-      data = generateLevel(`title:${Math.random()}`, first + 1 + Math.floor(Math.random() * (FLOORS_PER_THEME - 2)));
+      data = generateFloor(`title:${Math.random()}`, first + 1 + Math.floor(Math.random() * (FLOORS_PER_THEME - 2)));
       points = planWalk(data);
     }
     if (!points) return;

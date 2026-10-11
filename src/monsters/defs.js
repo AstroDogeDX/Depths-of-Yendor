@@ -76,6 +76,17 @@ export const MONSTERS = {
     // stone fists; edges and points glance off it, stone shrugs off fire and lightning, but magic unravels its rune
     xp: 22, depth: [20, 25], freq: 3, dodge: 0, def: 6, sleepChance: 0.8, traits: ['bloodless'],
   },
+  // A stone sentinel (see the sentinel room in dungeon/rooms.js): a golem left to guard a weapon, standing at the back
+  // of a hall with it in its fist. It never stirs on its own (`dormant`): nothing but a blow wakes it, and then it fights
+  // with the weapon (its loot, which it drops when it falls), its blows the weapon's, harder by its `armed`, of the
+  // weapon's type and bringing its enchantment. Stone, as a golem is; it may stand on any floor, so it grows with the
+  // floor from the first (`grow`) where other monsters only grow beyond their own floors.
+  sentinel: {
+    name: 'stone sentinel', hp: 40, dmg: [4, 9], speed: 1.6, radius: 0.55, reach: 2.1, windup: 0.95, cooldown: 1.7,
+    dmgType: 'bash', resist: { slash: 0.6, stab: 0.6, bash: 1.4, fire: 0.5, lightning: 0.5, poison: 0, magic: 1.25 },
+    xp: 14, depth: [1, 25], freq: 0, dodge: 0, def: 3, sleepChance: 1, traits: ['bloodless'],
+    dormant: true, armed: 1.3, grow: [0.15, 0.07],
+  },
   // A chest that isn't one: until something wakes it, it's a chest on the floor like any other (see Level.addChest).
   // Only chests become mimics, from its first floor on, and it grows faster than most, so a deep one is still a threat.
   mimic: {

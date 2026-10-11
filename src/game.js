@@ -1,7 +1,8 @@
 import * as THREE from 'three';
-import { TILE, MAX_DEPTH, ARTEFACT_DEPTHS, SHOP_DEPTHS, RENDER_HEIGHTS, HOTBAR_SIZE, danger } from './config.js';
+import { TILE, PLAYER_RADIUS, MAX_DEPTH, ARTEFACT_DEPTHS, SHOP_DEPTHS, RENDER_HEIGHTS, HOTBAR_SIZE, danger } from './config.js';
 import { RNG, rand } from './rng.js';
-import { generateLevel } from './dungeon/generator.js';
+import { generateFloor } from './dungeon/generator.js';
+import { T } from './dungeon/tiles.js';
 import { Level } from './world/level.js';
 import { Player } from './player.js';
 import { Knowledge } from './items/identify.js';
@@ -28,6 +29,8 @@ import { quiverOf } from './bow.js';
 import { BUILD } from './build.js';
 
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]]; // N E S W, matches stair `dir`
+const FALL = 0.12; // the share of your health a fall into an oubliette takes (see jumpDown)
+const RESTLESS = 0.35; // the chance that searching the body in an oubliette wakes a wraith in it (see useChest)
 
 // What smashing a chest (or burning it) does to a thing in it that's lost with it (see Game.hitChest).
 function ruined(item, fire) {
@@ -288,7 +291,7 @@ export class Game {
 
   /** What a floor is generated with besides its seed and depth (see generateLevel). */
   floorOpts(depth) {
-    return { artefact: this.artefactFor(depth), wares: this.shopWares(depth) };
+    return { artefact: this.artefactFor(depth), wares: this.shopWares(depth), allSpecial: !!this.dev?.allRooms };
   }
 
   makeAmulet() {
@@ -297,7 +300,7 @@ export class Game {
 
   getLevel(depth) {
     if (!this.levels.has(depth)) {
-      const data = generateLevel(this.seed, depth, this.floorOpts(depth));
+      const data = generateFloor(this.seed, depth, (d) => this.floorOpts(d));
       // A floor from a save comes back as it was left, unless floors are laid out differently since it was saved
       // (a newer version of the game): then it starts afresh, rather than with things in its walls.
       const saved = this.savedLevels.get(depth);
@@ -309,7 +312,8 @@ export class Game {
 
   /**
    * Goes to floor `depth`, arriving by the stairs `arrive` names ('down' or 'start': the up stairs; 'up': the down
-   * stairs; 'saved': where the save left you), then calls `done`. The first floor of a theme
+   * stairs; 'drop': down the hole in an oubliette's vault, from the floor above (see jumpDown); 'saved': where the save
+   * left you), then calls `done`. The first floor of a theme
    * whose props haven't downloaded yet waits for them in the dark (they're usually fetched on the floor before;
    * see arrive()).
    */
@@ -356,8 +360,13 @@ export class Game {
     this.ambient.color.setHex(th.ambient);
 
     const p = this.player;
-    // Back where a save left you, if the floor came back as it was; else by the stairs.
-    if (!(arrive === 'saved' && level.restored && !level.isSolid(level.toTile(p.x), level.toTile(p.z)))) {
+    // Back where a save left you, if the floor came back as it was; else by the stairs. Down through the hole into an
+    // oubliette's cell, under where you jumped from (see dropDown).
+    if (arrive === 'drop' && level.data.vaultHole) {
+      Object.assign(p, this.landing(level, this.dropFrom));
+      level.collide(p, PLAYER_RADIUS);
+      p.pitch = 0;
+    } else if (!(arrive === 'saved' && level.restored && !level.isSolid(level.toTile(p.x), level.toTile(p.z)))) {
       const stairs = arrive === 'up' ? level.data.down : level.data.up;
       const [dx, dy] = DIRS[stairs.dir];
       p.x = (stairs.x + dx + 0.5) * TILE;
@@ -390,6 +399,57 @@ export class Game {
     // Start fetching the next floor's props, so they're here by the time you go down.
     loadProps(propsForFloor(Math.min(MAX_DEPTH, depth + 1)))?.catch(() => {});
     this.save(); // every floor you reach
+  }
+
+  /**
+   * The floor fallen in over an oubliette (see rooms.js): a look down at the cell below, and the choice whether to jump.
+   * The fall hurts (a share of your health: `FALL`, though never the last of it), and there's no climbing back up: the
+   * way out of the cell is its door, locked, and the key's on the body in it (see Level.addChest).
+   */
+  jumpDown() {
+    this.dialog({
+      title: 'The broken floor',
+      body: "The floor's fallen in here, and the vault of a cell under it: you can see down into it, the rubble heaped on its flagstones. It's a long drop, and there'd be no climbing back up.",
+      buttons: [
+        { label: 'Stay up here', fn: () => {} },
+        { label: 'Jump down', fn: () => this.dropDown() },
+      ],
+    });
+  }
+
+  /**
+   * Where you land in an oubliette's cell on `level`, having jumped from `from` (x, y in tiles from the cell's corner,
+   * as it lies under the floor above: see dropDown): under the tile of the hole nearest that, as near to it as that
+   * tile goes. Or, without `from`, the middle of the hole (its `drop`). Returns { x, z }.
+   */
+  landing(level, from) {
+    const c = level.data.vaultHole, d = level.data.drop;
+    if (!from) return { x: (d.x + 0.5) * TILE, z: (d.y + 0.5) * TILE };
+    let best = null;
+    for (let j = 0; j < c.h; j++) {
+      for (let i = 0; i < c.w; i++) {
+        if (!c.hole[j * c.w + i]) continue;
+        const x = Math.max(i + 0.25, Math.min(i + 0.75, from.x)), y = Math.max(j + 0.25, Math.min(j + 0.75, from.y)), dist = Math.hypot(x - from.x, y - from.y);
+        if (!best || dist < best.dist) best = { x, y, dist };
+      }
+    }
+    return { x: (c.x + best.x) * TILE, z: (c.y + best.y) * TILE };
+  }
+
+  /** Drops you through the broken floor into the oubliette's cell, on the floor below, under where you jumped from. */
+  dropDown() {
+    const pit = this.level.data.pit, p = this.player;
+    this.dropFrom = pit ? { x: p.x / TILE - pit.x, y: p.z / TILE - pit.y } : null;
+    const depth = this.level.depth + 1;
+    this.audio.stairs();
+    this.ui.fadeTransition();
+    this.enterLevel(depth, 'drop', () => {
+      const p = this.player, hurt = Math.min(Math.max(2, Math.round(p.maxHp * FALL)), p.hp - 1);
+      this.audio.thud();
+      this.shake(0.35);
+      this.log(`You drop through the broken floor, and land hard in a cell on depth ${depth}.`, 'warn');
+      if (hurt > 0) this.hurtPlayer(hurt, { source: 'a fall', ignoreArmor: true });
+    });
   }
 
   changeLevel(depth, arrive) {
@@ -657,6 +717,7 @@ export class Game {
       if (score < bestScore) { bestScore = score; best = null; chest = c; }
     }
     if (chest) {
+      if (chest.kind === 'corpse') return { kind: 'chest', chest, label: 'Search the body' };
       if (chest.kind !== 'locked') return { kind: 'chest', chest, label: 'Open the chest' };
       const keys = p.goldKeys[level.depth] || 0;
       return { kind: 'chest', chest, label: keys ? 'Unlock the chest (uses a gold key)' : 'Locked. It needs a gold key from this floor' };
@@ -682,6 +743,10 @@ export class Game {
     }
     const near = (s) => s && Math.hypot((s.x + 0.5) * TILE - p.x, (s.y + 0.5) * TILE - p.z) < 1.95;
     if (near(level.data.down)) return { kind: 'down', label: `Descend to depth ${level.depth + 1}` };
+    // At the edge of a floor fallen in over an oubliette, facing over it.
+    if (level.data.pit && [0.8, 1.3].some((d) => level.tile(level.toTile(p.x + fx * d), level.toTile(p.z + fz * d)) === T.PIT)) {
+      return { kind: 'pit', label: 'Jump down into the cell below' };
+    }
     if (near(level.data.up)) {
       if (level.depth === 1) {
         return { kind: 'surface', label: p.hasAmulet() ? 'Climb into the daylight with the Amulet' : 'Return to the surface (abandon the quest)' };
@@ -718,6 +783,7 @@ export class Game {
       case 'chest': this.useChest(it.chest); break;
       case 'door': this.useDoor(it.door); break;
       case 'down': this.changeLevel(this.level.depth + 1, 'down'); break;
+      case 'pit': this.jumpDown(); break;
       case 'up': this.changeLevel(this.level.depth - 1, 'up'); break;
       case 'surface':
         if (p.hasAmulet()) this.finish('ascended');
@@ -878,7 +944,7 @@ export class Game {
       this.revealMimic(chest, true);
       return;
     }
-    let how = 'You open the chest.';
+    let how = chest.kind === 'corpse' ? 'You search the body.' : 'You open the chest.';
     if (chest.kind === 'locked') {
       if (!((p.goldKeys[depth] || 0) > 0)) {
         if (this.time - (chest.lastRattle ?? -Infinity) > 2) {
@@ -893,6 +959,23 @@ export class Game {
       how = 'You turn the gold key in the lock and lift the lid.';
     }
     const items = level.openChest(chest);
+    if (chest.kind === 'corpse') {
+      this.audio.search();
+      this.log(items.length ? `${how} On it: ${this.listItems(items)}.` : `${how} There's nothing on it.`);
+      // What's left of them may not be all that's left of them.
+      if (rand.chance(RESTLESS)) {
+        const w = level.addMonster('wraith', chest.x, chest.z, { asleep: false });
+        level.collide(w, w.radius, w.flies);
+        w.state = 'hunt';
+        w.seen = true;
+        w.revealT = 0;
+        w.cooldown = 1.2;
+        burst(level, chest.x, 1, chest.z, 0x6040a0, 24, 2.5, 1);
+        this.audio.alert(0.7);
+        this.log('A cold shape tears itself free of the body and rises at you!', 'danger');
+      }
+      return;
+    }
     this.audio.chestOpen();
     this.log(items.length ? `${how} Inside: ${this.listItems(items)}.` : `${how} It's empty.`, chest.kind === 'locked' ? 'good' : '');
   }
@@ -920,7 +1003,7 @@ export class Game {
    * A `harmless` bolt (teleport other) wakes a mimic, but does nothing to a chest.
    */
   hitChest(chest, { type = null, harmless = false } = {}) {
-    if (chest.state !== 'closed') return null;
+    if (chest.state !== 'closed' || chest.kind === 'corpse') return null;
     if (chest.kind === 'mimic') return this.revealMimic(chest);
     if (harmless) return null;
     if (chest.kind === 'locked') {

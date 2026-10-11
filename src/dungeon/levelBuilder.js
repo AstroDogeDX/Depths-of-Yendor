@@ -12,7 +12,7 @@ import { placeProp, propTemplate, propRig } from './props.js';
 import { roughRock } from './roughRock.js';
 import { Haze } from '../fx/haze.js';
 import { faceKey, wallFace, decorProps, corridorMask } from './decor.js';
-import { SHOP_PROPS } from './rooms.js';
+import { SHOP_PROPS, roomProps } from './rooms.js';
 import { rgb, mix, paint, noise } from './texturePaint.js';
 import sconceModel from '../../assets/models/sconce.bbmodel';
 
@@ -73,6 +73,16 @@ const STAIRS = {
   // Black steps carved with glowing runes, down a stairwell and up a flight into the vault.
   underworld: { down: { rect: [-0.6875, -0.8125, 0.6875, 1] }, up: 'full', descent: 'steps' },
 };
+// An oubliette (see rooms.js): how thick the floor is between its cell's vault and the room above, and so how far above
+// the cell that room's floor is (as far as the ways down go: PIT in tools/modelgen/stairkit.mjs).
+const SLAB = 0.4;
+const STOREY = WALL_H + SLAB;
+// Its broken edges (see collapseEdges): how many pieces each tile's length is broken into, how far into the hole each
+// point of it reaches (metres: the corners of the grid, and those between), how far further in or back its underside
+// reaches, and how dark its broken face is, at the top and at the foot.
+const BREAK = { steps: 4, corner: [0.08, 0.3], straight: [0.06, 0.4], along: [0.06, 0.6], under: [-0.03, 0.12], face: [0.7, 0.42] };
+// The model each kind of chest is (see Level.addChest): a mimic passes for a plain one.
+export const CHEST_MODEL = { chest: 'chest', locked: 'chest_locked', corpse: 'corpse', mimic: 'chest' };
 // The title screen's walk down each kind of stairs: points in the stairs' own frame, in metres (y down from eye
 // height), from the tile in front of them.
 const DESCENTS = {
@@ -103,6 +113,9 @@ const LAMP_FIRE = { color: 0xffb860, light: 9 }; // an oil flame behind glass, y
 const RUBY_FIRE = { color: 0xff7048, light: 9 }; // a flame over ruby glass
 const VIOLET_FIRE = { color: 0xa060ff, light: 14 }; // every flame in a theme whose `fire` is 'violet'
 const LAVA_GLOW = { color: 0xff5a1a, light: 12 }; // the light off a channel of lava
+// The light in an oubliette's cell, from the room above, down the hole: in the cell under the middle of the hole, this
+// far below its vault, on both its floors (see buildLevelMeshes).
+const CELL_LIGHT = { color: 0xd09a60, light: 16, below: 0.6 };
 // Wall lights: a theme's are named by `lights` in config.js (the sconce if it names none). Each is a Blockbench
 // model whose origin sits on the wall 1.85 m up, with an empty group "flame" marking where its fire burns. A theme
 // whose `fire` is 'violet' burns them all violet.
@@ -248,6 +261,7 @@ export function propsForTheme(theme) {
     ...decorProps(theme.style),
     ...(fill ? [fill.bridge, fill.end, fill.bed, ...(fill.lips ?? [])].filter(Boolean) : []),
     ...(THEMES.indexOf(theme) > 0 ? SHOP_PROPS : []),
+    ...roomProps(theme.style),
     ...(theme.lights ?? []),
   ])];
 }
@@ -255,7 +269,13 @@ export function propsForTheme(theme) {
 /** Every prop floor `depth` might use: its theme's (see propsForTheme), and those of an arena laid out by hand (see arenas.js). */
 export const propsForFloor = (depth) => [...new Set([...propsForTheme(themeForDepth(depth)), ...(arenaFor(depth)?.props ?? [])])];
 
-export function buildLevelMeshes(data) {
+/**
+ * The floor's meshes, lights and all, from its generated `data`. Where it has one of an oubliette's two rooms, the
+ * other's built too, where it lies on the floor above or below (`below` and `above`: see generateFloor), its lights
+ * among this floor's. That's built as a `view`: the room's own meshes, props, doors and lights' flames only (returning
+ * { group, flames }).
+ */
+export function buildLevelMeshes(data, { view = false } = {}) {
   const { w, h, grid, theme } = data;
   const tex = getTextures(theme);
   const rng = new RNG(`deco:${data.depth}`);
@@ -305,6 +325,9 @@ export function buildLevelMeshes(data) {
   const theirs = (x, y, salt) => blend && blend.mix[y * w + x] > (gridHash(data.depth, x, y, 60 + salt) % 1000) / 1000;
   const wallUV = (t) => (t.wallFullHeight ? [[0, 0], [1, 0], [1, 1], [0, 1]] : [[0, 0], [1, 0], [1, vh], [0, vh]]);
 
+  // Each tile's shade, by where it is, so it's the same however much of the floor is built (see `view`).
+  const tintAt = (x, y) => 0.9 + (gridHash(data.depth, x, y, 70) % 1000) * 0.00012;
+
   // Corner ambient occlusion: darken grid corners that touch walls.
   const cornerAO = (gx, gy) => {
     let n = 0;
@@ -320,7 +343,7 @@ export function buildLevelMeshes(data) {
       const t = get(x, y);
       if (t === T.WALL) continue;
       const x0 = x * TILE, x1 = (x + 1) * TILE, z0 = y * TILE, z1 = (y + 1) * TILE;
-      const tint = 0.9 + rng.next() * 0.12, inRoom = roomTile[y * w + x] === 1;
+      const tint = tintAt(x, y), inRoom = roomTile[y * w + x] === 1;
       const ao = [cornerAO(x, y), cornerAO(x + 1, y), cornerAO(x + 1, y + 1), cornerAO(x, y + 1)].map((v) => v * tint);
 
       // (A pool's floor is its bed, a step down, and in shadow under the water. Stairs leave a hole in the floor, or
@@ -329,12 +352,12 @@ export function buildLevelMeshes(data) {
       const floor = theirs(x, y, 0) ? tileOf(blended.floors, x, y, 1) : tileOf(inRoom ? floors : tunnelFloors, x, y, 1);
       const ceil = theirs(x, y, 1) ? tileOf(blended.ceils, x, y, 2) : tileOf(ceils, x, y, 2);
       if (t === T.STAIRS_DOWN) holed(floor, x, y, 0, stairsOf(data.down).down, data.down.dir, ao);
-      else if (!sunk(t)) {
+      else if (!sunk(t) && t !== T.PIT) {
         floor.quad([[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]], [0, 1, 0],
           [[0, 0], [1, 0], [1, 1], [0, 1]], y0 ? ao.map((v) => v * 0.55) : ao);
       }
       if (t === T.STAIRS_UP) holed(ceil, x, y, WALL_H, stairsOf(data.up).up, data.up.dir, ao.map((v) => v * 0.8));
-      else {
+      else if (!(data.vaultHole && inHole(data.vaultHole, x, y))) {
         ceil.quad([[x0, WALL_H, z0], [x1, WALL_H, z0], [x1, WALL_H, z1], [x0, WALL_H, z1]], [0, -1, 0],
           [[0, 0], [1, 0], [1, 1], [0, 1]], ao.map((v) => v * 0.8));
       }
@@ -368,6 +391,30 @@ export function buildLevelMeshes(data) {
         const v = POOL.bed / (tex.wallFullHeight ? WALL_H : TILE);
         side(-POOL.bed, 0, [[0, 0], [1, 0], [1, v], [0, v]], [0.4 * tint, 0.4 * tint, 0.75 * tint, 0.75 * tint],
           inRoom ? walls : tunnelWalls, (nx, ny) => get(nx, ny) !== T.POOL);
+      }
+    }
+  }
+
+  // Where an oubliette's fallen in (see rooms.js): round the hole in the floor above, its broken edge (the floor reaching
+  // raggedly out over it, and the broken face of the slab under that); round the hole in the cell's vault, the
+  // underside of the same edge. Both floors break it alike (see collapseEdges).
+  for (const [c, vault] of [[data.pit, false], [data.vaultHole, true]]) {
+    if (!c) continue;
+    const ox = c.x * TILE, oz = c.y * TILE, [ft, fb] = BREAK.face;
+    for (const e of collapseEdges(c)) {
+      const X = c.x + e.i, Y = c.y + e.j, nb = tintAt(X - e.n[0], Y - e.n[1]); // (shaded as the tile it breaks from)
+      const at = ([px, pz], y) => [ox + px, y, oz + pz], uv = ([px, pz]) => [px / TILE - e.i, pz / TILE - e.j];
+      for (let k = 0; k < BREAK.steps; k++) {
+        const p = e.edge[k], q = e.edge[k + 1], a = e.top[k], b = e.top[k + 1], r = e.under[k], s = e.under[k + 1];
+        if (vault) {
+          const v = 0.8 * nb;
+          tileOf(ceils, X, Y, 2).quad([at(p, WALL_H), at(q, WALL_H), at(s, WALL_H), at(r, WALL_H)], [0, -1, 0], [uv(p), uv(q), uv(s), uv(r)], [v, v, v, v]);
+          continue;
+        }
+        tileOf(floors, X, Y, 1).quad([at(p, 0), at(q, 0), at(b, 0), at(a, 0)], [0, 1, 0], [uv(p), uv(q), uv(b), uv(a)], [nb, nb, nb, nb]);
+        const u0 = k / BREAK.steps, u1 = (k + 1) / BREAK.steps, v = SLAB / TILE;
+        tileOf(ceils, X, Y, 2).quad([at(a, 0), at(b, 0), at(s, -SLAB), at(r, -SLAB)], [e.n[0], 0, e.n[1]],
+          [[u0, 0], [u1, 0], [u1, v], [u0, v]], [ft * nb, ft * nb, fb * nb, fb * nb]);
       }
     }
   }
@@ -544,22 +591,25 @@ export function buildLevelMeshes(data) {
   const openStairs = new Set();
   for (const [s, way] of [[data.down, 'down'], [data.up, 'up']]) {
     if (!s) continue;
-    place({ type: s === data.up && data.depth === 1 ? 'stairs_surface' : `stairs_${way}_${s.style ?? theme.style}`, x: s.x + 0.5, y: s.y + 0.5, yaw: DIR_ANGLE[s.dir] });
+    const type = s === data.up && data.depth === 1 ? 'stairs_surface' : `stairs_${way}_${s.style ?? theme.style}`;
+    place({ type, x: s.x + 0.5, y: s.y + 0.5, yaw: DIR_ANGLE[s.dir] });
     const blocks = stairsOf(s).blocks?.[way];
     if (!blocks) continue;
     openStairs.add(s.y * w + s.x);
     obstacles.push(...blocks.map((b) => stairsBlock(b, s)));
   }
-  const daylight = data.depth === 1 ? sunlight(group, data.up, stairsOf(data.up).up) : null;
+  const daylight = !view && data.depth === 1 ? sunlight(group, data.up, stairsOf(data.up).up) : null;
   if (daylight) glowing.unshift(daylight.source);
   // The sun, shining down that way up. Every floor has it, parked in the dark on all but the first, so every floor has
   // the same lights and no shader needs recompiling between them (as with SCONCE_LIGHTS).
-  const sun = new THREE.SpotLight(0xfff2dc, daylight ? SUN.light : 0, SURFACE_TOP + 1, SUN.angle, 0.55, 1.2);
-  sun.position.set(daylight ? (data.up.x + 0.5) * TILE : 0, daylight ? SURFACE_TOP : -50, daylight ? (data.up.y + 0.5) * TILE : 0);
-  sun.target.position.set(sun.position.x, -60, sun.position.z);
-  group.add(sun, sun.target);
+  if (!view) {
+    const sun = new THREE.SpotLight(0xfff2dc, daylight ? SUN.light : 0, SURFACE_TOP + 1, SUN.angle, 0.55, 1.2);
+    sun.position.set(daylight ? (data.up.x + 0.5) * TILE : 0, daylight ? SURFACE_TOP : -50, daylight ? (data.up.y + 0.5) * TILE : 0);
+    sun.target.position.set(sun.position.x, -60, sun.position.z);
+    group.add(sun, sun.target);
+  }
 
-  const flames = buildSconces(data, group, rng, isWall, rough, violet);
+  const flames = buildSconces(data, group, rng, isWall, rough, violet, !view);
   // Props' fires (fire_N anchors): full-size flames, like the wall lights'.
   for (const { x, y, z } of fires) {
     const look = violet ? VIOLET_FIRE : FIRE;
@@ -570,9 +620,34 @@ export function buildLevelMeshes(data) {
     group.add(flame, halo);
     flames.push({ flame, halo, fire: look, phase: rng.next() * 10, pos: new THREE.Vector3(x, y + 0.3, z) });
   }
+  // An oubliette's other room, on the floor above or below (see generateFloor), its lights among this floor's: the cell
+  // seen down the hole in the floor, or the room above seen up the hole in the vault.
+  for (const v of view ? [] : [data.below, data.above]) {
+    if (!v) continue;
+    const seen = buildLevelMeshes(v.data, { view: true });
+    seen.group.position.set(v.dx * TILE, v.up * STOREY, v.dy * TILE);
+    group.add(seen.group);
+    for (const f of seen.flames) f.pos?.add(seen.group.position);
+    flames.push(...seen.flames);
+  }
+  // The light down the hole into an oubliette's cell (CELL_LIGHT), seen from above or from the cell, in the same place.
+  for (const [c, y] of view ? [] : [[data.pit, -SLAB - CELL_LIGHT.below], [data.vaultHole, WALL_H - CELL_LIGHT.below]]) {
+    if (!c) continue;
+    let sx = 0, sz = 0, n = 0;
+    for (let j = 0; j < c.h; j++) for (let i = 0; i < c.w; i++) if (c.hole[j * c.w + i]) { sx += i + 0.5; sz += j + 0.5; n++; }
+    glowing.push({ pos: new THREE.Vector3((c.x + sx / n) * TILE, y, (c.y + sz / n) * TILE), fire: CELL_LIGHT });
+  }
+  // In a view, the chests (and what passes for one) as they were left, shut; the floor itself sets them out (Level.addChest).
+  for (const c of view ? data.chests : []) {
+    const chest = propRig(CHEST_MODEL[c.kind] ?? 'chest').clone();
+    chest.traverse((o) => { if (o.name === 'broken') o.visible = false; });
+    chest.position.set(c.px * TILE, 0, c.py * TILE);
+    chest.rotation.y = c.yaw;
+    group.add(chest);
+  }
   // The level's few real lights: the shop's sconces first, so it's sure of them, then lava, then the rest.
   // (Every fitting with a fire, lava's glow and daylight share the level's few real lights: see shareLights.)
-  const { lights, share } = castLights(group, [...flames.filter((f) => f.shop), ...glowing, ...flames.filter((f) => f.fire && !f.shop)]);
+  const { lights, share } = view ? {} : castLights(group, [...flames.filter((f) => f.shop), ...glowing, ...flames.filter((f) => f.fire && !f.shop)]);
   // Soft glows about things that shine by themselves (glow_N anchors: the caves' crystals, the ruins' void shards).
   for (const g of glows) {
     const halo = glowSprite(g.color, 0.9, 0.45);
@@ -594,6 +669,7 @@ export function buildLevelMeshes(data) {
     group.add(built.group);
     return built;
   });
+  if (view) return { group, flames };
   return { group, flames, lights, share, obstacles, openStairs, doors, shopSlots, shopKept, shopResale, water, haze, rough, sunlight: daylight, drips: dripSources(data, rng, drips) };
 }
 
@@ -631,6 +707,59 @@ function holed(builder, x, y, height, hole, dir, ao) {
     };
     quad([pt(k, hole.r), pt(k + 1, hole.r), pt(k + 1, null), pt(k, null)]);
   }
+}
+
+/** Whether tile (x, y) of the floor is in an oubliette's hole `c` (its `pit` or `vaultHole`: see rooms.js). */
+const inHole = (c, x, y) => x >= c.x && y >= c.y && x < c.x + c.w && y < c.y + c.h && c.hole[(y - c.y) * c.w + x - c.x] === 1;
+
+/**
+ * The broken edges round an oubliette's hole (`c`, as `inHole` takes it), in metres from the cell's corner: one along
+ * each side of each tile of the hole with no hole beyond it. Each runs along the side (`edge`, corner to corner of the
+ * grid, in BREAK.steps pieces) and is broken back into the hole (`top`, where the floor above reaches; `under`, its
+ * underside, a little further in or back), some points further than others. At the corners of the grid it's broken
+ * square to the side, where the side runs straight on, or across the corner, where it turns, so each side's pieces
+ * meet the next's. `i`, `j`: the tile, `n` the way into it. Both of the oubliette's floors break it alike (by its `key`).
+ */
+function collapseEdges({ w, h, hole, key }) {
+  const at = (i, j) => i >= 0 && j >= 0 && i < w && j < h && hole[j * w + i] === 1;
+  const roll = (a, b, salt, [lo, hi]) => lo + (hi - lo) * ((gridHash(key, a, b, salt) % 1000) / 1000);
+  const corners = new Map();
+  const corner = (vi, vj) => {
+    const id = vj * (w + 1) + vi;
+    if (!corners.has(id)) {
+      let sx = 0, sz = 0;
+      for (const [a, b] of [[-1, -1], [0, -1], [-1, 0], [0, 0]]) if (at(vi + a, vj + b)) { sx += a * 2 + 1; sz += b * 2 + 1; }
+      const dx = Math.sign(sx), dz = Math.sign(sz), r = roll(vi, vj, 80, dx && dz ? BREAK.corner : BREAK.straight), u = r + roll(vi, vj, 81, BREAK.under);
+      corners.set(id, { top: [vi * TILE + dx * r, vj * TILE + dz * r], under: [vi * TILE + dx * u, vj * TILE + dz * u] });
+    }
+    return corners.get(id);
+  };
+  const edges = [];
+  for (let j = 0; j < h; j++) {
+    for (let i = 0; i < w; i++) {
+      if (!at(i, j)) continue;
+      for (const [di, dj] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
+        if (at(i + di, j + dj)) continue;
+        const n = [-di, -dj], a = di ? [i + (di > 0 ? 1 : 0), j] : [i, j + (dj > 0 ? 1 : 0)], b = di ? [a[0], j + 1] : [i + 1, a[1]];
+        const edge = [], top = [], under = [];
+        for (let k = 0; k <= BREAK.steps; k++) {
+          const t = k / BREAK.steps, p = [(a[0] + (b[0] - a[0]) * t) * TILE, (a[1] + (b[1] - a[1]) * t) * TILE];
+          edge.push(p);
+          if (k === 0 || k === BREAK.steps) {
+            const c = corner(...(k ? b : a));
+            top.push(c.top);
+            under.push(c.under);
+            continue;
+          }
+          const salt = 90 + k + (di ? 10 : 0), d = roll(a[0], a[1], salt, BREAK.along), u = d + roll(a[0], a[1], salt + 20, BREAK.under);
+          top.push([p[0] + n[0] * d, p[1] + n[1] * d]);
+          under.push([p[0] + n[0] * u, p[1] + n[1] * u]);
+        }
+        edges.push({ i, j, n, edge, top, under });
+      }
+    }
+  }
+  return edges;
 }
 
 /**
@@ -890,9 +1019,9 @@ function buildPedestal(p, stoneMat) {
 /**
  * The wall lights' flames, sconces and all (`violet`: burning violet). The shop's are marked `shop`. A room may bring
  * its own (`sconces`, an arena's: see arenas.js), in place of one or two on its walls at random, each the theme's kind
- * of fitting or its own (`kind`: a FITTINGS name).
+ * of fitting or its own (`kind`: a FITTINGS name). The passages have theirs, unless not `passages`.
  */
-function buildSconces(data, group, rng, isWall, rough, violet) {
+function buildSconces(data, group, rng, isWall, rough, violet, passages = true) {
   const spots = [];
   for (const r of data.rooms) {
     if (r.id === data.shop?.room) continue; // the shop brings its own
@@ -917,7 +1046,7 @@ function buildSconces(data, group, rng, isWall, rough, violet) {
   }
   // Along the passages between the rooms, a light every so often (none nearer another than CORRIDOR_GAP tiles), clear
   // of the doorways (see corridorMask) and of walls with something on them.
-  const passage = corridorMask(data.grid, data.w, data.rooms), cands = [];
+  const passage = passages ? corridorMask(data.grid, data.w, data.rooms) : [], cands = [];
   for (let i = 0; i < passage.length; i++) {
     if (!passage[i]) continue;
     const x = i % data.w, y = (i / data.w) | 0, free = (side) => !data.wallUsed?.has(faceKey(x, y, side));

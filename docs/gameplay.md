@@ -5,7 +5,7 @@ How the game plays and the rules behind it: what's in it, the controls, the pack
 ## What's in it
 
 - **25 floors in 5 themes** of five floors each: Sewers, Catacombs, Caves, Dwarven Ruins and the Underworld. Seeded layouts with pillared halls, wall sconces, doors and hidden traps (spike, poison gas, teleport, alarm). See [The dungeon](dungeon.md).
-- **15 monsters:** rat, bat, ooze, goblin, goblin archer, skeleton, orc, wraith, fire imp, troll, stone golem, the **mimic**, which passes for a chest until you reach for it, and three bosses: the **Maledicted Ooze**, in its lair at the bottom of the Sewers, the **Forgotten Jailer**, in his cell block at the bottom of the Catacombs, and the **Warden of Yendor**, who fires bolt volleys and raises the dead at half health. See [Bosses](#bosses).
+- **16 monsters:** rat, bat, ooze, goblin, goblin archer, skeleton, orc, wraith, fire imp, troll, stone golem, the **stone sentinel**, which stands motionless in its hall until you strike it, the **mimic**, which passes for a chest until you reach for it, and three bosses: the **Maledicted Ooze**, in its lair at the bottom of the Sewers, the **Forgotten Jailer**, in his cell block at the bottom of the Catacombs, and the **Warden of Yendor**, who fires bolt volleys and raises the dead at half health. See [Bosses](#bosses).
 - **Items:** 7 weapons with different reach, speed and damage types (spears out-reach swords, hammers hit hard but recover slowly), each to be gripped in one hand or both, the lantern, a **shield** or a **bow** (with **arrows** in your quiver) in your off hand, **thrown weapons** (stones, darts and throwing knives), 5 armours with strength requirements, 10 potions, 10 scrolls, 5 wands, 6 rings, food. Most are found in **chests**, and the best in locked ones. See [Chests and mimics](dungeon.md#chests-and-mimics).
 - **A shop** on the first floor of each theme after the first (floors 6, 11, 16 and 21). See [The shop](dungeon.md#the-shop).
 - **6 artefacts**, 5 per run in guarded shrines on the third floor of each theme (3, 8, 13, 18 and 23): Chalice of Crimson Thirst (lifesteal), Eye of the Deep (see all monsters, even through walls, and traps), Horn of Thunder (stun blast), Cloak of Shadows (invisibility), Boots of the Wind (speed), Emberheart (burning strikes, fire immunity). You have two attunement slots.
@@ -20,7 +20,7 @@ How the game plays and the rules behind it: what's in it, the controls, the pack
 | C | Sneak on/off: half speed, crouched and near-silent (uses stamina); creeps over found traps without setting them off. Sprinting, or running out of stamina, ends it |
 | Mouse | Look (click the view to capture the pointer) |
 | Click / Space | Attack. Click swings once the meter is past 20%; holding re-swings only at full charge. With a bow in hand, a jab with the arrow in your hand (see [Bows and arrows](#bows-and-arrows)) |
-| E | Pick up, open a chest or door, use stairs |
+| E | Pick up, open a chest or door, search a body, use stairs, jump down a hole |
 | I or Tab | Pack (click or arrow keys select, drag to the doll or hotbar, 1–4 put on the hotbar, Q next tab, double-click or Enter use, T throw, D drop) |
 | M | Full map |
 | 1–4 | Hotbar slots (see [Hotbar](#hotbar)). For a potion or wand, hold the key: click throws or zaps it, right-click drinks it or zaps yourself. For a thrown weapon, hold the key, hold right-click to draw your arm back, and click to throw (see [Thrown weapons](#thrown-weapons)). A weapon, lantern, shield or bow there swaps with what's in that hand |
@@ -179,6 +179,7 @@ Each monster's blows fit what it fights with, and most resist some kinds of dama
 | Fire imp | slash (claws), fire (fireballs) | | +25% | | ice +50%, holy +50%, fire immune |
 | Troll | bash (club) | | +25% | −25% | fire +50% |
 | Stone golem | bash (fists) | −50% | −50% | +50% | magic +25%, fire −50%, lightning −50%, poison immune |
+| Stone sentinel | its weapon's (and its enchantment's) | −40% | −40% | +40% | magic +25%, fire −50%, lightning −50%, poison immune |
 | Mimic | stab (bite) | | −25% | | fire +50% |
 | Maledicted Ooze | bash (slam, blast), magic (globs) | +25% | −25% | −50% | fire +25%, poison immune; past half its health, cold only chills it |
 | Forgotten Jailer | bash (mace, chain, charge) | −15% | −40% | +30% | holy +50%, poison immune |
@@ -293,6 +294,10 @@ How they meet (`afflict` in `status.js`):
 - When it loses sight of you, it goes to where it last saw you.
 - Either way, it looks around when it gets there and heads for anything else it hears.
 - It gives up after 12 s with no sign of you. A boss never gives up.
+
+## The stone sentinel
+
+A [sentinel's hall](dungeon.md#special-rooms) holds a mossy stone golem with a weapon in its right hand, standing at the back facing the way in. It never stirs on its own: it doesn't see you or hear you, and you can walk right up to it. Only a blow wakes it (your first is a sneak attack), and then it fights like a golem, slow and heavy, with 40 health, but with that weapon: its damage and its +, a third again (`armed` in its def, and growing deeper down as any monster's does), of the weapon's type, and a weapon enchanted to burn, chill or poison does that to you as well. Kill it and the weapon is yours: always +1 at least, known not to be cursed, otherwise unidentified. Leave it alone and it stays where it is.
 
 ## Bosses
 

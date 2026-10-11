@@ -171,6 +171,17 @@ export class Sfx {
   }
   equip() { this.noise({ dur: 0.12, vol: 0.18, freq: 1500, q: 2 }); }
   stairs() { this.noise({ dur: 0.9, vol: 0.3, freq: 300, freq2: 60, type: 'lowpass', q: 0.7 }); }
+  /** Landing hard, after a drop (see Game.dropDown). */
+  thud() {
+    this.tone({ f: 80, f2: 38, dur: 0.35, type: 'sine', vol: 0.4 });
+    this.noise({ dur: 0.3, vol: 0.32, freq: 500, freq2: 120, type: 'lowpass', q: 0.8 });
+    for (let i = 0; i < 3; i++) this.noise({ dur: 0.07, vol: 0.08, freq: 1500 + i * 400, q: 2, delay: 0.12 + i * 0.09 }); // grit
+  }
+  /** Searching a body: rags, and the bones in them shifting. */
+  search() {
+    this.noise({ dur: 0.35, vol: 0.12, freq: 1400, freq2: 900, q: 0.8 });
+    for (let i = 0; i < 4; i++) this.tone({ f: 900 + Math.random() * 600, f2: 700, dur: 0.05, type: 'triangle', vol: 0.05, delay: 0.15 + i * 0.07 + Math.random() * 0.03 });
+  }
   drink() { for (let i = 0; i < 4; i++) this.tone({ f: 380 + i * 90, f2: 260, dur: 0.07, type: 'sine', vol: 0.12, delay: i * 0.08 }); }
   read() { this.noise({ dur: 0.35, vol: 0.14, freq: 3500, type: 'highpass', q: 0.5 }); }
   zap() { this.tone({ f: 1400, f2: 180, dur: 0.28, type: 'sawtooth', vol: 0.11 }); }

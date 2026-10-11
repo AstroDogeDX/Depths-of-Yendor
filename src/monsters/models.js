@@ -213,6 +213,7 @@ const ANIMATE = {
   skeleton: (b) => biped(b),
   orc: (b) => biped(b),
   golem: (b) => biped(b),
+  sentinel: (b) => biped(b),
   warden: (b) => biped(b),
   troll: (b) => biped(b, 0.3),
   archer: (b) => {

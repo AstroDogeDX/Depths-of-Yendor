@@ -108,6 +108,9 @@ const MATS = {
     if (fract(noise3(p.x * 0.08, p.y * 0.08, p.z * 0.08, 461) * 5) < 0.06) v = 0.1; // cracks
     return ramp(MON_PAL.stone, v, c.ax, c.ay);
   },
+  // A sentinel's stone: moss grown over whatever faces up, it's stood so long.
+  mossStone: (c) => (noise3(c.p.x * 0.1, c.p.y * 0.1, c.p.z * 0.1, 470) > 0.58 && c.n.y > 0.15
+    ? ramp(MON_PAL.moss, 0.42 + 0.3 * patches(c.p, 471, 0.6), c.ax, c.ay) : MATS.stone(c)),
   warden: skin('warden', { seed: 6 }),
   plate(c) {
     const { p, info } = c;
@@ -246,6 +249,27 @@ function humanoid(m, o) {
     if (o.extras) o.extras(m, dims);
   }, { origin: [0, legLen, 0] });
   return dims;
+}
+
+/**
+ * A golem: a hulking biped of `stone`, its eyes and the rune-core in its chest glowing in `eyes` and `core`, boulders
+ * for shoulders; with `grip`, an empty group at its right fist for what it holds.
+ */
+function golem(m, { stone, eyes, core, grip = false }) {
+  humanoid(m, {
+    h: 2.35, bulk: 1.9, skin: stone, head: 0.34, eyes, limb: 0.14, fist: 1.5,
+    headParts: (m, neckY, S) => {
+      const w = S / 2;
+      m.mesh('head', loft([octRingZ(-w, w * 1.1, w, neckY + w, 0.25), octRingZ(w * 1.1, w * 1.1, w, neckY + w, 0.25)]), { mat: stone });
+      m.cube('brow', [-w * 1.15, neckY + S * 0.62, w * 0.9], [w * 1.15, neckY + S * 0.8, w * 1.3], { mat: stone });
+    },
+    extras: (m, d) => {
+      // A glowing rune-core set into the chest, and boulders for shoulders.
+      m.mesh('core', loft([octRingZ(0, 5, 5, d.legLen + d.torsoH * 0.62, 0.3), octRingZ(2, 3.5, 3.5, d.legLen + d.torsoH * 0.62, 0.3)].map((ring) => ring.map(([x, y, z]) => [x, y, z + d.rz * 1.0]))), { mat: core });
+      pair((s, side) => m.mesh(`shoulder_${side}`, revolve([[0, -6], [8, -4], [10, 1], [7, 6], [0, 7]], { sides: 6 }), { mat: stone, origin: [s * (d.sx + 1), d.shY + 3, 0], rotation: [0, 30, s * 15] }));
+    },
+    ...(grip ? { rightHand: (m, x, y, z) => m.group('grip', undefined, { origin: [x, y, z] }) } : {}),
+  });
 }
 
 function defaultHead(m, neckY, headS, mat) {
@@ -593,21 +617,11 @@ const monsters = {
     });
   }, { glow: ['eyeOrange'], density: 1 }),
 
-  golem: defineModel('golem', MATS, (m) => {
-    humanoid(m, {
-      h: 2.35, bulk: 1.9, skin: 'stone', head: 0.34, eyes: 'eyeOrange', limb: 0.14, fist: 1.5,
-      headParts: (m, neckY, S) => {
-        const w = S / 2;
-        m.mesh('head', loft([octRingZ(-w, w * 1.1, w, neckY + w, 0.25), octRingZ(w * 1.1, w * 1.1, w, neckY + w, 0.25)]), { mat: 'stone' });
-        m.cube('brow', [-w * 1.15, neckY + S * 0.62, w * 0.9], [w * 1.15, neckY + S * 0.8, w * 1.3], { mat: 'stone' });
-      },
-      extras: (m, d) => {
-        // A glowing rune-core set into the chest, and boulders for shoulders.
-        m.mesh('core', loft([octRingZ(0, 5, 5, d.legLen + d.torsoH * 0.62, 0.3), octRingZ(2, 3.5, 3.5, d.legLen + d.torsoH * 0.62, 0.3)].map((ring) => ring.map(([x, y, z]) => [x, y, z + d.rz * 1.0]))), { mat: 'ember' });
-        pair((s, side) => m.mesh(`shoulder_${side}`, revolve([[0, -6], [8, -4], [10, 1], [7, 6], [0, 7]], { sides: 6 }), { mat: 'stone', origin: [s * (d.sx + 1), d.shY + 3, 0], rotation: [0, 30, s * 15] }));
-      },
-    });
-  }, { glow: ['eyeOrange', 'ember'], density: 1 }),
+  golem: defineModel('golem', MATS, (m) => golem(m, { stone: 'stone', eyes: 'eyeOrange', core: 'ember' }), { glow: ['eyeOrange', 'ember'], density: 1 }),
+
+  // The stone sentinel (see dungeon/rooms.js): a golem left standing guard over a weapon so long that moss has grown
+  // over it, its eyes and rune a cold blue; `grip` marks its right fist, where the game sets the weapon it holds.
+  sentinel: defineModel('sentinel', MATS, (m) => golem(m, { stone: 'mossStone', eyes: 'eyeCyan', core: 'eyeCyan', grip: true }), { glow: ['eyeCyan'], density: 1 }),
 
   warden: defineModel('warden', MATS, (m) => {
     humanoid(m, {

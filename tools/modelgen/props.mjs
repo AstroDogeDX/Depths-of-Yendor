@@ -25,6 +25,8 @@ const PROP_PAL = {
   royal: P('#04081a', '#081028', '#0e1a3c', '#162650', '#203466', '#2c447e'),
   burlap: P('#2e2112', '#45321b', '#5e4625', '#785b31', '#91703e', '#a8864e'),
   grain: P('#4a3812', '#6a521c', '#8c6e28', '#ab8a36', '#c6a448', '#dcbe62'),
+  slab: P('#24262a', '#33363b', '#43464c', '#54585e', '#666a71', '#797e85'), // cold grey stone, no theme's own
+  rune: P('#0c3a4a', '#16607a', '#2c8eaa', '#62c2d8', '#b8ecf6'), // the sentinel's runes, glowing a pale cold blue
 };
 
 // Wooden planks: `across` is the axis the planks are laid across (each plank is `width` pixels of it) and
@@ -48,6 +50,13 @@ function crate(c) {
 
 const MATS = {
   ...MAT,
+  // The sentinel's slab: grey stone, worn smooth, a groove cut round inside its rim and another round the middle.
+  slab(c) {
+    const r = Math.hypot(c.p.x, c.p.z);
+    if (c.n.y > 0.5 && (Math.abs(r - 52) < 1 || Math.abs(r - 41) < 1 || Math.abs(r - 18) < 0.9)) return ramp(PROP_PAL.slab, 0.06, c.ax, c.ay);
+    return ramp(PROP_PAL.slab, 0.48 + 0.12 * patches(c.p, 690, 0.3) + (c.n.y > 0.5 ? 0.06 * (1 - r / 58) : -0.1), c.ax, c.ay);
+  },
+  rune: (c) => ramp(PROP_PAL.rune, 0.55 + 0.25 * patches(c.p, 691, 1), c.ax, c.ay),
   counterTop: planks('oak', 'z', 'x', 8),
   counterFront: planks('oak', 'x', 'y', 7, 1),
   darkOak: (c) => ramp(PROP_PAL.darkOak, 0.45 + 0.16 * patches(c.p, 620, 0.4) + bevel(c, 0.18), c.ax, c.ay),
@@ -314,4 +323,27 @@ export const props = {
     m.cube('rug', [-90, 0.05, -58], [90, 0.5, 58], { mat: 'rug', info: { w: 90, d: 58 }, faces: ['up'] });
     [-26, 26].forEach((z, row) => [-55, 0, 55].forEach((x, i) => slot(m, row * 3 + i + 1, [x, 0.5, z])));
   }, { density: 1 }),
+
+  rune_slab: defineModel('rune_slab', MATS, (m) => {
+    // A great round slab set in the floor where a stone sentinel stands its watch (see dungeon/rooms.js), its runes
+    // cut between the grooves round its rim and glowing faintly: a ring of them, and a sigil in the middle. Of no
+    // theme's stone, as the sentinel is of none.
+    m.mesh('slab', revolve([[0, 0], [58, 0], [58, 1.2], [0, 1.2]], { sides: 16 }), { mat: 'slab' });
+    // Each rune a few strokes, between the grooves, turned to face the middle.
+    for (let k = 0; k < 14; k++) {
+      const a = (k / 14) * Math.PI * 2, deg = (a * 180) / Math.PI, x = Math.sin(a) * 46.5, z = Math.cos(a) * 46.5;
+      const strokes = [[0, -3.5, 0, 3.5], [-2.2, rand(k, 692) * 4 - 2, 2.2, rand(k, 693) * 4 - 2], [rand(k, 694) > 0.5 ? -2 : 2, -3.5, 0, 0]];
+      strokes.slice(0, 2 + (rand(k, 695) > 0.4 ? 1 : 0)).forEach(([u0, v0, u1, v1], s) => {
+        const len = Math.hypot(u1 - u0, v1 - v0), ang = Math.atan2(u1 - u0, v1 - v0) * (180 / Math.PI);
+        const cu = (u0 + u1) / 2, cv = (v0 + v1) / 2;
+        // (u along the ring, v toward the middle; the slab turned so +z points out from the middle at this rune)
+        const px = x + Math.cos(a) * cu - Math.sin(a) * cv, pz = z - Math.sin(a) * cu - Math.cos(a) * cv;
+        m.cube(`rune_${k + 1}_${s + 1}`, [px - 0.6, 1.2, pz - len / 2], [px + 0.6, 1.5, pz + len / 2], { mat: 'rune', origin: [px, 1.2, pz], rotation: [0, deg + ang, 0], faces: ['up'] });
+      });
+    }
+    // The sigil: a ring with an eye in it.
+    const ring = Array.from({ length: 16 }, (_, i) => [Math.sin((i / 16) * Math.PI * 2) * 11, 1.35, Math.cos((i / 16) * Math.PI * 2) * 11]);
+    m.mesh('sigil_ring', tube(ring, { half: 0.8, closed: true, side: [0, 1, 0] }), { mat: 'rune' });
+    m.mesh('sigil_eye', revolve([[0, 1.2], [4, 1.2], [4, 1.5], [0, 1.5]], { sides: 8 }), { mat: 'rune' });
+  }, { density: 1, glow: ['rune'] }),
 };

@@ -1,4 +1,5 @@
 import { T } from './tiles.js';
+import { TILE } from '../config.js';
 
 // Decorations by theme `style`: props set about the rooms after they're furnished (see props.js for the models).
 // Wall pieces hang on walls facing into a room; floor pieces keep to the edges of rooms, or to tiles open all
@@ -40,10 +41,11 @@ export function corridorMask(grid, w, rooms) {
 
 /**
  * Decorates a floor. `occupied` (a Set of tile indices) gets the tiles solid props stand on, so nothing is placed
- * on them later. The passages are dressed with `tunnelRng`. Returns { props, wallUsed }: wallUsed holds the wall faces
- * taken (faceKey), which sconces avoid.
+ * on them later. The passages are dressed with `tunnelRng`. A room that brings its own dressing (`dress(room)` gives
+ * it: see rooms.js) is dressed with that in place of its theme's. Returns { props, wallUsed }: wallUsed holds the wall
+ * faces taken (faceKey), which sconces avoid.
  */
-export function decorate({ style, rng, tunnelRng = rng, grid, w, rooms, channels, occupied }) {
+export function decorate({ style, rng, tunnelRng = rng, grid, w, rooms, channels, occupied, dress = () => null }) {
   const idx = (x, y) => y * w + x;
   const at = (x, y) => grid[idx(x, y)];
   const props = [], wallUsed = new Set();
@@ -128,15 +130,31 @@ export function decorate({ style, rng, tunnelRng = rng, grid, w, rooms, channels
         }
         return false;
       },
-      /** A cobweb in each of the room's upper corners, by `chance`, but not where a door would swing through it. */
-      cobwebs(chance) {
+      /**
+       * Takes a free wall face for one of the room's wall lights, rather than leaving them to be put up at random as the
+       * level's built (see `sconces` in buildSconces). Returns false if there's none left.
+       */
+      sconce() {
+        const f = freeFaces.find(([x, y, side]) => !wallUsed.has(faceKey(x, y, side)));
+        if (!f) return false;
+        const [x, y, side] = f, at = wallFace(x, y, side), [nx, ny] = SIDE[side].n;
+        wallUsed.add(faceKey(x, y, side));
+        (room.sconces ??= []).push({ x: at.x * TILE - nx * 0.1, z: at.y * TILE - ny * 0.1, ry: at.yaw }); // (0.1 m out from it)
+        return true;
+      },
+      /**
+       * A cobweb in each of the room's upper corners, by `chance`, but not where a door would swing through it, nor where
+       * `where(x, y)`, given the corner's tile, says not.
+       */
+      cobwebs(chance, where = () => true) {
         for (const [cx, cy, dx, dy] of [[room.x, room.y, 1, 1], [room.x + room.w, room.y, -1, 1], [room.x, room.y + room.h, 1, -1], [room.x + room.w, room.y + room.h, -1, -1]]) {
           if (room.doorways.some((d) => Math.abs(d.x + 0.5 - cx) < 2 && Math.abs(d.y + 0.5 - cy) < 2)) continue;
+          if (!where(dx > 0 ? cx : cx - 1, dy > 0 ? cy : cy - 1)) continue;
           if (rng.chance(chance)) props.push({ type: 'cobweb', x: cx, y: cy, corner: [dx, dy] });
         }
       },
     };
-    set(ctx);
+    (dress(room) ?? set)(ctx);
   }
 
   // The passages, for a style that dresses them.

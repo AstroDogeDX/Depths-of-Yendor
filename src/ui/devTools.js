@@ -5,7 +5,7 @@ import {
 } from '../items/defs.js';
 import { makeItem, stackable, chestLoot } from '../items/generate.js';
 import { MONSTERS } from '../monsters/defs.js';
-import { generateLevel } from '../dungeon/generator.js';
+import { generateFloor } from '../dungeon/generator.js';
 import { disposeGroup } from '../dungeon/levelBuilder.js';
 import { Level } from '../world/level.js';
 import { T } from '../dungeon/tiles.js';
@@ -41,6 +41,7 @@ export class DevTools {
   constructor(game) {
     this.game = game;
     this.god = false; // no damage (see Game.hurtPlayer)
+    this.allRooms = false; // every special room on each floor built from now on (see specialRooms in dungeon/generator.js)
     this.kind = 'weapon';
     this.layouts = 0; // how many times "New layout" has rerolled a floor, for fresh seeds
     this.build();
@@ -73,6 +74,7 @@ export class DevTools {
               <button class="alt" data-act="reveal">Reveal map</button>
               <button class="alt" data-act="stairs">To the stairs down</button>
             </div>
+            <label class="check" title="Each floor built from now on (by New layout, or the first time you reach it) has every special room it could have: the sentinel's hall, a storeroom, the Sewers' pipework, the Catacombs' oubliettes"><input type="checkbox" data-opt="allRooms" /> Every special room <span>(on floors built from now)</span></label>
             <h3>You</h3>
             <label class="check"><input type="checkbox" data-opt="god" /> God mode <span>(take no damage)</span></label>
             <div class="dev-stats"></div>
@@ -166,6 +168,10 @@ export class DevTools {
       this.god = e.target.checked;
       this.note(this.god ? 'God mode on: nothing can hurt you.' : 'God mode off.');
     });
+    this.opt('allRooms').addEventListener('change', (e) => {
+      this.allRooms = e.target.checked;
+      this.note(this.allRooms ? 'Every special room on floors built from now: New layout rebuilds this one.' : 'Special rooms by chance again, on floors built from now.');
+    });
   }
 
   show() {
@@ -232,7 +238,7 @@ export class DevTools {
   newLayout() {
     const g = this.game, depth = g.level.depth, old = g.level;
     this.layouts++;
-    g.levels.set(depth, new Level(g, generateLevel(`${g.seed}~${this.layouts}`, depth, g.floorOpts(depth))));
+    g.levels.set(depth, new Level(g, generateFloor(`${g.seed}~${this.layouts}`, depth, (d) => g.floorOpts(d))));
     g.closeMenu();
     g.ui.fadeTransition();
     g.arrive(depth, 'down');

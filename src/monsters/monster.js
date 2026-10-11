@@ -7,6 +7,9 @@ import { spawnProjectile } from '../fx/projectiles.js';
 import { burst } from '../fx/particles.js';
 import { strain } from '../fx/statusFx.js';
 import { round2 } from '../save.js';
+import { WEAPONS } from '../items/defs.js';
+import { buildWeaponMesh } from '../items/models.js';
+import { enchantOf } from '../items/enchant.js';
 import { DAMAGE_TYPES, damageType, damageMult, isPhysical } from '../damage.js';
 import {
   STATUSES, blankStatus, restoreStatus, saveStatus, afflict as applyStatus, tickStatuses, damageTakenMult, hitStatuses,
@@ -15,7 +18,7 @@ import {
 
 const BLOOD = {
   rat: 0x901010, bat: 0x901010, slime: 0x40c040, goblin: 0x902010, archer: 0x902010, skeleton: 0xe0d8c0,
-  orc: 0x801010, wraith: 0x6040a0, imp: 0xff6010, troll: 0x406020, golem: 0x909090, mimic: 0x7a1830,
+  orc: 0x801010, wraith: 0x6040a0, imp: 0xff6010, troll: 0x406020, golem: 0x909090, sentinel: 0x8a9090, mimic: 0x7a1830,
   maledicted_ooze: 0x5a1a78, jailer: 0xc8c0a8, warden: 0xffc040,
 };
 
@@ -28,6 +31,9 @@ const GRUDGE = 8;
 const ALLY_REACH = 12;
 const ALLY_PROVOKES = 4;
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+const ARMED_SCALE = 1.4; // the weapon an armed monster holds, to its size (a sentinel's is a man's weapon in a giant's fist)
+// What an enchanted weapon's blows bring (its `onHit`: see items/enchant.js), as statuses.
+const ON_HIT = { ignite: 'burning', chill: 'chilled', poison: 'poisoned' };
 
 export class Monster {
   constructor(type, x, z, levelDepth, opts = {}) {
@@ -55,6 +61,9 @@ export class Monster {
     this.noFreeze = false; // nothing freezes it now (see Frozen in status.js)
     this.guardian = !!opts.guardian;
     this.state = (opts.asleep ?? rand.chance(def.sleepChance)) ? 'sleep' : 'wander';
+    // Asleep, a `dormant` one (the sentinel) stands as if carved: it wakes to nothing but a blow (see takeDamage).
+    this.dormant = !!def.dormant && this.state === 'sleep';
+    this.weapon = null; // what an armed one fights with (see arm)
 
     const model = buildMonsterModel(type);
     this.model = model;
@@ -106,7 +115,7 @@ export class Monster {
       type: this.type, x: round2(this.x), z: round2(this.z), yaw: round2(this.yaw), hp: round2(this.hp), maxHp: this.maxHp,
       danger: this.danger, dmgMult: this.dmgMult, state: this.state, seen: this.seen || undefined, status,
       boss: this.boss || undefined, guardian: this.guardian || undefined, summoned: this.summoned || undefined,
-      enraged: this.enraged || undefined, roused: this.roused || undefined, weakBase: this.weakBase ?? undefined, loot: this.loot ?? undefined,
+      enraged: this.enraged || undefined, roused: this.roused || undefined, dormant: this.dormant || undefined, weakBase: this.weakBase ?? undefined, loot: this.loot ?? undefined,
     };
   }
 
@@ -122,11 +131,43 @@ export class Monster {
     this.state = s.state;
     this.seen = !!s.seen;
     this.roused = !!s.roused;
+    this.dormant = !!s.dormant;
     this.summoned = !!s.summoned;
     this.loot = s.loot ?? null;
     if (s.enraged) this.ai?.enrage(this, null, { quiet: true });
     this.mesh.rotation.y = this.yaw;
+    this.arm();
     return this;
+  }
+
+  /**
+   * An armed monster (`armed` in its def: the sentinel) holds the weapon it carries (in its loot) in its fist (its
+   * model's `grip`), tip forward, and fights with it (see melee). It drops it when it dies, with the rest of its loot.
+   */
+  arm() {
+    const w = this.def.armed ? this.loot?.find((it) => it.kind === 'weapon') : null, grip = this.model.bones.grip;
+    this.weapon = w ?? null;
+    if (!w || !grip || this.weaponMesh) return;
+    const mesh = buildWeaponMesh(WEAPONS[w.type].model);
+    mesh.rotation.x = Math.PI / 2;
+    mesh.scale.setScalar(ARMED_SCALE);
+    grip.add(mesh);
+    this.weaponMesh = mesh;
+  }
+
+  /**
+   * A blow of its own: its damage (rolled), and of what type, and what it brings with it. An armed one strikes with its
+   * weapon: the weapon's damage and its +, times its `armed`, of the weapon's type, bringing its enchantment's statuses.
+   */
+  blow() {
+    const w = this.weapon;
+    if (!w) return { dmg: this.rollDamage(), type: damageType(this.def), statuses: [] };
+    const [lo, hi] = WEAPONS[w.type].dmg, k = this.def.armed;
+    const onHit = enchantOf(w)?.onHit ?? {};
+    return {
+      dmg: this.rollDamage(1, [Math.round((lo + w.plus) * k), Math.round((hi + w.plus) * k)]), type: WEAPONS[w.type].dmgType,
+      statuses: Object.entries(onHit).map(([what, secs]) => [ON_HIT[what], secs]),
+    };
   }
 
   // --- Statuses (see status.js) ---
@@ -221,7 +262,7 @@ export class Monster {
       this.pickFoe(game, level);
     }
     // Carrying the Amulet, you're Hunted: everything on the floor knows where you are (all but the charmed).
-    if (game.hunted && !this.charmed() && (this.state !== 'hunt' || !this.seen)) {
+    if (game.hunted && !this.charmed() && !this.dormant && (this.state !== 'hunt' || !this.seen)) {
       this.state = 'hunt';
       this.seen = true;
       this.lostT = 0;
@@ -261,7 +302,7 @@ export class Monster {
     strain(this);
     this.updateTint(dt);
 
-    if (this.state === 'sleep') {
+    if (this.state === 'sleep' && !this.dormant) {
       this.zzzT -= dt;
       if (this.zzzT <= 0) {
         this.zzzT = 2.5;
@@ -307,6 +348,7 @@ export class Monster {
     const stealth = p.stealth();
     const heard = this.hearing(p, level);
     if (this.state === 'sleep') {
+      if (this.dormant) return;
       // Sleepers don't watch: they wake to footsteps, or to someone looming right over them.
       // Sneaking keeps your steps near-silent and your presence five times less likely to stir them.
       let chance = 0.25 * heard;
@@ -385,7 +427,7 @@ export class Monster {
    * finds nothing and hears no more (see think). Still open to an unaware strike.
    */
   hear(game, level, x = game.player.x, z = game.player.z) {
-    if (this.charmed() || (this.state === 'hunt' && this.seen && this.canSee)) return;
+    if (this.charmed() || this.dormant || (this.state === 'hunt' && this.seen && this.canSee)) return;
     this.state = 'hunt';
     this.seen = false;
     this.lostT = 0;
@@ -666,7 +708,8 @@ export class Monster {
         Math.hypot(m.x - this.x, m.z - this.z) <= this.def.reach + m.radius + 0.25 &&
         ((m.x - this.x) * fx + (m.z - this.z) * fz) > 0);
       if (other) {
-        other.takeDamage(game, this.rollDamage(), { type: damageType(this.def), attacker: this });
+        const b = this.blow();
+        other.takeDamage(game, b.dmg, { type: b.type, attacker: this });
         return;
       }
     }
@@ -675,7 +718,8 @@ export class Monster {
       const mx = target.x - this.x, mz = target.z - this.z, md = Math.hypot(mx, mz);
       if (md <= this.def.reach + target.radius + 0.25 && (mx * fx + mz * fz) / (md || 1) > 0.35 &&
           level.los(this.x, this.z, target.x, target.z) && rand.chance(0.9 - target.def.dodge)) {
-        target.takeDamage(game, this.rollDamage(), { type: damageType(this.def), attacker: this });
+        const b = this.blow();
+        if (target.takeDamage(game, b.dmg, { type: b.type, attacker: this }) > 0 && !target.dead) for (const [key, secs] of b.statuses) target.afflict(game, key, secs, false);
       } else if (nearYou) game.audio.whiff();
       return;
     }
@@ -684,8 +728,10 @@ export class Monster {
     if (dist <= this.def.reach + PLAYER_RADIUS + 0.25 && facing > 0.35 && p.status.invisible <= 0 &&
         level.los(this.x, this.z, p.x, p.z)) {
       if (rand.chance(Math.max(0.3, 0.9 - p.evasion()))) {
-        game.hurtPlayer(this.rollDamage(), { source: this.name, monster: this, type: damageType(this.def) });
+        const b = this.blow();
+        const dealt = game.hurtPlayer(b.dmg, { source: this.name, monster: this, type: b.type });
         if (this.def.poisonHit && rand.chance(this.def.poisonHit)) p.addStatus('poisoned', 6, game);
+        if (dealt > 0 && !game.over) for (const [key, secs] of b.statuses) p.addStatus(key, secs, game);
       } else {
         game.popup({ x: p.x - Math.sin(p.yaw) * 0.8, y: p.eyeHeight(), z: p.z - Math.cos(p.yaw) * 0.8 }, 'dodge', 'miss');
         game.audio.whiff();
@@ -730,6 +776,7 @@ export class Monster {
    */
   takeDamage(game, amount, opts = {}) {
     if (this.dead) return 0;
+    this.dormant = false; // (a blow wakes even a sentinel)
     const own = damageMult(this.def, opts.type);
     // (A frozen monster's resistances don't show: they're stripped.)
     if (own !== 1 && !(own < 1 && this.status.frozen > 0)) this.revealResist(game, opts.type, own);

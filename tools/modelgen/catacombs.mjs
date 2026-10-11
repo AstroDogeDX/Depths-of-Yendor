@@ -3,7 +3,7 @@
 // facing +z. Wall props: origin on the wall face at floor level, standing out from it along +z. The pits'
 // floors lie 1.5 m below the floor (96 px); the vault is 2.8 m up (179 px).
 import * as THREE from 'three';
-import { defineModel, revolve, tube, noise3, rand, fract, ramp } from './lib.mjs';
+import { defineModel, revolve, tube, loft, noise3, rand, fract, ramp } from './lib.mjs';
 import { MAT, PAL, P, patches, bevel } from './materials.mjs';
 import { HALF, VAULT as TOP, prism, archPts, archSlices, bothFaces } from './doorkit.mjs';
 import { PIT as DEPTH, SKY, face, squareShaft, sideways, deep } from './stairkit.mjs';
@@ -17,6 +17,8 @@ const CAT_PAL = {
   blood: P('#1a0806', '#2e0e0a', '#44150f'),
   oak: P('#0e0a07', '#17110b', '#211810', '#2c2016', '#382a1c', '#453423', '#53402c'), // old oak, near black
   parchment: P('#4a3e2a', '#685a40', '#887a58', '#a69772', '#c0b28c'),
+  straw: P('#2e2410', '#46381a', '#615026', '#7d6833', '#998142', '#b29a55'), // old straw, gone dun
+  rag: P('#1c1915', '#29251f', '#37322a', '#464036', '#554e42'), // a prisoner's rags, grey with filth
 };
 const PIT = -96; // the floor of a spike pit
 const VAULT = 179; // the ceiling
@@ -137,6 +139,20 @@ export const MATS = {
     const iron = flat ? u < 0.95 && (u > 0.45 || f < 0.22 || f > 0.78) : u < 0.3;
     return iron ? MAT.rustyIron(c) : [0, 0, 0, 0];
   },
+  // --- The oubliette (prison_bed, corpse)
+  // A cot's boards, laid along x, a dark seam between each.
+  cot(c) {
+    const { p } = c;
+    if (c.n.y > 0.5 && fract((p.z + 40) / 7.5) < 0.1) return ramp(CAT_PAL.oak, 0.05, c.ax, c.ay);
+    return ramp(CAT_PAL.oak, 0.5 + 0.14 * patches(p, 980, 0.3) + 0.1 * (rand(Math.floor((p.z + 40) / 7.5), 981) - 0.5) + bevel(c, 0.15), c.ax, c.ay);
+  },
+  straw: (c) => ramp(CAT_PAL.straw, 0.45 + 0.2 * patches(c.p, 982, 0.9) + (rand(c.ax, c.ay, 983) > 0.85 ? 0.2 : 0) + bevel(c, 0.1), c.ax, c.ay),
+  rag(c) {
+    let v = 0.45 + 0.16 * patches(c.p, 984, 0.4);
+    if (fract(c.p.y * 0.4 + noise3(c.p.x * 0.2, 0, c.p.z * 0.2, 985)) < 0.12) v -= 0.18; // the weave, and the stains on it
+    return ramp(CAT_PAL.rag, v, c.ax, c.ay);
+  },
+  purse: (c) => ramp(PAL.leather, 0.45 + 0.15 * patches(c.p, 986, 0.6) + bevel(c, 0.2), c.ax, c.ay),
   // A ledger's pages, yellowed, ruled with lines of faded ink (on its upper faces).
   parchment(c) {
     const { p, n } = c;
@@ -573,6 +589,102 @@ export const catacombs = {
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * Math.PI * 2 + 0.3;
       m.mesh(`stool_leg_${i + 1}`, tube([[-6 + Math.cos(a) * 8, 30, 40 + Math.sin(a) * 8], [-6 + Math.cos(a) * 11, 0, 40 + Math.sin(a) * 11]], { half: 1.5, sides: 4 }), { mat: 'oak' });
+    }
+  }, { density: 1 }),
+
+  // --- The oubliette (see dungeon/rooms.js): a cell you can only get into from above, or with its key
+
+  prison_bed: defineModel('prison_bed', MATS, (m) => {
+    // A prisoner's cot along the wall: boards on a frame on four stubby legs, a straw tick on it, flattened and
+    // spilling, a lump of rag for a pillow, and a ragged blanket fallen half onto the floor.
+    const L = 54, W = 23, H = 19; // half its length (along x), half its width (z), the top of its boards
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      const x = sx * (L - 5), z = sz * (W - 4);
+      m.cube(`leg_${sz < 0 ? 'back' : 'front'}_${sx < 0 ? 'left' : 'right'}`, [x - 2.5, 0, z - 2.5], [x + 2.5, H - 3, z + 2.5], { mat: 'cot' });
+    }
+    m.cube('rail_back', [-L, H - 8, -W], [L, H - 3, -W + 4], { mat: 'cot' });
+    m.cube('rail_front', [-L, H - 8, W - 4], [L, H - 3, W], { mat: 'cot' });
+    m.cube('boards', [-L, H - 3, -W], [L, H, W], { mat: 'cot' });
+    m.cube('tick', [-L + 4, H, -W + 2], [L - 10, H + 5, W - 3], { mat: 'straw' });
+    m.cube('tick_end', [L - 10, H, -W + 4], [L - 3, H + 3, W - 6], { mat: 'straw' });
+    m.cube('pillow', [-L + 6, H + 5, -W + 5], [-L + 22, H + 9, W - 7], { mat: 'rag' });
+    for (let i = 0; i < 7; i++) {
+      const x = -L + 10 + rand(i, 993) * (2 * L - 20), z = W + 2 + rand(i, 994) * 10;
+      m.cube(`straw_${i + 1}`, [x - 4, 0, z - 0.5], [x + 4, 0.6, z + 0.5], { mat: 'straw', origin: [x, 0, z], rotation: [0, rand(i, 995) * 180, 0] });
+    }
+    // The blanket: over the foot of the tick, down its front and out across the floor.
+    m.mesh('blanket', [
+      { pts: [[4, H + 5.4, -W + 3], [L - 8, H + 5.4, -W + 3], [L - 8, H + 5.4, W - 1], [4, H + 5.4, W - 1]] },
+      { pts: [[4, H + 5.4, W - 1], [L - 8, H + 5.4, W - 1], [L - 4, 3, W + 6], [8, 3, W + 9]] },
+      { pts: [[8, 3, W + 9], [L - 4, 3, W + 6], [L + 2, 0.4, W + 16], [12, 0.4, W + 20]] },
+    ], { mat: 'rag' });
+  }, { density: 1, double: ['rag'] }),
+
+  corpse: defineModel('corpse', MATS, (m) => {
+    // Someone who died in the cell, slumped against its wall (behind, toward -z) with its legs out before it: bones in
+    // a rotten tunic, the skull fallen forward onto its chest, a hand open in its lap, a purse still at its belt. The
+    // game sets it out as it would a chest (see Level.addChest), backed up to the wall, to be searched.
+    m.group('body', () => {
+      const B = -27; // where its back is
+      m.cube('pelvis', [-9, 2, B + 4], [9, 10, B + 16], { mat: 'bone' });
+      m.mesh('spine', tube([[0, 8, B + 8], [0, 26, B + 3], [0, 44, B + 2]], { half: 1.8 }), { mat: 'bone' });
+      m.cube('shoulders', [-12, 41, B + 1], [12, 45, B + 7], { mat: 'bone' });
+      // The tunic, hanging off the shoulders round the ribs to the hips, torn short at the front.
+      m.mesh('tunic', loft([[-13, 9, B + 2], [-12, 26, B + 1], [-12, 44, B + 1]].map(([x, y, z], k) => {
+        const w = -x, d = [12, 10, 8][k];
+        return [[-w, y, z], [w, y, z], [w, y, z + d], [-w, y, z + d]];
+      }), { capStart: false }), { mat: 'rag' });
+      for (const s of [-1, 1]) {
+        const side = s < 0 ? 'left' : 'right';
+        // Legs out along the floor, one knee up a little.
+        const knee = s < 0 ? [s * 7, 10, B + 36] : [s * 8, 16, B + 34];
+        bone(m, `femur_${side}`, [s * 5, 5, B + 12], knee, 1.8);
+        bone(m, `shin_${side}`, knee, [s * 9, 3, B + 60], 1.5);
+        m.cube(`foot_${side}`, [s * 9 - 3, 0, B + 58], [s * 9 + 3, 4, B + 67], { mat: 'bone' });
+        // Arms: one hanging at its side, one fallen across into its lap.
+        const elbow = [s * 15, 26, B + 8];
+        bone(m, `humerus_${side}`, [s * 11, 43, B + 4], elbow, 1.6);
+        bone(m, `forearm_${side}`, elbow, s < 0 ? [s * 14, 8, B + 18] : [-2, 12, B + 22], 1.3);
+        m.cube(`hand_${side}`, s < 0 ? [s * 14 - 3, 4, B + 17] : [-6, 9, B + 20], s < 0 ? [s * 14 + 3, 7, B + 24] : [1, 12, B + 27], { mat: 'bone' });
+        for (const [k, y] of [30, 35].entries()) {
+          m.mesh(`rib_${side}_${k + 1}`, tube([[s * 1.5, y, B + 5], [s * 8, y - 1, B + 7], [s * 8.5, y - 2.5, B + 12], [s * 3, y - 3.5, B + 14]], { half: 0.9 }), { mat: 'bone' });
+        }
+      }
+      skull(m, 'skull', [2, 47, B + 11], { s: 10, rot: [52, -14, 8] });
+      m.cube('purse', [7, 6, B + 13], [14, 14, B + 18], { mat: 'purse' });
+      m.cube('purse_neck', [9, 14, B + 14], [12, 16, B + 17], { mat: 'purse' });
+    });
+  }, { density: 1, double: ['rag'] }),
+
+  collapse_heap: defineModel('collapse_heap', MATS, (m) => {
+    // What came down when an oubliette's vault fell in, and the floor over it (see dungeon/rooms.js), heaped on the
+    // cell's floor under the hole: a low mound of grit and dust, broken slabs of that floor tipped across it, blocks of
+    // the vault, and chunks strewn round its foot.
+    m.mesh('mound', revolve([[0, 0], [56, 0], [46, 4], [30, 10], [12, 14], [0, 15]], { sides: 9 }), { mat: 'dust' });
+    [[-20, 11, -6, 20, 14], [16, 9, 12, -35, -18], [4, 14, 22, 70, 10], [-30, 4, 24, 15, -8], [32, 4, -20, 55, 12], [0, 15, -18, -20, -14]].forEach(([x, y, z, turn, tilt], i) => {
+      const w = 16 + rand(i, 1030) * 8, d = 10 + rand(i, 1031) * 6;
+      m.cube(`slab_${i + 1}`, [x - w, y - 3, z - d], [x + w, y + 3, z + d], { mat: 'tomb', origin: [x, y, z], rotation: [tilt, turn, rand(i, 1032) * 24 - 12] });
+    });
+    [[-38, -18, 30], [24, 34, -20], [42, 10, 65]].forEach(([x, z, turn], i) => {
+      m.cube(`block_${i + 1}`, [x - 10, 0, z - 7], [x + 10, 12, z + 7], { mat: 'ashlar', origin: [x, 0, z], rotation: [rand(i, 1033) * 16 - 8, turn, rand(i, 1034) * 30 - 15] });
+    });
+    for (let i = 0; i < 10; i++) {
+      const a = rand(i, 1035) * Math.PI * 2, r = 46 + rand(i, 1036) * 22, x = Math.sin(a) * r, z = Math.cos(a) * r, s = 2.5 + rand(i, 1037) * 4;
+      m.cube(`chunk_${i + 1}`, [x - s, 0, z - s * 0.8], [x + s, s * 0.9, z + s * 0.8], { mat: 'tomb', origin: [x, 0, z], rotation: [rand(i, 1038) * 30 - 15, rand(i, 1039) * 180, rand(i, 1040) * 30 - 15] });
+    }
+  }, { density: 1 }),
+
+  collapse_debris: defineModel('collapse_debris', MATS, (m) => {
+    // A little of the fall, strewn about: a slab or two of the floor broken across, chunks and grit. Under the hole in
+    // an oubliette's cell, and on the floor round the hole above it (see dungeon/rooms.js).
+    m.mesh('grit', revolve([[0, 0], [30, 0], [22, 1.5], [0, 2.5]], { sides: 8 }), { mat: 'dust' });
+    [[-8, 4, 3, 25, 9], [14, 3, -10, -50, -12]].forEach(([x, y, z, turn, tilt], i) => {
+      const w = 13 + rand(i, 1041) * 6, d = 8 + rand(i, 1042) * 5;
+      m.cube(`slab_${i + 1}`, [x - w, y - 2.5, z - d], [x + w, y + 2.5, z + d], { mat: 'tomb', origin: [x, y, z], rotation: [tilt, turn, rand(i, 1043) * 20 - 10] });
+    });
+    for (let i = 0; i < 7; i++) {
+      const a = rand(i, 1044) * Math.PI * 2, r = 12 + rand(i, 1045) * 22, x = Math.sin(a) * r, z = Math.cos(a) * r, s = 2 + rand(i, 1046) * 3.5;
+      m.cube(`chunk_${i + 1}`, [x - s, 0, z - s * 0.8], [x + s, s * 0.9, z + s * 0.8], { mat: 'tomb', origin: [x, 0, z], rotation: [rand(i, 1047) * 30 - 15, rand(i, 1048) * 180, rand(i, 1049) * 30 - 15] });
     }
   }, { density: 1 }),
 };

@@ -2,5 +2,6 @@
 // A CHANNEL tile is sunk below the floor (water in the Sewers, a spike pit in the Catacombs): nothing can walk
 // it, though fliers pass over and you can see and shoot across. A BRIDGE is walkable floor laid over a channel.
 // A POOL is standing water a step below the floor (see dungeon/pools.js): anything on foot can wade through it,
-// slowly, and comes out wet.
-export const T = { WALL: 0, FLOOR: 1, STAIRS_DOWN: 2, STAIRS_UP: 3, PEDESTAL: 4, DOOR: 5, CHANNEL: 6, BRIDGE: 7, POOL: 8 };
+// slowly, and comes out wet. A PIT is floor that has fallen in (over an oubliette: see rooms.js): nothing walks or flies
+// over it, though you can see and shoot across, and down it.
+export const T = { WALL: 0, FLOOR: 1, STAIRS_DOWN: 2, STAIRS_UP: 3, PEDESTAL: 4, DOOR: 5, CHANNEL: 6, BRIDGE: 7, POOL: 8, PIT: 9 };

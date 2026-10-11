@@ -65,6 +65,17 @@ const MATS = {
     if (rand(c.ax, c.ay, 831) > 0.93) v = 0.8; // wet glints
     return ramp(SEWER_PAL.slime, v, c.ax, c.ay);
   },
+  // A pressure gauge's face (on its +z faces): a yellowed dial ringed in brass, its marks round the top and its needle
+  // stuck past the last of them.
+  gauge(c) {
+    const { p, n } = c;
+    if (n.z < 0.5) return ramp(PAL.brass, 0.4 + bevel(c, 0.2), c.ax, c.ay);
+    const dx = p.x, dy = p.y - c.info.y, r = Math.hypot(dx, dy), a = Math.atan2(dx, dy);
+    if (r > 5) return ramp(PAL.brass, 0.6, c.ax, c.ay);
+    if (Math.abs(a - 1.9) < 0.18 && r < 4.4) return ramp(SEWER_PAL.paint, 0.7, c.ax, c.ay); // the needle
+    if (r > 3.6 && Math.abs(a) < 1.7 && fract((a + 1.7) / 0.43) < 0.3) return ramp(SEWER_PAL.void, 0.4, c.ax, c.ay);
+    return ramp(SEWER_PAL.dust, 0.9, c.ax, c.ay);
+  },
   // Red paint, chipped back to rust.
   valvePaint(c) {
     if (noise3(c.p.x * 0.5, c.p.y * 0.5, c.p.z * 0.5, 840) > 0.62) return ramp(PAL.rust, 0.5, c.ax, c.ay);
@@ -321,6 +332,54 @@ export const sewers = {
       const a = (k / 3) * Math.PI * 2 + 0.3;
       m.mesh(`spoke_${k + 1}`, tube([[-8, Y, Z + 20], [-8 + Math.cos(a) * 13, Y + Math.sin(a) * 13, Z + 20]], { half: 1.4, side: [0, 0, 1] }), { mat: 'valvePaint' });
     }
+  }, { density: 1 }),
+
+  // The pipework room's (see dungeon/rooms.js): mains along the foot of the walls, and others rising into the vault.
+
+  floor_pipe: defineModel('floor_pipe', MATS, (m) => {
+    // A main along the foot of the wall (a wall piece), the tile's length of it, so mains on walls side by side run on:
+    // flanged at its ends and where two lengths are bolted in the middle, on saddles, a valve on top with a red wheel,
+    // and slime weeping from the joint onto the floor.
+    const R = 13, Y = R + 4, Z = R + 3, X = 64;
+    m.mesh('main', pipeRun(R, 2 * X), { mat: 'rustyIron', origin: [-X, Y, Z], rotation: TURN.x });
+    const flange = (w) => revolve([[0, 0], [R + 3, 0], [R + 3, w], [0, w]], { sides: 8 });
+    [[-X, 'end_left', 3], [-2.5, 'joint', 5], [X - 3, 'end_right', 3]].forEach(([x, name, w]) => m.mesh(`flange_${name}`, flange(w), { mat: 'rustyIron', origin: [x, Y, Z], rotation: TURN.x }));
+    for (const x of [-38, 38]) m.cube(`saddle_${x < 0 ? 'left' : 'right'}`, [x - 4, 0, Z - R - 1], [x + 4, Y - R + 3, Z + R + 1], { mat: 'rustyIron' });
+    m.mesh('valve_stem', pipeRun(4.5, 12), { mat: 'rustyIron', origin: [22, Y + R - 2, Z] });
+    const wy = Y + R + 11;
+    const wheel = Array.from({ length: 12 }, (_, i) => [22 + Math.cos((i / 12) * Math.PI * 2) * 11, wy, Z + Math.sin((i / 12) * Math.PI * 2) * 11]);
+    m.mesh('wheel', tube(wheel, { half: 1.8, closed: true, side: [0, 1, 0] }), { mat: 'valvePaint' });
+    for (let k = 0; k < 3; k++) {
+      const a = (k / 3) * Math.PI * 2 + 0.5;
+      m.mesh(`spoke_${k + 1}`, tube([[22, wy, Z], [22 + Math.cos(a) * 10, wy, Z + Math.sin(a) * 10]], { half: 1.2, side: [0, 1, 0] }), { mat: 'valvePaint' });
+    }
+    m.mesh('weep', [facing([[-14, 0.4, Z + R - 2], [10, 0.4, Z + R - 2], [16, 0.4, Z + R + 18], [-18, 0.4, Z + R + 14]], [0, 1, 0])], { mat: 'slime' });
+  }, { density: 1 }),
+
+  pipe_riser: defineModel('pipe_riser', MATS, (m) => {
+    // A main rising from the floor into the vault against the wall (a wall piece): a fat pipe on brackets, flanged at
+    // the floor, the vault and a joint, a big red wheel on a valve at its front, a gauge above that, and a branch
+    // elbowing off it into the wall.
+    const R = 11, Z = R + 3, V = 179;
+    m.mesh('riser', pipeRun(R, V + 2), { mat: 'rustyIron', origin: [0, -1, Z] });
+    const flange = (w) => revolve([[0, 0], [R + 4, 0], [R + 4, w], [0, w]], { sides: 8 });
+    [[0, 'floor', 3], [96, 'joint', 5], [V - 3, 'vault', 3]].forEach(([y, name, w]) => m.mesh(`flange_${name}`, flange(w), { mat: 'rustyIron', origin: [0, y, Z] }));
+    for (const y of [40, 140]) m.cube(`bracket_${y}`, [-R - 2, y - 3, 0], [R + 2, y + 3, Z - R + 2], { mat: 'rustyIron' });
+    // The valve: a body round the pipe, a stem out of its front, the wheel on it.
+    m.mesh('valve_body', revolve([[0, 0], [R + 3, 0], [R + 4, 6], [R + 3, 12], [0, 12]], { sides: 8 }), { mat: 'rustyIron', origin: [0, 58, Z] });
+    m.mesh('valve_stem', pipeRun(3.5, 12), { mat: 'rustyIron', origin: [0, 64, Z + R], rotation: TURN.z });
+    const wheel = Array.from({ length: 12 }, (_, i) => [Math.cos((i / 12) * Math.PI * 2) * 14, 64 + Math.sin((i / 12) * Math.PI * 2) * 14, Z + R + 12]);
+    m.mesh('wheel', tube(wheel, { half: 2, closed: true, side: [0, 0, 1] }), { mat: 'valvePaint' });
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + 0.4;
+      m.mesh(`spoke_${k + 1}`, tube([[0, 64, Z + R + 12], [Math.cos(a) * 13, 64 + Math.sin(a) * 13, Z + R + 12]], { half: 1.4, side: [0, 0, 1] }), { mat: 'valvePaint' });
+    }
+    m.mesh('gauge_stem', pipeRun(1.6, 6), { mat: 'rustyIron', origin: [0, 88, Z + R - 2], rotation: TURN.z });
+    m.mesh('gauge', revolve([[0, 0], [6, 0], [6, 3], [0, 3]], { sides: 10 }), { mat: 'gauge', origin: [0, 88, Z + R + 4], rotation: TURN.z, info: { y: 88 } });
+    // The branch: out of its side, along the wall, and back into it.
+    m.mesh('branch_out', pipeRun(5, 30), { mat: 'rustyIron', origin: [R - 2, 126, Z], rotation: TURN.x });
+    m.mesh('branch_in', pipeRun(5, Z), { mat: 'rustyIron', origin: [R + 26, 126, 0], rotation: TURN.z });
+    m.mesh('branch_flange', revolve([[0, 0], [8, 0], [8, 2.5], [0, 2.5]], { sides: 8 }), { mat: 'rustyIron', origin: [R + 26, 126, 0], rotation: TURN.z });
   }, { density: 1 }),
 
   rubble: defineModel('rubble', MATS, (m) => {
